@@ -21,7 +21,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "blend_scene_creator.py")
 
 
-def run_blender(scene_script=None, view=False, render_only=False, background=False):
+def run_blender(scene_script=None, view=False, render_only=False, background=False, shading_mode='MATERIAL'):
     """Blenderをコマンドラインから起動してスクリプトを実行する"""
     
     if scene_script is None:
@@ -51,6 +51,10 @@ def run_blender(scene_script=None, view=False, render_only=False, background=Fal
         cmd.extend(["--render-output", "//output/"])
         print("レンダーモードを有効にしました")
     
+    # シェーディングモードの表示（オプション）
+    if shading_mode != 'MATERIAL':
+        print(f"シェーディングモード: {shading_mode}")
+    
     print(f"Blenderを起動します...")
     print(f"コマンド: {' '.join(cmd)}")
     print("-" * 50)
@@ -78,6 +82,8 @@ def main():
     parser.add_argument("--view", action="store_true", help="ビューポートを開く")
     parser.add_argument("--render", action="store_true", help="レンダーのみ実行")
     parser.add_argument("--background", action="store_true", help="バックグラウンドモードで実行（ウィンドウを閉じる）")
+    parser.add_argument("--shading-mode", type=str, choices=['MATERIAL', 'RENDER', 'TEXTURED'],
+                        default='MATERIAL', help="ビューポートシェーディングモード (デフォルト: MATERIAL)")
     
     args = parser.parse_args()
     
@@ -85,7 +91,8 @@ def main():
         scene_script=args.script,
         view=args.view,
         render_only=args.render,
-        background=args.background
+        background=args.background,
+        shading_mode=args.shading_mode
     )
     
     sys.exit(0 if success else 1)

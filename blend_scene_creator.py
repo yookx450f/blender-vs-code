@@ -13,6 +13,7 @@ import sys
 import struct
 import json
 import time
+from mathutils import Vector
 
 # ============================================================
 # glTFアドオンを強制的に有効化
@@ -52,12 +53,16 @@ CARS = {
         "glb_path": r"C:\3d\Modly\glb\colloraCross2025.glb",
         "position": (-2.0, 0, 0),
         "color": (0.8, 0.2, 0.2),
+        # サイズ（mm）: 全長4460 × 全幅1825 × 全高1620, ホイールベース2640
+        "dimensions_mm": {"length": 4460, "width": 1825, "height": 1620},
     },
     "carB": {
         "name": "Land Cruiser",
         "glb_path": r"C:\3d\Modly\glb\colloraCross2026.glb",
         "position": (2.0, 0, 0),
         "color": (0.2, 0.2, 0.8),
+        # サイズ（mm）: 全長4950 × 全幅1930 × 全高1875, ホイールベース2850
+        "dimensions_mm": {"length": 4950, "width": 1930, "height": 1875},
     },
 }
 # ============================================================
@@ -140,7 +145,7 @@ def import_glb_file(file_path):
 
 def create_grid_floor():
     """サイバー空間用の発光グリッド床面を作成する"""
-    bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, -0.01))
+    bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, 0))
     grid = bpy.context.active_object
     grid.name = "CyberGrid"
     
@@ -199,7 +204,7 @@ def create_grid_floor():
 
 
 def create_clay_material(name, color):
-    """単色クレイモデル用のマテリアルを作成する"""
+    """単色クレイモデル用のマテリアルを作成する（Principled BSDFベース）"""
     if name in bpy.data.materials:
         return bpy.data.materials[name]
     
@@ -212,12 +217,18 @@ def create_clay_material(name, color):
     output_node = nodes.new(type='ShaderNodeOutputMaterial')
     output_node.location = (400, 0)
     
-    emission_node = nodes.new(type='ShaderNodeEmission')
-    emission_node.location = (100, 0)
-    emission_node.inputs['Color'].default_value = (*color, 1.0)
-    emission_node.inputs['Strength'].default_value = 0.3
+    # Principled BSDF ノード（クレイモデル用）
+    principled_node = nodes.new(type='ShaderNodeBsdfPrincipled')
+    principled_node.location = (100, 0)
+    # Blender 5.x では 'Base Color'、それ以前は 'Color'
+    if 'Base Color' in principled_node.inputs:
+        principled_node.inputs['Base Color'].default_value = (*color, 1.0)
+    else:
+        principled_node.inputs['Color'].default_value = (*color, 1.0)
+    principled_node.inputs['Roughness'].default_value = 0.8
+    principled_node.inputs['Metallic'].default_value = 0.0
     
-    material.node_tree.links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
+    material.node_tree.links.new(principled_node.outputs['BSDF'], output_node.inputs['Surface'])
     
     return material
 
@@ -253,17 +264,203 @@ def create_placeholder_car(key, color, location):
     return body
 
 
+def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_height_mm):
+    """オブジェクトを指定した寸法（mm）にスケールする"""
+    # 現在のサイズを取得（Blender単位: メートル）
+    current_x = abs(obj.dimensions.x)
+    current_y = abs(obj.dimensions.y)
+    current_z = abs(obj.dimensions.z)
+    
+    # mmをBlender単位（メートル）に変換
+    target_length_m = target_length_mm / 1000.0
+    target_width_m = target_width_mm / 1000.0
+    target_height_m = target_height_mm / 1000.0
+    
+    # スケール係数を計算（全長→Y軸、全幅→X軸、全高→Z軸）
+    if current_x > 0:
+        scale_x = target_width_m / current_x   # 全幅をX軸に適用
+    else:
+        scale_x = 1.0
+    
+    if current_y > 0:
+        scale_y = target_length_m / current_y  # 全長をY軸に適用
+    else:
+        scale_y = 1.0
+    
+    if current_z > 0:
+        scale_z = target_height_m / current_z  # 全高をZ軸に適用
+    else:
+        scale_z = 1.0
+    
+    # スケールを適用
+    obj.scale = (scale_x, scale_y, scale_z)
+    
+    print(f"スケール適用: {obj.name} -> ({scale_x:.3f}, {scale_y:.3f}, {scale_z:.3f})")
+    return obj
+
+
+def auto_ground_car(car_object):
+    """オブジェクトのバウンディングボックスから最低点を計算し、Z=0.0 に接地するオフセットを適用"""
+    # オブジェクトとシーンを完全に更新
+    car_object.update_tag()
+    car_object.data.update_tag()
+    bpy.context.view_layer.update()
+    
+    # ローカル座標系のバウンディングボックスを取得（ワールド空間に変換済み）
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        print(f"警告: {car_object.name} のバウンディングボックスが取得できません")
+        return 0.0
+    
+    # 8隅のローカル座標
+    corners_local = [Vector(corner) for corner in local_bounds]
+    
+    # ワールド座標に変換（行列適用）
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    # Z軸の最小値（一番低い位置）を取得
+    min_z = min(corner.z for corner in corners_world)
+    
+    # 接地オフセットを計算（最低点を Z=0.0 に合わせる）
+    offset_z = -min_z
+    
+    # オブジェクトのZ位置にオフセットを適用
+    car_object.location.z += offset_z
+    
+    print(f"自動接地: {car_object.name} -> ズオフセット: {offset_z:.4f}, 新 Z 位置: {car_object.location.z:.4f}")
+    
+    # グローバル変数に保存（アニメーションで再利用）
+    grounded_z_positions[car_object.name] = car_object.location.z
+    
+    return offset_z
+
+# 追加：バウンディングボックスの最小Z値を返す関数
+def get_car_ground_offset(car_object):
+    """車の接地オフセットを計算する（デバッグ用）"""
+    car_object.update_tag()
+    car_object.data.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        return 0.0
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    min_z = min(corner.z for corner in corners_world)
+    offset_z = -min_z
+    
+    print(f"  接地オフセット: {offset_z:.4f}, 最低点 Z={min_z:.4f}")
+    return offset_z
+
+# 追加：バウンディングボックスの最小Z値を返す関数
+def get_car_ground_offset(car_object):
+    """車の接地オフセットを計算する（デバッグ用）"""
+    car_object.update_tag()
+    car_object.data.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        return 0.0
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    min_z = min(corner.z for corner in corners_world)
+    offset_z = -min_z
+    
+    print(f"  接地オフセット: {offset_z:.4f}, 最低点 Z={min_z:.4f}")
+    return offset_z
+
+# 追加：バウンディングボックスの最小Z値を返す関数
+def get_car_ground_offset(car_object):
+    """車の接地オフセットを計算する（デバッグ用）"""
+    car_object.update_tag()
+    car_object.data.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        return 0.0
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    min_z = min(corner.z for corner in corners_world)
+    offset_z = -min_z
+    
+    print(f"  接地オフセット: {offset_z:.4f}, 最低点 Z={min_z:.4f}")
+    return offset_z
+
+# 追加：バウンディングボックスの最小Z値を返す関数
+def get_car_ground_offset(car_object):
+    """車の接地オフセットを計算する（デバッグ用）"""
+    car_object.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        return 0.0
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    min_z = min(corner.z for corner in corners_world)
+    offset_z = -min_z
+    
+    print(f"  接地オフセット: {offset_z:.4f}, 最低点 Z={min_z:.4f}")
+    return offset_z
+
+# 追加：バウンディングボックスの最小Z値を返す関数
+def get_car_ground_offset(car_object):
+    """車の接地オフセットを計算する（デバッグ用）"""
+    car_object.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        return 0.0
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    corners_world = [car_object.matrix_world @ corner for corner in corners_local]
+    
+    min_z = min(corner.z for corner in corners_world)
+    offset_z = -min_z
+    
+    print(f"  接地オフセット: {offset_z:.4f}, 最低点 Z={min_z:.4f}")
+    return offset_z
+
+
 def setup_car(key, car_data, imported_object):
-    """車の設定（位置、名前、マテリアル）を適用"""
+    """車の設定（位置、名前、マテリアル、サイズ）を適用"""
     if imported_object is None:
         return None
     
     imported_object.name = f"{key}_{car_data['name']}"
     imported_object.data.name = f"{key}_{car_data['name']}.Mesh"
-    imported_object.location = car_data['position']
     
+    # サイズ指定がある場合はスケール適用
+    if 'dimensions_mm' in car_data:
+        dims = car_data['dimensions_mm']
+        scale_object_to_dimensions(
+            imported_object,
+            dims.get('length', 4460),
+            dims.get('width', 1825),
+            dims.get('height', 1620)
+        )
+    
+    # 初期位置を設定（後で接地処理で調整される）
+    initial_location = list(car_data['position'])  # tuple を list に変換
+    imported_object.location = initial_location
+    
+    # オブジェクトの原点を幾何中心に設定
     bpy.context.view_layer.objects.active = imported_object
     bpy.ops.object.origin_set(type='GEOMETRY_ORIGIN', center='MEDIAN')
+    
+    # 自動接地処理：バウンディングボックスから最低点を計算して Z=0.0 に合わせる
+    auto_ground_car(imported_object)
     
     mat_name = f"clay_{key}_{car_data['name']}"
     clay_material = create_clay_material(mat_name, car_data['color'])
@@ -274,6 +471,9 @@ def setup_car(key, car_data, imported_object):
         imported_object.data.materials[0] = clay_material
     
     return imported_object
+
+# グローバル変数として接地後のZ位置を保存
+grounded_z_positions = {}
 
 
 def setup_camera_and_lighting():
@@ -334,6 +534,61 @@ def setup_world_background():
 
 
 # ============================================================
+# アニメーション設定関数（ステップ2）
+# ============================================================
+def setup_car_animation(car_object, start_frame, end_frame, start_x, end_x):
+    """車の位置アニメーションを設定"""
+    # X位置のキーフレームを設定
+    car_object.location = (start_x, 0.0, 0.0)
+    car_object.keyframe_insert(data_path="location", frame=start_frame)
+    
+    car_object.location = (end_x, 0.0, 0.0)
+    car_object.keyframe_insert(data_path="location", frame=end_frame)
+    
+    print(f"アニメーション設定: {car_object.name} ({start_frame}-{end_frame}フレーム)")
+
+
+def apply_clay_material_to_object(object_name, color_rgb):
+    """指定されたオブジェクトにクレイマテリアルを適用"""
+    if object_name not in bpy.data.objects:
+        print(f"警告: オブジェクト '{object_name}' が見つかりません")
+        return
+    
+    obj = bpy.data.objects[object_name]
+    
+    # マテリアル名（重複防止）
+    mat_name = f"clay_{object_name}"
+    
+    if mat_name not in bpy.data.materials:
+        # 新しいクレイマテリアルを作成
+        material = create_clay_material(mat_name, color_rgb)
+    else:
+        material = bpy.data.materials[mat_name]
+    
+    # オブジェクトにマテリアルを適用
+    if len(obj.data.materials) == 0:
+        obj.data.materials.append(material)
+    else:
+        obj.data.materials[0] = material
+    
+    print(f"マテリアル適用完了: {object_name} -> {mat_name}")
+
+
+# ============================================================
+# ビューポートシェーディング設定（ステップ3）
+# ============================================================
+def setup_viewport_shading(shading_type='MATERIAL'):
+    """3Dビューポートのシェーディングモードを設定"""
+    for area in bpy.context.screen.areas:
+        if area.type == 'VIEW_3D':
+            for space in area.spaces:
+                if space.type == 'VIEW_3D':
+                    # シェーディングモードを設定（MATERIAL, RENDER, TEXTURED など）
+                    space.shading.type = shading_type
+    print(f"ビューポートシェーディングを {shading_type} モードに設定しました")
+
+
+# ============================================================
 # メイン処理
 # ============================================================
 def main():
@@ -383,6 +638,59 @@ def main():
     
     # カメラとライティングを設定
     camera = setup_camera_and_lighting()
+    
+    # =============================================
+    # アニメーション設定（ステップ2）
+    # =============================================
+    print("\n=== アニメーション設定を開始 ===")
+    
+    # シーンフレーム範囲を設定
+    scene = bpy.context.scene
+    scene.frame_start = 0
+    scene.frame_end = 120
+    scene.render.fps = 24
+    print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
+    
+    # 車のアニメーション設定（キーフレーム）
+    for key, car_data in CARS.items():
+        # 車オブジェクトを取得
+        car_obj = imported_cars.get(key)
+        if not car_obj:
+            print(f"警告: {key} の車オブジェクトが見つかりません")
+            continue
+        
+        # 接地後のZ位置を保持（アニメーションでも維持）
+        grounded_z = grounded_z_positions.get(car_obj.name, 0.0)
+        
+        # 0フレーム：初期位置に出現
+        car_obj.location = (car_data['position'][0], 0.0, grounded_z)
+        car_obj.keyframe_insert(data_path="location", frame=0)
+        
+        # 30フレーム：初期位置を維持（キーフレーム）
+        car_obj.location = (car_data['position'][0], 0.0, grounded_z)
+        car_obj.keyframe_insert(data_path="location", frame=30)
+        
+        # 90フレーム：中央に到達
+        car_obj.location = (0.0, 0.0, grounded_z)
+        car_obj.keyframe_insert(data_path="location", frame=90)
+        
+        # 120フレーム：中央を維持（キーフレーム）
+        car_obj.location = (0.0, 0.0, grounded_z)
+        car_obj.keyframe_insert(data_path="location", frame=120)
+        
+        print(f"アニメーション設定完了: {car_obj.name}")
+    
+    # マテリアルの再適用（確認用）
+    for key, car_data in CARS.items():
+        apply_clay_material_to_object(imported_cars[key].name, car_data['color'])
+    
+    print("\n=== アニメーション設定完了 ===")
+    
+    # =============================================
+    # ビューポートシェーディング設定（ステップ3）
+    # =============================================
+    print("\n=== ビューポートシェーディングを設定 ===")
+    setup_viewport_shading()  # デフォルト: MATERIAL モード
     
     print("\n" + "=" * 50)
     print("シーン作成完了！")
