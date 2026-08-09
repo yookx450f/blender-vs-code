@@ -1,0 +1,36 @@
+# Blender 関連
+*.blend1
+*.blend2
+*.blend3
+*.blend4
+*.blend5
+*.blend6
+*.blend7
+*.blend8
+*.blend9
+*.blend0
+*.blend.bak
+*.tmp
+__pycache__/
+*.pyc
+*.pyo
+
+# OS 関連
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Blender テンポラリ
+temp_*.glb
+temp_*.fbx
+temp_*.obj
+
+# ログファイル
+*.log
