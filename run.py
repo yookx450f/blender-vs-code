@@ -142,8 +142,8 @@ def main():
     # PNGシーケンスをmp4に変換（--render オプションの場合のみ）
     if success and args.render:
         desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        png_pattern = os.path.join(desktop_path, "car_comparison.mp4.%04d.png")
-        mp4_output = os.path.join(desktop_path, "car_comparison.mp4")
+        png_pattern = os.path.join(desktop_path, "mp4.%04d.png")
+        mp4_output = os.path.join(desktop_path, "mp4")
         
         print("\n=== PNGシーケンスをmp4に変換 ===")
         convert_png_sequence_to_mp4(png_pattern, mp4_output, fps=24)

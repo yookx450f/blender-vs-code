@@ -324,106 +324,6 @@ def create_clay_material(name, color):
 
 
 # ============================================================
-# アニメーション設定関数群（透過・カメラ）
-# ============================================================
-def setup_transparency_animation(car_object, start_frame, end_frame, start_alpha, end_alpha):
-    """車のマテリアル不透明度をアニメーションさせる（EEVEE透過対応）"""
-    if car_object is None:
-        print(f"エラー: オブジェクトがNoneです")
-        return
-    
-    # マテリアルが存在するか確認
-    if len(car_object.data.materials) == 0:
-        print(f"警告: {car_object.name} にマテリアルが設定されていません")
-        return
-    
-    material = car_object.data.materials[0]
-    
-    # ノードベースのマテリアルでない場合はスキップ
-    if not material.use_nodes:
-        print(f"警告: {material.name} はノードベースではありません")
-        return
-    
-    # EEVEEで透過が正しくブレンドされるよう、ブレンドモードを 'BLEND' に設定
-    material.blend_method = 'BLEND'
-    print(f"{car_object.name} のマテリアルブレンドモードを BLEND に設定しました")
-    
-    nodes = material.node_tree.nodes
-    links = material.node_tree.links
-    
-    # Principled BSDF ノードを検索
-    principled_node = None
-    for node in nodes:
-        if node.type == 'BSDF_PRINCIPLED':
-            principled_node = node
-            break
-    
-    if principled_node is None:
-        print(f"警告: {material.name} にPrincipled BSDFノードが見つかりません")
-        return
-    
-    # Alpha入力が存在するか確認（Blender 4.0+ では 'Alpha'、それ以前は 'Specular Tint' の下）
-    if 'Alpha' in principled_node.inputs:
-        alpha_input = principled_node.inputs['Alpha']
-        
-        # スタートフレームでセット
-        car_object.location = car_object.location  # 何もしないが更新を強制
-        alpha_input.default_value = start_alpha
-        alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
-        
-        # エンドフレームでセット
-        alpha_input.default_value = end_alpha
-        alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
-        
-        print(f"不透明度アニメーション設定: {car_object.name} ({start_frame}-{end_frame}) Alpha: {start_alpha}→{end_alpha}")
-    else:
-        # Alpha入力が存在しない場合は、Base ColorのAlpha成分を操作する代替方法
-        # ただし、これはキーフレームが効かない可能性があるため注意が必要
-        print(f"警告: {material.name} にAlpha入力が見つかりません。Base Colorでの透過制御を試みます...")
-        
-        # Base Colorの入力を取得（Blender 5.x）
-        if 'Base Color' in principled_node.inputs:
-            base_color = principled_node.inputs['Base Color']
-            
-            # スタートフレーム - color パラメータが必要
-            # ここではデフォルトの赤色を使用
-            start_color = (1.0, 0.2, 0.2)  # 赤
-            base_color.default_value = (*start_color, start_alpha)
-            base_color.keyframe_insert(data_path="default_value", frame=start_frame)
-            
-            # エンドフレーム
-            base_color.default_value = (*start_color, end_alpha)
-            base_color.keyframe_insert(data_path="default_value", frame=end_frame)
-            
-            print(f"Base Colorアニメーション設定: {car_object.name} ({start_frame}-{end_frame})")
-        else:
-            print(f"エラー: Base Color入力も存在しません。透過アニメーションを実行できません。")
-
-
-def setup_camera_animation(camera, start_frame, end_frame, start_location, end_location, start_rotation, end_rotation):
-    """カメラの位置と回転をアニメーションさせる"""
-    if camera is None:
-        print("エラー: カメラがシーンに設定されていません")
-        return
-    
-    # スタートフレームでセット
-    camera.location = start_location
-    camera.rotation_euler = start_rotation
-    camera.keyframe_insert(data_path="location", frame=start_frame)
-    camera.keyframe_insert(data_path="rotation_euler", frame=start_frame)
-    
-    # エンドフレームでセット
-    camera.location = end_location
-    camera.rotation_euler = end_rotation
-    camera.keyframe_insert(data_path="location", frame=end_frame)
-    camera.keyframe_insert(data_path="rotation_euler", frame=end_frame)
-    
-    print(f"カメラアニメーション設定: {camera.name} ({start_frame}-{end_frame})")
-    print(f"  - スタート位置: {start_location}, 回転: {[round(e, 3) for e in start_rotation]}")
-    print(f"  - エンド位置: {end_location}, 回転: {[round(e, 3) for e in end_rotation]}")
-
-
-# ============================================================
 # 車の設定・配置関数群（スケール・接地・マテリアル適用）
 # ============================================================
 def create_placeholder_car(key, color, location):
@@ -945,165 +845,15 @@ def main():
     camera = setup_camera_and_lighting()
     
     # =============================================
-    # アニメーション設定（ステップ2）
+    # アニメーション設定（フレーム順・別モジュールから呼び出し）
     # =============================================
-    print("\n=== アニメーション設定を開始 ===")
+    import sys
+    if SCRIPT_DIR not in sys.path:
+        sys.path.insert(0, SCRIPT_DIR)
+    from animation_settings import setup_all_animations
     
-    # シーンフレーム範囲を設定
     scene = bpy.context.scene
-    scene.frame_start = 0
-    scene.frame_end = 400
-    scene.render.fps = 24
-    print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
-
-    # 車のアニメーション設定（キーフレーム）- 左右配置版 + リア端Y整列
-    for key, car_data in CARS.items():
-        # 車オブジェクトを取得
-        car_obj = imported_cars.get(key)
-        if not car_obj:
-            print(f"警告: {key} の車オブジェクトが見つかりません")
-            continue
-        
-        # 接地後のZ位置を保持（アニメーションでも維持）
-        grounded_z = grounded_z_positions.get(car_obj.name, 0.0)
-        
-        # 初期位置：左右に配置かつリア端揃え（全長差から計算）
-        if key == "carA":
-            # carA: Y=+rear_offset_y でリア端を揃える（全長差から計算済み）
-            start_x, start_y = -2.0, rear_offset_y
-            end_x, end_y = 0.0, rear_offset_y
-        else:
-            # carB (Land Cruiser): Y=0.0 のまま（基準）
-            start_x, start_y = 2.0, 0.0
-            end_x, end_y = 0.0, 0.0
-        
-        # フレーム0-30: 左右に配置された状態で出現（初期位置を維持）
-        car_obj.location = (start_x, start_y, grounded_z)
-        car_obj.keyframe_insert(data_path="location", frame=0)
-        car_obj.location = (start_x, start_y, grounded_z)
-        car_obj.keyframe_insert(data_path="location", frame=30)
-        
-        # フレーム90: 中央に集まって重なる（リア端揃え状態を維持）
-        car_obj.location = (end_x, end_y, grounded_z)
-        car_obj.keyframe_insert(data_path="location", frame=90)
-        
-        # フレーム400まで位置を維持（キーフレーム）
-        car_obj.location = (end_x, end_y, grounded_z)
-        car_obj.keyframe_insert(data_path="location", frame=400)
-        
-        print(f"アニメーション設定完了：{car_obj.name} ({start_x},{start_y}→{end_x},{end_y})")
-
-    # =============================================
-    # 半透明化アニメーション（フレーム30-90）
-    # =============================================
-    print("\n=== 半透明化アニメーションを設定 ===")
-    
-    # 両車のマテリアルに不透明度アニメーションを追加
-    for key, car_obj in imported_cars.items():
-        setup_transparency_animation(car_obj, 30, 90, 1.0, 0.4)
-    
-    print("半透明化アニメーション設定完了")
-
-    # =============================================
-    # カメラ移動アニメーション（フレーム0-400）
-    # Track To不使用：位置と回転を直接キーフレーム制御
-    # =============================================
-    print("\n=== カメラ移動アニメーションを設定 ===")
-    
-    camera = scene.camera
-    if camera is None:
-        print("エラー: カメラが設定されていません")
-    else:
-        # Track To コンストレイントをすべて無効化（直接回転制御）
-        for constraint in camera.constraints:
-            if constraint.type == 'TRACK_TO':
-                constraint.mute = True  # 無効化
-                print(f"Track To コンストレイント '{constraint.name}' を無効化しました")
-        
-        target = (0.0, 0.0, 1.5)  # カメラが向くターゲット（車の中心付近）
-        
-        def set_camera_look_at(cam, loc, tgt):
-            """カメラを指定位置に配置し、ターゲット方向に向ける"""
-            cam.location = loc
-            direction = Vector(tgt) - Vector(loc)
-            rot_quat = direction.to_track_quat('-Z', 'Y')  # カメラの-Z軸をターゲット方向へ
-            cam.rotation_euler = rot_quat.to_euler()
-        
-        # 【フェーズ1】フレーム0-90: 斜め上の固定視点（2台の車を映す）
-        loc_phase1 = (6.5, -6.5, 4.0)
-        set_camera_look_at(camera, loc_phase1, target)
-        rot_phase1_start = camera.rotation_euler.copy()
-        
-        # フレーム0: スタート位置
-        camera.location = loc_phase1
-        camera.rotation_euler = rot_phase1_start
-        camera.keyframe_insert(data_path="location", frame=0)
-        camera.keyframe_insert(data_path="rotation_euler", frame=0)
-        
-        # フレーム90: 同じ位置・回転を維持（固定視点）
-        camera.location = loc_phase1
-        camera.rotation_euler = rot_phase1_start
-        camera.keyframe_insert(data_path="location", frame=90)
-        camera.keyframe_insert(data_path="rotation_euler", frame=90)
-        
-        # 【フェーズ2】フレーム90-200: ゆっくりトップビューへ移動（車の中心の真上）
-        loc_phase2 = (0.0, 0.0, 14.0)
-        
-        # フレーム200: トップビュー位置でターゲットを見る（車が縦に見える斜めの状態）
-        set_camera_look_at(camera, loc_phase2, target)
-        rot_phase2_end = camera.rotation_euler.copy()
-        camera.keyframe_insert(data_path="location", frame=200)
-        camera.keyframe_insert(data_path="rotation_euler", frame=200)
-        
-        # 【フェーズ3】フレーム200-240: トップビュー位置でZ軸回転（車が横に映る）
-        loc_phase3 = (0.0, 0.0, 14.0)  # 位置はトップビューのままとする
-        
-        # フレーム240: Z軸周りに90度回転して車を横から見えるように
-        # rot_phase2_endのZ成分にπ/2を加算（Z軸回転）
-        base_rot = rot_phase2_end.copy()
-        rot_phase3_end = (base_rot.x, base_rot.y, base_rot.z + math.pi / 2)
-        
-        camera.location = loc_phase3
-        camera.rotation_euler = rot_phase3_end
-        camera.keyframe_insert(data_path="location", frame=240)
-        camera.keyframe_insert(data_path="rotation_euler", frame=240)
-        
-        # 【フェーズ4】フレーム240-340: ゆっくりサイドビューへ移動（車の真横）
-        # set_camera_look_at() を使用せず、直接キーフレーム制御で回転を保持
-        loc_phase4 = (8.0, 0.0, 2.5)
-        
-        # サイドビューの適切な回転を計算（車の側面を見る方向）
-        # カメラ位置(8,0,2.5)からターゲット(0,0,1.5)へ向く回転
-        direction_phase4 = Vector(target) - Vector(loc_phase4)
-        rot_quat_phase4 = direction_phase4.to_track_quat('-Z', 'Y')
-        rot_phase4_end = rot_quat_phase4.to_euler()
-        
-        # フレーム240: トップビューの回転を保持（フェーズ3から連続）
-        camera.location = loc_phase3
-        camera.rotation_euler = rot_phase3_end
-        camera.keyframe_insert(data_path="location", frame=240)
-        camera.keyframe_insert(data_path="rotation_euler", frame=240)
-        
-        # フレーム340: サイドビュー位置・回転へ移動
-        camera.location = loc_phase4
-        camera.rotation_euler = rot_phase4_end
-        camera.keyframe_insert(data_path="location", frame=340)
-        camera.keyframe_insert(data_path="rotation_euler", frame=340)
-        
-        # 【フェーズ5】フレーム340-400: サイドビューで静止（全長差比較）
-        camera.location = loc_phase4
-        camera.rotation_euler = rot_phase4_end
-        camera.keyframe_insert(data_path="location", frame=400)
-        camera.keyframe_insert(data_path="rotation_euler", frame=400)
-        
-        bpy.context.scene.frame_set(0)
-        
-        print("カメラアニメーション設定完了:")
-        print(f"  - フレーム0-90:   斜め上の固定視点 {loc_phase1}")
-        print(f"  - フレーム90-200: ゆっくりトップビューへ移動（車の中心の真上）{loc_phase2}")
-        print(f"  - フレーム200-240: トップビュー位置でZ軸回転（車が横に映る）")
-        print(f"  - フレーム240-340: ゆっくりサイドビューへ移動（車の真横）{loc_phase4}")
-        print(f"  - フレーム340-400: サイドビューで静止（全長差比較）")
+    setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     
     # マテリアルの再適用（確認用）- 青い車の色補正を含む
     for key, car_data in CARS.items():
@@ -1145,7 +895,7 @@ def main():
     print("\n=== レンダリング出力設定 ===")
     
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-    output_filepath = os.path.join(desktop_path, "car_comparison.mp4")
+    output_filepath = os.path.join(desktop_path, "mp4")
     scene.render.filepath = output_filepath
     
     # レンダーエンジンを EEVEE に設定
