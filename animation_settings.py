@@ -38,8 +38,17 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     # ============================================================
     # シーンフレーム範囲を設定
     # ============================================================
+    # タイムライン:
+    #   シーン1: フレーム0-96     斜め上の固定視点（4秒）
+    #            フレーム96-144   停止（2秒）
+    #   シーン2: フレーム144-264  トップビューへ移動（5秒）
+    #            フレーム264-312  停止（2秒）
+    #   シーン3: フレーム312-408  Z軸回転で車が横になる（4秒）
+    #            フレーム408-456  停止（2秒）
+    #   シーン4: フレーム456-600  サイドビューへ移動（6秒）
+    #            フレーム600-648  サイドビューで静止（2秒）
     scene.frame_start = 0
-    scene.frame_end = 400
+    scene.frame_end = 648
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -95,118 +104,148 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"[フレーム0] カメラ={loc_phase1}, carA={car_a_start}, carB={car_b_start}")
 
     # --- フレーム30: 出現完了、半透明化開始 ---
-    # カメラ: 同じ位置維持（固定視点）
     camera.location = loc_phase1
     camera.rotation_euler = rot_phase1
     camera.keyframe_insert(data_path="location", frame=30)
     camera.keyframe_insert(data_path="rotation_euler", frame=30)
 
-    # 車A・B: 同じ位置維持（出現状態）
     car_a.location = car_a_start
     car_a.keyframe_insert(data_path="location", frame=30)
     car_b.location = car_b_start
     car_b.keyframe_insert(data_path="location", frame=30)
 
-    # Alpha: 半透明化アニメーション開始（フレーム30-90で1.0→0.4）
-    for key, car_obj in imported_cars.items():
-        _setup_transparency_animation(car_obj, 30, 90, 1.0, 0.4)
+    # Alpha: CarBのみ半透明化アニメーション開始（フレーム30-96で1.0→0.4）
+    car_b_obj = imported_cars.get("carB")
+    if car_b_obj:
+        _setup_transparency_animation(car_b_obj, 30, 96, 1.0, 0.4)
 
-    print(f"[フレーム30] カメラ維持, 車維持, Alpha: 1.0→0.4開始")
+    print(f"[フレーム30] カメラ維持, 車維持, Alpha(CarBのみ): 1.0→0.4開始")
 
-    # --- フレーム90: 中央集合・半透明化完了、カメラ上昇開始 ---
+    # --- シーン1終了・シーン2開始: フレーム96（中央集合・半透明化完了）---
     # カメラ: 同じ位置維持（固定視点終了）
     camera.location = loc_phase1
     camera.rotation_euler = rot_phase1
-    camera.keyframe_insert(data_path="location", frame=90)
-    camera.keyframe_insert(data_path="rotation_euler", frame=90)
+    camera.keyframe_insert(data_path="location", frame=96)
+    camera.keyframe_insert(data_path="rotation_euler", frame=96)
 
     # 車A: 中央に集まる (0.0, rear_offset_y) - リア端揃え状態を維持
     car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=90)
+    car_a.keyframe_insert(data_path="location", frame=96)
 
     # 車B: 中央に集まる (0.0, 0.0) - 基準位置
     car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=90)
+    car_b.keyframe_insert(data_path="location", frame=96)
 
-    print(f"[フレーム90] カメラ維持, carA={car_a_end}, carB={car_b_end}")
+    print(f"[フレーム96] シーン1終了: カメラ維持, carA={car_a_end}, carB={car_b_end}")
 
-    # --- フレーム200: トップビュー到達（車が縦に見える）---
-    # カメラ: (0.0, 0.0, 14.0)、ターゲットを下向きに見る
+    # --- 停止（2秒）: フレーム144 ---
+    camera.location = loc_phase1
+    camera.rotation_euler = rot_phase1
+    camera.keyframe_insert(data_path="location", frame=144)
+    camera.keyframe_insert(data_path="rotation_euler", frame=144)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=144)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=144)
+
+    print(f"[フレーム144] 停止（2秒）")
+
+    # --- シーン2: フレーム264（トップビュー到達・車が縦に見える）---
     loc_phase2 = (0.0, 0.0, 14.0)
     set_camera_look_at(camera, loc_phase2, target)
     rot_phase2 = camera.rotation_euler.copy()
-    camera.keyframe_insert(data_path="location", frame=200)
-    camera.keyframe_insert(data_path="rotation_euler", frame=200)
+    camera.keyframe_insert(data_path="location", frame=264)
+    camera.keyframe_insert(data_path="rotation_euler", frame=264)
 
-    # 車A・B: リア端揃えて重なり静止（フレーム90で既に到達済み）
     car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=200)
+    car_a.keyframe_insert(data_path="location", frame=264)
     car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=200)
+    car_b.keyframe_insert(data_path="location", frame=264)
 
-    print(f"[フレーム200] カメラ={loc_phase2}（トップビュー、車が縦）, 車維持")
+    print(f"[フレーム264] シーン2終了: カメラ={loc_phase2}（トップビュー、車が縦）, 車維持")
 
-    # --- フレーム240: Z軸回転完了（車が横に見える）---
-    # カメラ: 同じ位置、Z成分にπ/2加算して車を横から見えるように
+    # --- 停止（2秒）: フレーム312 ---
+    camera.location = loc_phase2
+    camera.rotation_euler = rot_phase2
+    camera.keyframe_insert(data_path="location", frame=312)
+    camera.keyframe_insert(data_path="rotation_euler", frame=312)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=312)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=312)
+
+    print(f"[フレーム312] 停止（2秒）")
+
+    # --- シーン3: フレーム408（Z軸回転完了・車が横に見える）---
     loc_phase3 = (0.0, 0.0, 14.0)
     rot_phase3 = (rot_phase2.x, rot_phase2.y, rot_phase2.z + math.pi / 2)
     camera.location = loc_phase3
     camera.rotation_euler = rot_phase3
-    camera.keyframe_insert(data_path="location", frame=240)
-    camera.keyframe_insert(data_path="rotation_euler", frame=240)
+    camera.keyframe_insert(data_path="location", frame=408)
+    camera.keyframe_insert(data_path="rotation_euler", frame=408)
 
-    # 車A・B: 維持
     car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=240)
+    car_a.keyframe_insert(data_path="location", frame=408)
     car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=240)
+    car_b.keyframe_insert(data_path="location", frame=408)
 
-    print(f"[フレーム240] カメラ={loc_phase3}（Z軸回転、車が横）, 車維持")
+    print(f"[フレーム408] シーン3終了: カメラ={loc_phase3}（Z軸回転、車が横）, 車維持")
 
-    # --- フレーム340: サイドビュー到達 ---
-    # カメラ: (8.0, 0.0, 2.5)、車の側面を見る
+    # --- 停止（2秒）: フレーム456 ---
+    camera.location = loc_phase3
+    camera.rotation_euler = rot_phase3
+    camera.keyframe_insert(data_path="location", frame=456)
+    camera.keyframe_insert(data_path="rotation_euler", frame=456)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=456)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=456)
+
+    print(f"[フレーム456] 停止（2秒）")
+
+    # --- シーン4: フレーム600（サイドビュー到達）---
     loc_phase4 = (8.0, 0.0, 2.5)
     direction_phase4 = Vector(target) - Vector(loc_phase4)
     rot_quat_phase4 = direction_phase4.to_track_quat('-Z', 'Y')
     rot_phase4 = rot_quat_phase4.to_euler()
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
-    camera.keyframe_insert(data_path="location", frame=340)
-    camera.keyframe_insert(data_path="rotation_euler", frame=340)
+    camera.keyframe_insert(data_path="location", frame=600)
+    camera.keyframe_insert(data_path="rotation_euler", frame=600)
 
-    # 車A・B: 維持
     car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=340)
+    car_a.keyframe_insert(data_path="location", frame=600)
     car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=340)
+    car_b.keyframe_insert(data_path="location", frame=600)
 
-    print(f"[フレーム340] カメラ={loc_phase4}（サイドビュー）, 車維持")
+    print(f"[フレーム600] シーン4終了: カメラ={loc_phase4}（サイドビュー）, 車維持")
 
-    # --- フレーム400: サイドビュー静止（全長差比較）---
-    # カメラ: 同じ位置維持
+    # --- サイドビュー静止（2秒）: フレーム648 ---
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
-    camera.keyframe_insert(data_path="location", frame=400)
-    camera.keyframe_insert(data_path="rotation_euler", frame=400)
+    camera.keyframe_insert(data_path="location", frame=648)
+    camera.keyframe_insert(data_path="rotation_euler", frame=648)
 
-    # 車A・B: 維持
     car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=400)
+    car_a.keyframe_insert(data_path="location", frame=648)
     car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=400)
+    car_b.keyframe_insert(data_path="location", frame=648)
 
-    print(f"[フレーム400] カメラ維持（サイドビュー静止）, 車維持")
+    print(f"[フレーム648] サイドビュー静止（2秒）, 車維持")
 
     # シーンをフレーム0に戻す
     bpy.context.scene.frame_set(0)
 
     print("\n=== アニメーション設定完了 ===")
     print("カメラアニメーション:")
-    print(f"  - フレーム0-90:   斜め上の固定視点 {loc_phase1}")
-    print(f"  - フレーム90-200: トップビューへ移動（車の中心の真上）{loc_phase2}")
-    print(f"  - フレーム200-240: Z軸回転で車が横になる")
-    print(f"  - フレーム240-340: サイドビューへ移動 {loc_phase4}")
-    print(f"  - フレーム340-400: サイドビューで静止（全長差比較）")
+    print(f"  【シーン1】フレーム0-96:     斜め上の固定視点 {loc_phase1}（4秒）")
+    print(f"              フレーム96-144:   停止（2秒）")
+    print(f"  【シーン2】フレーム144-264:  トップビューへ移動（車の中心の真上）{loc_phase2}（5秒）")
+    print(f"              フレーム264-312:  停止（2秒）")
+    print(f"  【シーン3】フレーム312-408:  Z軸回転で車が横になる（4秒）")
+    print(f"              フレーム408-456:  停止（2秒）")
+    print(f"  【シーン4】フレーム456-600:  サイドビューへ移動 {loc_phase4}（6秒）")
+    print(f"              フレーム600-648:  サイドビューで静止（全長差比較）（2秒）")
 
 
 def _setup_transparency_animation(car_object, start_frame, end_frame, start_alpha, end_alpha):
