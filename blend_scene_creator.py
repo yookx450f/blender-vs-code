@@ -51,7 +51,7 @@ CARS = {
     "carA": {
         "name": "Corolla Cross",
         "glb_path": r"C:\3d\Modly\glb\colloraCross2025.glb",
-        "position": (-2.0, 0, 0),
+        "position": (-2.0, 0.0, 0),  # X=-2.0 に配置（初期位置）
         "color": (0.8, 0.2, 0.2),
         # サイズ（mm）: 全長4460 × 全幅1825 × 全高1620, ホイールベース2640
         "dimensions_mm": {"length": 4460, "width": 1825, "height": 1620},
@@ -59,7 +59,7 @@ CARS = {
     "carB": {
         "name": "Land Cruiser",
         "glb_path": r"C:\3d\Modly\glb\colloraCross2026.glb",
-        "position": (2.0, 0, 0),
+        "position": (2.0, 0.0, 0),   # X=2.0 に配置（初期位置）
         "color": (0.2, 0.2, 0.8),
         # サイズ（mm）: 全長4950 × 全幅1930 × 全高1875, ホイールベース2850
         "dimensions_mm": {"length": 4950, "width": 1930, "height": 1875},
@@ -572,6 +572,8 @@ def setup_car(key, car_data, imported_object):
 # グローバル変数として接地後のZ位置を保存
 grounded_z_positions = {}
 
+# リア端揃え用のグローバル変数は不要になったため削除（ハードコード済み）
+
 
 def setup_camera_and_lighting():
     """カメラとライティングを設定する"""
@@ -582,10 +584,29 @@ def setup_camera_and_lighting():
         if obj.type == 'CAMERA' and obj.name != "ComparisonCamera":
             bpy.data.objects.remove(obj, do_unlink=True)
     
-    bpy.ops.object.camera_add(location=(5, -5, 3))
+    # カメラを作成 - 初期位置を1.7倍に拡大（2台の車が画面にゆとりを持って収まるように）
+    camera_location = (6.5, -6.5, 4.0)  # 修正前より少し遠く（元の位置の約1.3倍）
+    bpy.ops.object.camera_add(location=camera_location)
     camera = bpy.context.active_object
     camera.name = "ComparisonCamera"
     scene.camera = camera
+    
+    # 視野角を広げてより広い範囲が映るように（24mm相当）
+    camera.data.lens = 24
+    print(f"カメラの焦点距離を {camera.data.lens}mm に設定しました")
+    
+    # ターゲットとなる Empty を作成（2台の車の中心位置）
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0.0, 0.0, 0.0))
+    camera_target = bpy.context.active_object
+    camera_target.name = "Camera_Target"
+    
+    # カメラに Track To コンストレイントを追加（全軸トラック）
+    constraint = camera.constraints.new('TRACK_TO')
+    constraint.target = camera_target
+    constraint.track_axis = 'TRACK_NEGATIVE_Z'  # カメラの-Z方向をレンズ方向に設定
+    constraint.up_axis = 'UP_Y'                  # Y軸を上方向として維持
+    
+    print(f"カメラターゲットを作成しました: {camera_target.name}")
     
     target_location = (0.0, 0.0, 0.0)
     # カメラからターゲットへの方向を計算
@@ -598,22 +619,28 @@ def setup_camera_and_lighting():
     pitch = math.atan2(dz, math.sqrt(dx*dx + dy*dy))
     camera.rotation_euler = (pitch, 0.0, -yaw)
     
-    bpy.ops.object.light_add(type='AREA', location=(3, -3, 5))
+    # ライトもカメラの位置に合わせて調整（より広い照明範囲に）
+    # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
+    # ライトもカメラの位置に合わせて調整（より広い照明範囲に）
+    # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
+    bpy.ops.object.light_add(type='AREA', location=(8.5*0.6, -8.5*0.6, 7))
     key_light = bpy.context.active_object
     key_light.name = "KeyLight"
-    key_light.data.energy = 100
+    key_light.data.energy = 200  # 修正前より上げる
     key_light.data.size = 3
     
-    bpy.ops.object.light_add(type='AREA', location=(-3, 3, 4))
+    # SubLightもカメラに合わせて拡大
+    bpy.ops.object.light_add(type='AREA', location=(-8.5*0.6, 8.5*0.6, 6))
     sub_light = bpy.context.active_object
     sub_light.name = "SubLight"
-    sub_light.data.energy = 50
+    sub_light.data.energy = 100  # 修正前（50）の2倍に
     sub_light.data.size = 2
     
-    bpy.ops.object.light_add(type='SPOT', location=(0, 5, 3))
+    # RimLightもカメラに合わせて拡大
+    bpy.ops.object.light_add(type='SPOT', location=(0, 7*1.7, 5))
     rim_light = bpy.context.active_object
     rim_light.name = "RimLight"
-    rim_light.data.energy = 80
+    rim_light.data.energy = 150  # 修正前（80）より上げる
     rim_light.data.spot_size = 1.2
     
     print(f"カメラを設定しました: {camera.name}")
@@ -643,6 +670,70 @@ def setup_car_animation(car_object, start_frame, end_frame, start_x, end_x):
     car_object.keyframe_insert(data_path="location", frame=end_frame)
     
     print(f"アニメーション設定: {car_object.name} ({start_frame}-{end_frame}フレーム)")
+
+
+def align_cars_by_rear_simple(car_a, car_b):
+    """2台の車のリア（後部）端をピッタリ揃える（シンプル版：左右配置用）"""
+    # オブジェクトを完全に更新
+    car_a.update_tag()
+    car_a.data.update_tag()
+    bpy.context.view_layer.update()
+    car_b.update_tag()
+    car_b.data.update_tag()
+    bpy.context.view_layer.update()
+    
+    # ローカルバウンディングボックスを取得してワールド座標に変換
+    local_bounds_a = car_a.bound_box
+    corners_world_a = [car_a.matrix_world @ Vector(corner) for corner in local_bounds_a]
+    local_bounds_b = car_b.bound_box
+    corners_world_b = [car_b.matrix_world @ Vector(corner) for corner in local_bounds_b]
+    
+    # 車の前後方向の軸を判定（XまたはY）
+    x_range_a = max(c.x for c in corners_world_a) - min(c.x for c in corners_world_a)
+    y_range_a = max(c.y for c in corners_world_a) - min(c.y for c in corners_world_a)
+    x_range_b = max(c.x for c in corners_world_b) - min(c.x for c in corners_world_b)
+    y_range_b = max(c.y for c in corners_world_b) - min(c.y for c in corners_world_b)
+    
+    # 最も長い軸を前後方向とする
+    if x_range_a >= y_range_a and x_range_b >= y_range_b:
+        axis = 'x'
+        print("車の前後方向：X軸")
+    else:
+        axis = 'y'
+        print("車の前後方向：Y軸")
+    
+    # リア端の座標を取得（最小値）
+    if axis == 'x':
+        car_a_rear = min(c.x for c in corners_world_a)
+        car_b_rear = min(c.x for c in corners_world_b)
+    else:
+        car_a_rear = min(c.y for c in corners_world_a)
+        car_b_rear = min(c.y for c in corners_world_b)
+    
+    # オフセットを計算（carBがcarAより後ろにある場合、carAを前にずらす）
+    offset = car_b_rear - car_a_rear
+    print(f"リア端オフセット計算：{car_a.name}={car_a_rear:.4f}, {car_b.name}={car_b_rear:.4f} -> オフセット={offset:.4f}")
+    
+    return offset, axis
+
+
+def setup_car_animation_aligned_simple(car_object, start_frame, end_frame, start_x, end_x, rear_offset, rear_axis):
+    """リア端を揃えた位置へのアニメーションを設定（シンプル版）"""
+    # 初期位置：リアオフセット分だけずらす
+    if rear_axis == 'x':
+        car_object.location = (start_x + rear_offset, 0.0, 0.0)
+    else:
+        car_object.location = (0.0, start_x + rear_offset, 0.0)
+    car_object.keyframe_insert(data_path="location", frame=start_frame)
+    
+    # エンド位置：リア端がピッタリ揃う位置（オフセットなし）
+    if rear_axis == 'x':
+        car_object.location = (end_x, 0.0, 0.0)
+    else:
+        car_object.location = (0.0, end_x, 0.0)
+    car_object.keyframe_insert(data_path="location", frame=end_frame)
+    
+    print(f"リア揃えアニメーション設定：{car_object.name} ({start_frame}-{end_frame}フレーム)")
 
 
 def apply_clay_material_to_object(object_name, color_rgb):
@@ -728,6 +819,26 @@ def main():
         print(f"成功: '{imported_object.name}' をインポートしました")
         print(f"  - 位置: {imported_object.location}")
     
+    # ============================================================
+    # 新しい演出：リア端を揃えて全長差を可視化（左右配置版）
+    # ============================================================
+    
+    # 初期位置は左右に配置（X軸方向）かつリア端を揃える - ハードコード値を使用
+    car_a = imported_cars.get("carA")
+    car_b = imported_cars.get("carB")
+    
+    if car_a and car_b:
+        # ハードコードされた初期位置を設定（接地後のZ位置を保持）
+        grounded_z_a = grounded_z_positions.get(car_a.name, 0.0)
+        grounded_z_b = grounded_z_positions.get(car_b.name, 0.0)
+        
+        # carB (Land Cruiser): Vector(2.0, 0.0, Z) - Y座標=0.0
+        car_b.location = (2.0, 0.0, grounded_z_b)
+        # carA (Corolla Cross): Vector(-2.0, +0.258, Z) - Y座標=+0.258（リア端を揃える）
+        car_a.location = (-2.0, 0.258, grounded_z_a)
+        
+        print(f"初期位置を設定（ハードコード、Z=接地後）：carA={car_a.location}, carB={car_b.location}")
+    
     # 結果を表示
     print("\n=== インポート結果 ===")
     for key, obj in imported_cars.items():
@@ -748,7 +859,7 @@ def main():
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
     
-    # 車のアニメーション設定（キーフレーム）
+    # 車のアニメーション設定（キーフレーム）- 左右配置版 + リア端Y整列
     for key, car_data in CARS.items():
         # 車オブジェクトを取得
         car_obj = imported_cars.get(key)
@@ -759,23 +870,33 @@ def main():
         # 接地後のZ位置を保持（アニメーションでも維持）
         grounded_z = grounded_z_positions.get(car_obj.name, 0.0)
         
-        # 0フレーム：初期位置に出現
-        car_obj.location = (car_data['position'][0], 0.0, grounded_z)
+        # 初期位置：左右に配置かつリア端揃え（ハードコード値）
+        if key == "carA":
+            # carA (Corolla Cross): Y=+0.258 でリア端を揃える
+            start_x, start_y = -2.0, 0.258
+            end_x, end_y = 0.0, 0.258
+        else:
+            # carB (Land Cruiser): Y=0.0 のまま
+            start_x, start_y = 2.0, 0.0
+            end_x, end_y = 0.0, 0.0
+        
+        # 0フレーム：初期位置に出現（左右かつリア端揃え）
+        car_obj.location = (start_x, start_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=0)
         
         # 30フレーム：初期位置を維持（キーフレーム）
-        car_obj.location = (car_data['position'][0], 0.0, grounded_z)
+        car_obj.location = (start_x, start_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=30)
         
-        # 90フレーム：中央に到達
-        car_obj.location = (0.0, 0.0, grounded_z)
+        # 90フレーム：中央に集まって重なる（リア端揃え状態を維持）
+        car_obj.location = (end_x, end_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=90)
         
-        # 120フレーム：中央を維持（キーフレーム）
-        car_obj.location = (0.0, 0.0, grounded_z)
+        # 120フレーム：位置を維持（キーフレーム）
+        car_obj.location = (end_x, end_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=120)
         
-        print(f"アニメーション設定完了: {car_obj.name}")
+        print(f"アニメーション設定完了：{car_obj.name} ({start_x},{start_y}→{end_x},{end_y})")
     
     # =============================================
     # 新しい演出：半透明化アニメーション（フレーム30-90）
@@ -793,17 +914,18 @@ def main():
     # =============================================
     print("\n=== カメラ移動アニメーションを設定 ===")
     
-    # 初期カメラ位置と回転を取得
     camera = scene.camera
     if camera is None:
         print("エラー: カメラが設定されていません")
     else:
-        start_location = list(camera.location)
+        # フレーム90でのカメラ位置と回転（現在の状態を維持）
+        # 新しい初期位置 (8.5, -8.5, 4.5) に合わせる
+        start_location = [8.5, -8.5, 4.5]
         start_rotation = list(camera.rotation_euler)
         
-        # 真上からの俯瞰アングル（X軸回転90度、Z軸位置10m）
-        end_location = (0.0, 0.0, 10.0)
-        end_rotation = [math.radians(90), 0.0, 0.0]  # X軸を90度回転
+        # 真上俯瞰アングル：カメラを車の真上に配置し、真下を見る
+        end_location = (0.0, 0.0, 12.0)  # より高い位置から見るように調整（距離を保つ）
+        end_rotation = [math.radians(90), 0.0, 0.0]  # X軸を90度回転して真下を見る
         
         setup_camera_animation(camera, 90, 120, start_location, end_location, start_rotation, end_rotation)
     
