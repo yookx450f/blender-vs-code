@@ -1,0 +1,42 @@
+/*
+ * ★ 車の設定ファイル（cars_config.json）★
+ * 
+ * このファイルを編集して、2台の車の情報を設定してください。
+ * JSON形式なので、コメントは /* ... */ または // で記述できますが、
+ * 実際の cars_config.json ではコメントを削除して使用してください。
+ * 
+ * パラメータの説明：
+ *   name          : 車の表示名（ログやオブジェクト名に表示）
+ *   glb_path      : GLBファイルのフルパス（バックスラッシュは2つにする）
+ *   position      : 初期配置位置 [X, Y, Z] - X:左右, Y:前後, Z:高さ（自動調整される）
+ *   color         : クレイマテリアルの色 [赤, 緑, 青] - 各値は0.0〜1.0
+ *   dimensions_mm : 車の実寸法（単位：mm）
+ *     length      : 全長（前後方向の長さ、mm）
+ *     width       : 全幅（左右方向の幅、mm）
+ *     height      : 全高（上下方向の高さ、mm）
+ */
+
+{
+  "carA": {
+    "name": "Corolla Cross 2025",
+    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2025.glb",
+    "position": [-2.0, 0.0, 0],
+    "color": [0.8, 0.2, 0.2],
+    "dimensions_mm": {
+      "length": 4455,
+      "width": 1825,
+      "height": 1620
+    }
+  },
+  "carB": {
+    "name": "Corolla Cross 2026",
+    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2026.glb",
+    "position": [2.0, 0.0, 0],
+    "color": [0.2, 0.2, 0.8],
+    "dimensions_mm": {
+      "length": 4455,
+      "width": 1825,
+      "height": 1620
+    }
+  }
+}
