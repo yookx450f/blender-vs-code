@@ -594,27 +594,12 @@ def setup_camera_and_lighting():
     camera.data.lens = 24
     print(f"カメラの焦点距離を {camera.data.lens}mm に設定しました")
     
-    # ターゲットとなる Empty を作成（2台の車の中心位置）
-    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0.0, 0.0, 0.0))
-    camera_target = bpy.context.active_object
-    camera_target.name = "Camera_Target"
-    
-    # カメラに Track To コンストレイントを追加（全軸トラック）
-    constraint = camera.constraints.new('TRACK_TO')
-    constraint.target = camera_target
-    constraint.track_axis = 'TRACK_NEGATIVE_Z'  # カメラの-Z方向をレンズ方向に設定
-    constraint.up_axis = 'UP_Y'                  # Y軸を上方向として維持
-    
-    print(f"カメラターゲットを作成しました: {camera_target.name}")
-    
-    target_location = (0.0, 0.0, 0.0)
-    # カメラからターゲットへの方向を計算
+    # カメラの初期回転を設定（車の中心を見る）
+    target_location = (0.0, 0.0, 1.5)  # 車の中心付近を見つめる
     dx = target_location[0] - camera.location[0]
     dy = target_location[1] - camera.location[1]
     dz = target_location[2] - camera.location[2]
-    # Y軸周りの回転（水平方向）
     yaw = math.atan2(dx, dy)
-    # X軸周りの回転（垂直方向）
     pitch = math.atan2(dz, math.sqrt(dx*dx + dy*dy))
     camera.rotation_euler = (pitch, 0.0, -yaw)
     
@@ -967,10 +952,10 @@ def main():
     # シーンフレーム範囲を設定
     scene = bpy.context.scene
     scene.frame_start = 0
-    scene.frame_end = 120
+    scene.frame_end = 400
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
-    
+
     # 車のアニメーション設定（キーフレーム）- 左右配置版 + リア端Y整列
     for key, car_data in CARS.items():
         # 車オブジェクトを取得
@@ -992,26 +977,24 @@ def main():
             start_x, start_y = 2.0, 0.0
             end_x, end_y = 0.0, 0.0
         
-        # 0フレーム：初期位置に出現（左右かつリア端揃え）
+        # フレーム0-30: 左右に配置された状態で出現（初期位置を維持）
         car_obj.location = (start_x, start_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=0)
-        
-        # 30フレーム：初期位置を維持（キーフレーム）
         car_obj.location = (start_x, start_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=30)
         
-        # 90フレーム：中央に集まって重なる（リア端揃え状態を維持）
+        # フレーム90: 中央に集まって重なる（リア端揃え状態を維持）
         car_obj.location = (end_x, end_y, grounded_z)
         car_obj.keyframe_insert(data_path="location", frame=90)
         
-        # 120フレーム：位置を維持（キーフレーム）
+        # フレーム400まで位置を維持（キーフレーム）
         car_obj.location = (end_x, end_y, grounded_z)
-        car_obj.keyframe_insert(data_path="location", frame=120)
+        car_obj.keyframe_insert(data_path="location", frame=400)
         
         print(f"アニメーション設定完了：{car_obj.name} ({start_x},{start_y}→{end_x},{end_y})")
-    
+
     # =============================================
-    # 新しい演出：半透明化アニメーション（フレーム30-90）
+    # 半透明化アニメーション（フレーム30-90）
     # =============================================
     print("\n=== 半透明化アニメーションを設定 ===")
     
@@ -1020,9 +1003,10 @@ def main():
         setup_transparency_animation(car_obj, 30, 90, 1.0, 0.4)
     
     print("半透明化アニメーション設定完了")
-    
+
     # =============================================
-    # 新しい演出：カメラ移動アニメーション（フレーム90-120）
+    # カメラ移動アニメーション（フレーム0-400）
+    # Track To不使用：位置と回転を直接キーフレーム制御
     # =============================================
     print("\n=== カメラ移動アニメーションを設定 ===")
     
@@ -1030,18 +1014,96 @@ def main():
     if camera is None:
         print("エラー: カメラが設定されていません")
     else:
-        # フレーム90でのカメラ位置と回転（現在の状態を維持）
-        # 新しい初期位置 (8.5, -8.5, 4.5) に合わせる
-        start_location = [8.5, -8.5, 4.5]
-        start_rotation = list(camera.rotation_euler)
+        # Track To コンストレイントをすべて無効化（直接回転制御）
+        for constraint in camera.constraints:
+            if constraint.type == 'TRACK_TO':
+                constraint.mute = True  # 無効化
+                print(f"Track To コンストレイント '{constraint.name}' を無効化しました")
         
-        # 真上俯瞰アングル：カメラを車の真上に配置し、真下を見る
-        end_location = (0.0, 0.0, 12.0)  # より高い位置から見るように調整（距離を保つ）
-        end_rotation = [math.radians(90), 0.0, 0.0]  # X軸を90度回転して真下を見る
+        target = (0.0, 0.0, 1.5)  # カメラが向くターゲット（車の中心付近）
         
-        setup_camera_animation(camera, 90, 120, start_location, end_location, start_rotation, end_rotation)
-    
-    print("カメラ移動アニメーション設定完了")
+        def set_camera_look_at(cam, loc, tgt):
+            """カメラを指定位置に配置し、ターゲット方向に向ける"""
+            cam.location = loc
+            direction = Vector(tgt) - Vector(loc)
+            rot_quat = direction.to_track_quat('-Z', 'Y')  # カメラの-Z軸をターゲット方向へ
+            cam.rotation_euler = rot_quat.to_euler()
+        
+        # 【フェーズ1】フレーム0-90: 斜め上の固定視点（2台の車を映す）
+        loc_phase1 = (6.5, -6.5, 4.0)
+        set_camera_look_at(camera, loc_phase1, target)
+        rot_phase1_start = camera.rotation_euler.copy()
+        
+        # フレーム0: スタート位置
+        camera.location = loc_phase1
+        camera.rotation_euler = rot_phase1_start
+        camera.keyframe_insert(data_path="location", frame=0)
+        camera.keyframe_insert(data_path="rotation_euler", frame=0)
+        
+        # フレーム90: 同じ位置・回転を維持（固定視点）
+        camera.location = loc_phase1
+        camera.rotation_euler = rot_phase1_start
+        camera.keyframe_insert(data_path="location", frame=90)
+        camera.keyframe_insert(data_path="rotation_euler", frame=90)
+        
+        # 【フェーズ2】フレーム90-200: ゆっくりトップビューへ移動（車の中心の真上）
+        loc_phase2 = (0.0, 0.0, 14.0)
+        
+        # フレーム200: トップビュー位置でターゲットを見る（車が縦に見える斜めの状態）
+        set_camera_look_at(camera, loc_phase2, target)
+        rot_phase2_end = camera.rotation_euler.copy()
+        camera.keyframe_insert(data_path="location", frame=200)
+        camera.keyframe_insert(data_path="rotation_euler", frame=200)
+        
+        # 【フェーズ3】フレーム200-240: トップビュー位置でZ軸回転（車が横に映る）
+        loc_phase3 = (0.0, 0.0, 14.0)  # 位置はトップビューのままとする
+        
+        # フレーム240: Z軸周りに90度回転して車を横から見えるように
+        # rot_phase2_endのZ成分にπ/2を加算（Z軸回転）
+        base_rot = rot_phase2_end.copy()
+        rot_phase3_end = (base_rot.x, base_rot.y, base_rot.z + math.pi / 2)
+        
+        camera.location = loc_phase3
+        camera.rotation_euler = rot_phase3_end
+        camera.keyframe_insert(data_path="location", frame=240)
+        camera.keyframe_insert(data_path="rotation_euler", frame=240)
+        
+        # 【フェーズ4】フレーム240-340: ゆっくりサイドビューへ移動（車の真横）
+        # set_camera_look_at() を使用せず、直接キーフレーム制御で回転を保持
+        loc_phase4 = (8.0, 0.0, 2.5)
+        
+        # サイドビューの適切な回転を計算（車の側面を見る方向）
+        # カメラ位置(8,0,2.5)からターゲット(0,0,1.5)へ向く回転
+        direction_phase4 = Vector(target) - Vector(loc_phase4)
+        rot_quat_phase4 = direction_phase4.to_track_quat('-Z', 'Y')
+        rot_phase4_end = rot_quat_phase4.to_euler()
+        
+        # フレーム240: トップビューの回転を保持（フェーズ3から連続）
+        camera.location = loc_phase3
+        camera.rotation_euler = rot_phase3_end
+        camera.keyframe_insert(data_path="location", frame=240)
+        camera.keyframe_insert(data_path="rotation_euler", frame=240)
+        
+        # フレーム340: サイドビュー位置・回転へ移動
+        camera.location = loc_phase4
+        camera.rotation_euler = rot_phase4_end
+        camera.keyframe_insert(data_path="location", frame=340)
+        camera.keyframe_insert(data_path="rotation_euler", frame=340)
+        
+        # 【フェーズ5】フレーム340-400: サイドビューで静止（全長差比較）
+        camera.location = loc_phase4
+        camera.rotation_euler = rot_phase4_end
+        camera.keyframe_insert(data_path="location", frame=400)
+        camera.keyframe_insert(data_path="rotation_euler", frame=400)
+        
+        bpy.context.scene.frame_set(0)
+        
+        print("カメラアニメーション設定完了:")
+        print(f"  - フレーム0-90:   斜め上の固定視点 {loc_phase1}")
+        print(f"  - フレーム90-200: ゆっくりトップビューへ移動（車の中心の真上）{loc_phase2}")
+        print(f"  - フレーム200-240: トップビュー位置でZ軸回転（車が横に映る）")
+        print(f"  - フレーム240-340: ゆっくりサイドビューへ移動（車の真横）{loc_phase4}")
+        print(f"  - フレーム340-400: サイドビューで静止（全長差比較）")
     
     # マテリアルの再適用（確認用）- 青い車の色補正を含む
     for key, car_data in CARS.items():
@@ -1078,7 +1140,7 @@ def main():
     setup_viewport_shading()  # デフォルト: MATERIAL モード
     
     # =============================================
-    # レンダリング出力設定
+    # レンダリング出力設定（PNGシーケンス）
     # =============================================
     print("\n=== レンダリング出力設定 ===")
     
@@ -1086,22 +1148,17 @@ def main():
     output_filepath = os.path.join(desktop_path, "car_comparison.mp4")
     scene.render.filepath = output_filepath
     
-    # レンダーエンジンを Cycles に設定（レイトレーシング有効）
-    scene.render.engine = 'CYCLES'
+    # レンダーエンジンを EEVEE に設定
+    scene.render.engine = 'BLENDER_EEVEE'
     
-    # 出力形式をPNGに設定（FFMPEGが利用できない場合のフォールバック）
+    # PNGシーケンスで出力（手動レンダリング用）
     scene.render.image_settings.file_format = 'PNG'
     scene.render.image_settings.color_mode = 'RGBA'
     scene.render.image_settings.compression = 15
     
-    # レイトレーシング設定（Cycles）
-    scene.cycles.samples = 128
-    scene.cycles.use_denoising = True
-    
-    print(f"出力フォーマット: PNG")
-    print(f"レンダーエンジン: Cycles (レイトレーシング有効)")
-    print(f"Cycles サンプル数: {scene.cycles.samples}")
-    print(f"保存先: {output_filepath}")
+    print(f"出力フォーマット: PNGシーケンス")
+    print(f"レンダーエンジン: EEVEE")
+    print(f"保存先: {output_filepath}.0001.png 〜 .{scene.frame_end:04d}.png")
     
     print("\n" + "=" * 50)
     print("シーン作成完了！")
@@ -1111,6 +1168,13 @@ def main():
     blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")
     bpy.ops.wm.save_mainfile(filepath=blend_output_path)
     print(f"シーンを保存しました: {blend_output_path}")
+    
+    # 注意: 自動レンダリングは行いません。Blender GUIで手動レンダリングしてください。
+    # または --render オプションを使用してコマンドラインからレンダリングを実行できます。
+    print("\nシーンが作成されました。Blender GUIで確認・編集できます。")
+    print("アニメーションレンダリングを実行するには:")
+    print("  - Blender GUI: レンダー > アニメーションのレンダー (Ctrl+F12)")
+    print("  - コマンドライン: python run.py --render")
     
     return imported_cars
 
