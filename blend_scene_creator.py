@@ -649,11 +649,13 @@ def setup_camera_and_lighting():
 
 
 def setup_world_background():
-    """世界背景を薄めのグレーに設定する（見やすさ向上）"""
+    """世界背景を完全な漆黒（真っ黒）に設定する"""
     world = bpy.data.worlds["World"]
-    world.node_tree.nodes["Background"].inputs['Color'].default_value = (0.15, 0.15, 0.2, 1.0)
-    world.node_tree.nodes["Background"].inputs['Strength'].default_value = 0.4
-    print("世界背景を薄めのグレーに設定しました")
+    # RGBすべてゼロで完全な黒、アルファ1.0
+    world.node_tree.nodes["Background"].inputs['Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+    # Strengthを0.0に設定して完全に暗闇にする
+    world.node_tree.nodes["Background"].inputs['Strength'].default_value = 0.0
+    print("世界背景を完全な漆黒（真っ黒）に設定しました")
 
 
 # ============================================================
