@@ -233,6 +233,103 @@ def create_clay_material(name, color):
     return material
 
 
+def setup_transparency_animation(car_object, start_frame, end_frame, start_alpha, end_alpha):
+    """車のマテリアル不透明度をアニメーションさせる（EEVEE透過対応）"""
+    if car_object is None:
+        print(f"エラー: オブジェクトがNoneです")
+        return
+    
+    # マテリアルが存在するか確認
+    if len(car_object.data.materials) == 0:
+        print(f"警告: {car_object.name} にマテリアルが設定されていません")
+        return
+    
+    material = car_object.data.materials[0]
+    
+    # ノードベースのマテリアルでない場合はスキップ
+    if not material.use_nodes:
+        print(f"警告: {material.name} はノードベースではありません")
+        return
+    
+    # EEVEEで透過が正しくブレンドされるよう、ブレンドモードを 'BLEND' に設定
+    material.blend_method = 'BLEND'
+    print(f"{car_object.name} のマテリアルブレンドモードを BLEND に設定しました")
+    
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    
+    # Principled BSDF ノードを検索
+    principled_node = None
+    for node in nodes:
+        if node.type == 'BSDF_PRINCIPLED':
+            principled_node = node
+            break
+    
+    if principled_node is None:
+        print(f"警告: {material.name} にPrincipled BSDFノードが見つかりません")
+        return
+    
+    # Alpha入力が存在するか確認（Blender 4.0+ では 'Alpha'、それ以前は 'Specular Tint' の下）
+    if 'Alpha' in principled_node.inputs:
+        alpha_input = principled_node.inputs['Alpha']
+        
+        # スタートフレームでセット
+        car_object.location = car_object.location  # 何もしないが更新を強制
+        alpha_input.default_value = start_alpha
+        alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
+        
+        # エンドフレームでセット
+        alpha_input.default_value = end_alpha
+        alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
+        
+        print(f"不透明度アニメーション設定: {car_object.name} ({start_frame}-{end_frame}) Alpha: {start_alpha}→{end_alpha}")
+    else:
+        # Alpha入力が存在しない場合は、Base ColorのAlpha成分を操作する代替方法
+        # ただし、これはキーフレームが効かない可能性があるため注意が必要
+        print(f"警告: {material.name} にAlpha入力が見つかりません。Base Colorでの透過制御を試みます...")
+        
+        # Base Colorの入力を取得（Blender 5.x）
+        if 'Base Color' in principled_node.inputs:
+            base_color = principled_node.inputs['Base Color']
+            
+            # スタートフレーム - color パラメータが必要
+            # ここではデフォルトの赤色を使用
+            start_color = (1.0, 0.2, 0.2)  # 赤
+            base_color.default_value = (*start_color, start_alpha)
+            base_color.keyframe_insert(data_path="default_value", frame=start_frame)
+            
+            # エンドフレーム
+            base_color.default_value = (*start_color, end_alpha)
+            base_color.keyframe_insert(data_path="default_value", frame=end_frame)
+            
+            print(f"Base Colorアニメーション設定: {car_object.name} ({start_frame}-{end_frame})")
+        else:
+            print(f"エラー: Base Color入力も存在しません。透過アニメーションを実行できません。")
+
+
+def setup_camera_animation(camera, start_frame, end_frame, start_location, end_location, start_rotation, end_rotation):
+    """カメラの位置と回転をアニメーションさせる"""
+    if camera is None:
+        print("エラー: カメラがシーンに設定されていません")
+        return
+    
+    # スタートフレームでセット
+    camera.location = start_location
+    camera.rotation_euler = start_rotation
+    camera.keyframe_insert(data_path="location", frame=start_frame)
+    camera.keyframe_insert(data_path="rotation_euler", frame=start_frame)
+    
+    # エンドフレームでセット
+    camera.location = end_location
+    camera.rotation_euler = end_rotation
+    camera.keyframe_insert(data_path="location", frame=end_frame)
+    camera.keyframe_insert(data_path="rotation_euler", frame=end_frame)
+    
+    print(f"カメラアニメーション設定: {camera.name} ({start_frame}-{end_frame})")
+    print(f"  - スタート位置: {start_location}, 回転: {[round(e, 3) for e in start_rotation]}")
+    print(f"  - エンド位置: {end_location}, 回転: {[round(e, 3) for e in end_rotation]}")
+
+
 def create_placeholder_car(key, color, location):
     """GLBファイルがない場合のプレースホルダー車（円柱ベース）"""
     bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.8, depth=2.5, location=location)
@@ -680,6 +777,38 @@ def main():
         
         print(f"アニメーション設定完了: {car_obj.name}")
     
+    # =============================================
+    # 新しい演出：半透明化アニメーション（フレーム30-90）
+    # =============================================
+    print("\n=== 半透明化アニメーションを設定 ===")
+    
+    # 両車のマテリアルに不透明度アニメーションを追加
+    for key, car_obj in imported_cars.items():
+        setup_transparency_animation(car_obj, 30, 90, 1.0, 0.4)
+    
+    print("半透明化アニメーション設定完了")
+    
+    # =============================================
+    # 新しい演出：カメラ移動アニメーション（フレーム90-120）
+    # =============================================
+    print("\n=== カメラ移動アニメーションを設定 ===")
+    
+    # 初期カメラ位置と回転を取得
+    camera = scene.camera
+    if camera is None:
+        print("エラー: カメラが設定されていません")
+    else:
+        start_location = list(camera.location)
+        start_rotation = list(camera.rotation_euler)
+        
+        # 真上からの俯瞰アングル（X軸回転90度、Z軸位置10m）
+        end_location = (0.0, 0.0, 10.0)
+        end_rotation = [math.radians(90), 0.0, 0.0]  # X軸を90度回転
+        
+        setup_camera_animation(camera, 90, 120, start_location, end_location, start_rotation, end_rotation)
+    
+    print("カメラ移動アニメーション設定完了")
+    
     # マテリアルの再適用（確認用）
     for key, car_data in CARS.items():
         apply_clay_material_to_object(imported_cars[key].name, car_data['color'])
@@ -702,4 +831,5 @@ def main():
 # スクリプトとして実行された場合
 if __name__ == "__main__":
     result = main()
+    
     # シーン作成後にBlenderを自動終了しない（ウィンドウを開いたまま）
