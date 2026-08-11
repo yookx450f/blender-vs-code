@@ -11,7 +11,7 @@ import bpy
 import math
 from mathutils import Vector
 from animation_common import (
-    set_camera_look_at, _calculate_length_difference, 
+    set_camera_look_at, _calculate_length_difference, _calculate_width_difference,
     create_emission_material, _setup_char_by_char_animation
 )
 
@@ -165,6 +165,9 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
 
     print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ固定（正面ビュー）")
     print(f"[フレーム{scene7_end}] シーン 7 終了：カメラ={end_loc}（正面ビュー）, 車維持")
+
+    # --- シーン 7 の横幅差エフェクト（テキストのみ）---
+    _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end, car_dimensions)
 
     # シーン 5 のテキストをフェードアウト（シーン 6 終了時）
     text_container_name = "LengthDiff_Container_Scene5"
@@ -491,3 +494,155 @@ def _cleanup_transparency_keyframes(material, start_frame, end_frame):
     kf_keys = [k for k in material.keyframes if k.frame >= start_frame and k.frame <= end_frame]
     for kf in kf_keys:
         material.keyframes.remove(kf)
+
+
+def _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end, car_dimensions=None):
+    """シーン 7 の横幅差エフェクトを設定"""
+    width_diff_mm = _calculate_width_difference(car_a, car_b, car_dimensions)
+
+    if car_dimensions:
+        width_a_mm = car_dimensions.get("carA", {}).get("width", 0)
+        width_b_mm = car_dimensions.get("carB", {}).get("width", 0)
+    else:
+        def get_car_width(car_obj):
+            bounds = [Vector(b) for b in car_obj.bound_box]
+            x_coords = [b.x for b in bounds]
+            return max(x_coords) - min(x_coords)
+        width_a = get_car_width(car_a)
+        width_b = get_car_width(car_b)
+        width_a_mm = int(round(width_a * 1000))
+        width_b_mm = int(round(width_b * 1000))
+
+    print(f"[シーン 7] 横幅差：{width_diff_mm:+d}mm (CarB: {width_b_mm}mm, CarA: {width_a_mm}mm)")
+
+    text_obj = _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, scene7_start, scene7_end)
+    if text_obj:
+        print(f"[シーン 7] 数値テキスト '{text_obj.name}' を作成しました")
+
+    print(f"[フレーム{scene7_end}] シーン 7 終了：横幅差表示完了")
+
+
+def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, start_frame, end_frame):
+    """横幅の計算式を表示するテキストを作成（CarB - CarA → 結果）"""
+    def get_car_center(car_obj):
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        world_bounds = [car_obj.matrix_world @ b for b in bounds]
+        min_x = min(p.x for p in world_bounds)
+        max_x = max(p.x for p in world_bounds)
+        min_y = min(p.y for p in world_bounds)
+        max_y = max(p.y for p in world_bounds)
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        return (center_x, center_y)
+
+    center_a = get_car_center(car_a)
+    center_b = get_car_center(car_b)
+    avg_center_x = (center_a[0] + center_b[0]) / 2.0
+    avg_center_y = (center_a[1] + center_b[1]) / 2.0
+
+    def get_car_max_z(car_obj):
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        world_bounds = [car_obj.matrix_world @ b for b in bounds]
+        return max(p.z for p in world_bounds)
+
+    car_max_z_a = get_car_max_z(car_a)
+    car_max_z_b = get_car_max_z(car_b)
+    max_height = max(car_max_z_a, car_max_z_b)
+
+    avg_center_x = (center_a[0] + center_b[0]) / 2.0
+    avg_center_y = (center_a[1] + center_b[1]) / 2.0
+    
+    text_container_location = (avg_center_x, avg_center_y, 2.0)
+    
+    bpy.ops.object.empty_add(location=text_container_location)
+    text_container = bpy.context.active_object
+    text_container.name = "WidthDiff_Container_Scene7"
+
+    cam_pos = camera.location
+    container_pos = Vector(text_container_location)
+    direction = cam_pos - container_pos
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    euler_rot = rot_quat.to_euler()
+    euler_rot.z += math.pi
+    text_container.rotation_euler = euler_rot
+
+    scene.collection.objects.link(text_container)
+
+    text_str = f"Width: {width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
+
+    char_objects = []
+    spacing = 0.12
+
+    colors = {
+        'blue': (0.0, 1.0, 1.0),
+        'red': (1.0, 0.0, 0.0),
+        'white': (1.0, 1.0, 1.0)
+    }
+
+    color_map = ['white'] * len(text_str)
+
+    number_blocks = []
+    current_block = []
+
+    for i, char in enumerate(text_str):
+        if char in '0123456789':
+            current_block.append(i)
+        else:
+            if current_block:
+                number_blocks.append(current_block)
+                current_block = []
+    if current_block:
+        number_blocks.append(current_block)
+
+    for idx, block in enumerate(number_blocks):
+        if idx == 0:
+            color = 'blue'
+        elif idx == 1:
+            color = 'red'
+        else:
+            color = 'white'
+
+        for pos in block:
+            if pos < len(color_map):
+                color_map[pos] = color
+
+    for i, char in enumerate(text_str):
+        bpy.ops.object.text_add(location=(0, 0, 4.0))
+        char_obj = bpy.context.active_object
+        char_obj.name = f"WidthDiff_Char_{i}"
+
+        if hasattr(char_obj.data, 'string'):
+            char_obj.data.string = char
+        else:
+            char_obj.data.body = char
+
+        if hasattr(char_obj.data, 'size'):
+            char_obj.data.size = 0.22
+
+        char_obj.scale = (1.0, 1.0, 1.0)
+
+        color_name = color_map[i] if i < len(color_map) else 'white'
+        mat_name = f"emission_label_scene7_char_{color_name}"
+        if mat_name not in bpy.data.materials:
+            emission_mat = create_emission_material(colors[color_name], 5.0)
+            emission_mat.name = mat_name
+        else:
+            emission_mat = bpy.data.materials[mat_name]
+
+        if len(char_obj.data.materials) == 0:
+            char_obj.data.materials.append(emission_mat)
+
+        char_obj.parent = text_container
+        scene.collection.objects.link(char_obj)
+
+        local_x = -((len(text_str) - 1) * spacing) / 2 + (i * spacing)
+        local_y = 0.5
+        local_z = -0.3
+
+        char_obj.location = (local_x, local_y, local_z)
+        char_objects.append(char_obj)
+
+    _setup_char_by_char_animation(char_objects, start_frame=start_frame, end_frame=end_frame)
+
+    print(f"[シーン 7] 計算式テキスト '{text_str}' を {len(char_objects)} 文字で作成")
+    return text_container

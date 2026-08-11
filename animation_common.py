@@ -254,3 +254,30 @@ def _calculate_length_difference(car_a, car_b, car_dimensions=None):
     diff_mm = int(round(diff_meters * 1000))
     print(f"  carA 長さ：{length_a:.3f}m, carB 長さ：{length_b:.3f}m（バウンディングボックス）, 差 (carB-carA): {diff_mm:+d}mm")
     return diff_mm
+
+
+def _calculate_width_difference(car_a, car_b, car_dimensions=None):
+    """2 台の車の横幅差を計算（mm 単位、carB - carA）
+
+    設定ファイルの寸法値がある場合はそれを使用。
+    ない場合はバウンディングボックスから計算するフォールバック。
+    """
+    if car_dimensions:
+        width_a_mm = car_dimensions.get("carA", {}).get("width", 0)
+        width_b_mm = car_dimensions.get("carB", {}).get("width", 0)
+        diff_mm = width_b_mm - width_a_mm
+        print(f"  carA 横幅：{width_a_mm}mm, carB 横幅：{width_b_mm}mm（設定値）, 差 (carB-carA): {diff_mm:+d}mm")
+        return diff_mm
+    
+    # フォールバック：バウンディングボックスから計算
+    def get_car_width(car_obj):
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        x_coords = [b.x for b in bounds]
+        return max(x_coords) - min(x_coords)
+
+    width_a = get_car_width(car_a)
+    width_b = get_car_width(car_b)
+    diff_meters = width_b - width_a
+    diff_mm = int(round(diff_meters * 1000))
+    print(f"  carA 横幅：{width_a:.3f}m, carB 横幅：{width_b:.3f}m（バウンディングボックス）, 差 (carB-carA): {diff_mm:+d}mm")
+    return diff_mm
