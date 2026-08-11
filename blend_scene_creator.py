@@ -914,7 +914,7 @@ def main():
     setup_viewport_shading()  # デフォルト: MATERIAL モード
     
     # =============================================
-    # レンダリング出力設定（PNGシーケンス）
+    # レンダリング出力設定（FFMPEG動画直接出力）
     # =============================================
     print("\n=== レンダリング出力設定 ===")
     
@@ -925,14 +925,28 @@ def main():
     # レンダーエンジンを EEVEE に設定
     scene.render.engine = 'BLENDER_EEVEE'
     
-    # PNGシーケンスで出力（手動レンダリング用）
-    scene.render.image_settings.file_format = 'PNG'
-    scene.render.image_settings.color_mode = 'RGBA'
-    scene.render.image_settings.compression = 15
+    # EEVEEのレイトレーシングを有効化（Blender 5.x 対応）
+    try:
+        scene.eevee.use_gi = True
+    except AttributeError:
+        pass  # Blender 5.x では use_gi が廃止されている
+    scene.eevee.use_raytracing = True
+    print("EEVEEレイトレーシングを有効化しました")
     
-    print(f"出力フォーマット: PNGシーケンス")
+    # FFMPEGで直接動画出力（メディアタイプ=動画）
+    scene.render.image_settings.media_type = 'VIDEO'
+    scene.render.image_settings.file_format = 'FFMPEG'
+    scene.render.image_settings.color_mode = 'RGB'
+    
+    # FFMPEG設定（H.264コーデック、MP4コンテナ）
+    scene.render.ffmpeg.format = 'MPEG4'
+    scene.render.ffmpeg.codec = 'H264'
+    scene.render.ffmpeg.constant_rate_factor = 'MEDIUM'
+    scene.render.ffmpeg.ffmpeg_preset = 'GOOD'
+    
+    print(f"出力フォーマット: MP4 (FFMPEG / H.264)")
     print(f"レンダーエンジン: EEVEE")
-    print(f"保存先: {output_filepath}.0001.png 〜 .{scene.frame_end:04d}.png")
+    print(f"保存先: {output_filepath}.mp4")
     
     print("\n" + "=" * 50)
     print("シーン作成完了！")
