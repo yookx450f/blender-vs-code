@@ -22,22 +22,44 @@ def set_camera_look_at(cam, loc, tgt):
 
 
 def create_emission_material(color_rgb, strength):
-    """発光マテリアルを作成（再利用用）"""
+    """発光マテリアルを作成（再利用用）
+    
+    Mix Shader + Transparent BSDF + Emission の構成を使用し、
+    透明度をアニメーションで制御できるようにする。
+    """
     mat = bpy.data.materials.new(name="emission_temp")
     mat.use_nodes = True
+    # EEVEEで透過を有効化
+    mat.blend_method = 'BLEND'
 
     nodes = mat.node_tree.nodes
     nodes.clear()
 
-    output_node = nodes.new(type='ShaderNodeOutputMaterial')
-    output_node.location = (400, 0)
+    links = mat.node_tree.links
 
+    output_node = nodes.new(type='ShaderNodeOutputMaterial')
+    output_node.location = (500, 0)
+
+    # Mix Shader ノード（透明度制御用）
+    mix_shader = nodes.new(type='ShaderNodeMixShader')
+    mix_shader.location = (300, 0)
+    # Fac = 1.0 で Emission を完全に使用、0.0 で Transparent を完全に使用
+    mix_shader.inputs['Fac'].default_value = 1.0
+
+    # Transparent BSDF ノード
+    transparent_node = nodes.new(type='ShaderNodeBsdfTransparent')
+    transparent_node.location = (100, -100)
+
+    # Emission ノード
     emission_node = nodes.new(type='ShaderNodeEmission')
-    emission_node.location = (100, 0)
+    emission_node.location = (100, 100)
     emission_node.inputs['Color'].default_value = (*color_rgb, 1.0)
     emission_node.inputs['Strength'].default_value = strength * 2  # 発光強度を2倍に強化
 
-    mat.node_tree.links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
+    # ノード接続
+    links.new(emission_node.outputs['Emission'], mix_shader.inputs[2])  # Shader A
+    links.new(transparent_node.outputs['BSDF'], mix_shader.inputs[1])   # Shader B
+    links.new(mix_shader.outputs['Shader'], output_node.inputs['Surface'])
 
     return mat
 

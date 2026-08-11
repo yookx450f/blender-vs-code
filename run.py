@@ -4,7 +4,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
 使い方:
     python run.py              # 全カット（カット1+2）のシーンを作成
     python run.py 1            # カット1のみ（シーン1-4、フレーム0-648）
-    python run.py 2            # カット2のみ（シーン5、フレーム648-792）
+    python run.py 2            # カット2のみ（シーン5-7、フレーム648-984）
     python run.py --render     # レンダーのみ実行して終了
 """
 
@@ -18,9 +18,9 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 792, "label": "全カット（シーン1-5）"},
+    "all": {"start": 0, "end": 984, "label": "全カット（シーン1-7）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
-    "2": {"start": 648, "end": 792, "label": "カット2（シーン5）"},
+    "2": {"start": 648, "end": 984, "label": "カット2（シーン5-7）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス

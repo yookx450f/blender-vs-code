@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール - カット 2
-フレーム 648-936（シーン 5-6）を処理する。
+フレーム 648-1080（シーン 5-7）を処理する。
 
 使い方:
     from animation_settings_cut2 import setup_cut2_animations
@@ -52,12 +52,12 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 2】シーン 5: フレーム 648-792（真横固定視点・全長差表示エフェクト）
+    # 【カット 2】シーン 5: フレーム 648-768（真横固定視点・全長差表示エフェクト）
     # ============================================================
     print("\n=== 【カット 2】シーン 5 設定開始 ===")
 
     scene5_start = 648
-    scene5_end = 792  # 6 秒間（24fps × 6 = 144 フレーム）
+    scene5_end = 768  # 5 秒間（24fps × 5 = 120 フレーム）
 
     # カメラ: カット 1 の最終位置を維持（真横固定視点・ピタッと停止）
     camera.location = loc_phase4
@@ -85,30 +85,34 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions)
 
     # ============================================================
-    # 【カット 2】シーン 6: フレーム 792-936（車の正面にカメラ移動・6 秒間）
+    # 【カット 2】シーン 6: フレーム 792-936（サイドビューから正面へカメラ移動・6 秒間）
     # ============================================================
     print("\n=== 【カット 2】シーン 6 設定開始 ===")
 
-    scene6_start = 792
-    scene6_end = 936  # 6 秒間（24fps × 6 = 144 フレーム）
+    scene6_start = 768
+    scene6_end = 936  # 7 秒間（24fps × 7 = 168 フレーム）
 
-    # カメラ: 車の正面にゆっくり移動（距離 70%）
-    # サイドビュー位置から車の前方へ移動
-    loc_phase5 = (0.0, -10.0, 3.0)  # 車前方、やや上
-    direction_phase5 = Vector(target) - Vector(loc_phase5)
-    rot_quat_phase5 = direction_phase5.to_track_quat('-Z', 'Y')
-    rot_phase5 = rot_quat_phase5.to_euler()
+    # カメラ: サイドビュー位置から車の正面にゆっくり移動
+    # 初期位置：サイドビュー（loc_phase4, rot_phase4）
+    start_loc = loc_phase4
+    start_rot = rot_phase4
+    
+    # 最終位置：車により近い正面ビュー（より近い距離）
+    end_loc = (0.0, -7.0, 2.5)  # 車に近づけた正面、やや上
+    direction_end = Vector(target) - Vector(end_loc)
+    rot_quat_end = direction_end.to_track_quat('-Z', 'Y')
+    end_rot = rot_quat_end.to_euler()
 
     # 中間地点（フレーム 864）- 距離 50%
     mid_frame = scene6_start + 72
-    # サイドビュー位置から正面位置へのベクトルを 50% に縮小
-    loc_mid = (4.0, -5.0, 2.75)  # サイドビューと正面の中間（距離 50%）
+    loc_mid = (start_loc[0] + end_loc[0]) / 2.0, (start_loc[1] + end_loc[1]) / 2.0, (start_loc[2] + end_loc[2]) / 2.0
     direction_mid = Vector(target) - Vector(loc_mid)
     rot_quat_mid = direction_mid.to_track_quat('-Z', 'Y')
     rot_mid = rot_quat_mid.to_euler()
 
-    camera.location = loc_phase5
-    camera.rotation_euler = rot_phase5
+    # 開始位置
+    camera.location = start_loc
+    camera.rotation_euler = start_rot
     camera.keyframe_insert(data_path="location", frame=scene6_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene6_start)
 
@@ -118,12 +122,13 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     camera.keyframe_insert(data_path="location", frame=mid_frame)
     camera.keyframe_insert(data_path="rotation_euler", frame=mid_frame)
 
-    camera.location = loc_phase5
-    camera.rotation_euler = rot_phase5
+    # 終了位置
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
     camera.keyframe_insert(data_path="location", frame=scene6_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene6_end)
 
-    # 車: シーン 5 の位置を維持
+    # 車: シーン 6 の位置を維持
     car_a.location = car_a_end
     car_a.keyframe_insert(data_path="location", frame=scene6_start)
     car_a.keyframe_insert(data_path="location", frame=scene6_end)
@@ -131,45 +136,100 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     car_b.keyframe_insert(data_path="location", frame=scene6_start)
     car_b.keyframe_insert(data_path="location", frame=scene6_end)
 
-    # シーン 5 のテキストをフェードアウト（シーン 6 開始時）
+    print(f"[フレーム{scene6_start}] シーン 6 開始：カメラ移動開始（サイドビュー）")
+    print(f"[フレーム{scene6_end}] シーン 6 終了：カメラ={end_loc}（正面ビュー）, 車維持")
+
+    # ============================================================
+    # 【カット 2】シーン 7: フレーム 936-984（正面ビューで静止・2 秒間）
+    # ============================================================
+    print("\n=== 【カット 2】シーン 7 設定開始 ===")
+
+    scene7_start = 936
+    scene7_end = 1080  # 6 秒間（24fps × 6 = 144 フレーム）
+
+    # カメラ: シーン 6 の終了位置に固定
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
+    camera.keyframe_insert(data_path="location", frame=scene7_start)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene7_start)
+    camera.keyframe_insert(data_path="location", frame=scene7_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene7_end)
+
+    # 車: シーン 6 の位置を維持
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=scene7_start)
+    car_a.keyframe_insert(data_path="location", frame=scene7_end)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=scene7_start)
+    car_b.keyframe_insert(data_path="location", frame=scene7_end)
+
+    print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ固定（正面ビュー）")
+    print(f"[フレーム{scene7_end}] シーン 7 終了：カメラ={end_loc}（正面ビュー）, 車維持")
+
+    # シーン 5 のテキストをフェードアウト（シーン 6 終了時）
     text_container_name = "LengthDiff_Container_Scene5"
     if text_container_name in bpy.data.objects:
         text_obj = bpy.data.objects[text_container_name]
 
-        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（792→840）")
+        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（768→936）")
 
-        # 各文字オブジェクトに直接キーフレームを設定
+        # コンテナ自体のスケールをアニメーションで制御（最も確実な方法）
+        # フレーム 768: スケール維持（1.0, 1.0, 1.0）
+        text_obj.scale = (1.0, 1.0, 1.0)
+        text_obj.keyframe_insert(data_path="scale", frame=scene6_start)
+        
+        # フレーム 936: スケールを 0 に（完全に消える）
+        fade_end_frame = scene6_end  # フレーム 936
+        text_obj.scale = (0.0, 0.0, 0.0)
+        text_obj.keyframe_insert(data_path="scale", frame=fade_end_frame)
+
+        # 各文字オブジェクトにもキーフレームを設定（二重確保）
         for char_obj in text_obj.children:
             if char_obj.type == 'MESH':
-                # スケールを徐々に 0 にフェードアウト（フレーム 792→840 で）
-
                 # まず現在のスケールを取得して保存
                 current_scale = char_obj.scale.copy() if hasattr(char_obj, 'scale') else (1.0, 1.0, 1.0)
 
-                # フレーム 792: 現在のスケールを維持（キーフレーム）
+                # フレーム 768: 現在のスケールを維持（キーフレーム）
                 char_obj.scale = current_scale
                 char_obj.keyframe_insert(data_path="scale", frame=scene6_start)
 
-                # フレーム 840: スケールを 0 に
-                fade_end_frame = scene6_start + 48  # フレーム 840
+                # フレーム 936: スケールを 0 に
                 char_obj.scale = (0.0, 0.0, 0.0)
                 char_obj.keyframe_insert(data_path="scale", frame=fade_end_frame)
 
-                # 発光強度も徐々に 0 に
-                for node in char_obj.data.materials[0].node_tree.nodes:
-                    if node.type == 'BSDF_EMISSION':
-                        current_strength = node.inputs['Strength'].default_value
+                # 発光強度も徐々に 0 に（確実に消えるように）
+                if len(char_obj.data.materials) > 0:
+                    mat = char_obj.data.materials[0]
+                    if mat.use_nodes:
+                        for node in mat.node_tree.nodes:
+                            if node.type == 'BSDF_EMISSION':
+                                current_strength = node.inputs['Strength'].default_value
 
-                        # フレーム 792: 現在の強度を維持（キーフレーム）
-                        node.inputs['Strength'].default_value = current_strength
-                        node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene6_start)
+                                # フレーム 768: 現在の強度を維持（キーフレーム）
+                                node.inputs['Strength'].default_value = current_strength
+                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene6_start)
 
-                        # フレーム 840: 強度を 0 に
-                        node.inputs['Strength'].default_value = 0.0
-                        node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
+                                # フレーム 936: 強度を 0 に
+                                node.inputs['Strength'].default_value = 0.0
+                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
+                        
+                        # Mix Shader の Fac でも透明度を制御（二重確保）
+                        for n in mat.node_tree.nodes:
+                            if n.type == 'MIX_SHADER':
+                                # フレーム768で完全不透明（Fac=1.0 → Emissionを完全に使用）
+                                n.inputs['Fac'].default_value = 1.0
+                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene6_start)
+                                # フレーム936で完全透明（Fac=0.0 → Transparentを完全に使用）
+                                n.inputs['Fac'].default_value = 0.0
+                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
+                                
+                        # EEVEEの透過設定を確実に有効化
+                        mat.blend_method = 'BLEND'
+                        mat.shadow_method = 'BUFFER'
 
-    print(f"[フレーム{scene6_start}] シーン 6 開始：カメラ移動開始（正面へ）")
-    print(f"[フレーム{scene6_end}] シーン 6 終了：カメラ={loc_phase5}（正面ビュー）, 車維持")
+        print(f"[フレーム{scene6_end}] テキストオブジェクトのフェードアウト完了（スケール→0）")
+
+    print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ固定（正面ビュー）")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -268,21 +328,37 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
     print(f"max_height: {max_height}")
 
     # テキスト全体を格納する Empty を作成（コンテナ）
-    bpy.ops.object.empty_add(location=(avg_center_x, avg_center_y - 0.5, max_height + 0.3))
+    # 地面からの絶対的な高さを確保し、常に明確に見えるように配置
+    # 車の中心位置を使用
+    avg_center_x = (center_a[0] + center_b[0]) / 2.0
+    avg_center_y = (center_a[1] + center_b[1]) / 2.0
+    
+    # 地面からの絶対高さを確保（文字位置を下げるために2.0mに調整）
+    text_container_location = (avg_center_x, avg_center_y, 2.0)
+    
+    bpy.ops.object.empty_add(location=text_container_location)
     text_container = bpy.context.active_object
     text_container.name = "LengthDiff_Container_Scene5"
 
-    # コンテナの位置と回転を設定（文字がカメラに向くように）
-    # X 軸は車の中心、Y 軸は車の上、Z 軸は少し上
-    text_container.location = (avg_center_x, avg_center_y - 0.3, max_height + 0.35)
-
-    # カメラから読める向きに回転（サイドビューなので Z 軸回転のみ）
-    # カメラの回転を計算して、テキストが常にカメラの方を向くようにする
-    cam_rot = camera.rotation_euler.copy()
-    text_container.rotation_euler = (cam_rot.x, cam_rot.y, cam_rot.z)
+    # カメラに向くように回転（Z軸は上方向に保つ）
+    # テキストが正しく見えるように180度回転を追加
+    cam_pos = camera.location
+    container_pos = Vector(text_container_location)
+    direction = cam_pos - container_pos
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    euler_rot = rot_quat.to_euler()
+    # Z軸に180度（πラジアン）追加してテキストの向きを修正
+    euler_rot.z += math.pi
+    text_container.rotation_euler = euler_rot
 
     # シーンにリンク
     scene.collection.objects.link(text_container)
+
+    # 【デバッグ】コンテナの位置と回転を出力
+    print(f"=== TEXT CONTAINER DEBUG ===")
+    print(f"text_container.location: {text_container.location}")
+    print(f"text_container.rotation_euler: {text_container.rotation_euler}")
+    print(f"text_container.parent: {text_container.parent}")
 
     # 文字列を作成： "Length: CarB - CarA → 結果"
     # 例: "Length: 4890mm - 4460mm → +430mm"
@@ -334,7 +410,8 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
 
     for i, char in enumerate(text_str):
         # テキストオブジェクトを作成（一時的な位置）
-        bpy.ops.object.text_add(location=(0, 0, max_height + 0.3))
+        # 地面からの絶対的な高さを確保（Z=4.0）
+        bpy.ops.object.text_add(location=(0, 0, 4.0))
         char_obj = bpy.context.active_object
         char_obj.name = f"LengthDiff_Char_{i}"
 
@@ -370,26 +447,19 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
         scene.collection.objects.link(char_obj)
 
         # 各文字のローカル位置を設定して X 軸に沿って左から右に一列に並べる（親設定後）
-        # 開始位置を画面左側へ 6 文字分ずらす（全長差テキストが長くなるため）
-        forward_offset = 6 * spacing
-        local_x = -((len(text_str) - 1) * spacing) / 2 + (i * spacing) - forward_offset
+        # テキストがコンテナ中央に見えるように配置
+        local_x = -((len(text_str) - 1) * spacing) / 2 + (i * spacing)
 
-        # ローカル Y は中央、Z は少し上
-        local_y = 0.0
-        local_z = 0.1
-
-        # 文字列全体を右に 3 文字分、上に 1 文字分ずらす（グローバルオフセット）
-        global_shift_x = 3 * spacing  # 右に 3 文字分
-        global_shift_y = 1 * spacing  # 上に 1 文字分
-        local_x += global_shift_x
-        local_y += global_shift_y
+        # ローカル Y は少し上、Z を下げて文字位置を調整
+        local_y = 0.5
+        local_z = -0.3
 
         char_obj.location = (local_x, local_y, local_z)
 
         char_objects.append(char_obj)
 
     # アニメーションを設定（コンテナの子オブジェクトに対して）
-    _setup_char_by_char_animation(char_objects, start_frame=648, end_frame=792)
+    _setup_char_by_char_animation(char_objects, start_frame=648, end_frame=768)
 
     print(f"[シーン 5] 計算式テキスト '{text_str}' を {len(char_objects)} 文字で作成")
     return text_container
