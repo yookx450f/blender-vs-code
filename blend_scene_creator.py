@@ -762,10 +762,22 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
 # ============================================================
 # メイン処理
 # ============================================================
+# カット番号とフレーム範囲の取得（環境変数から）
+CUT_NUMBER = os.environ.get("CUT_NUMBER", "all")
+FRAME_START_OVERRIDE = int(os.environ.get("FRAME_START", "-1"))
+FRAME_END_OVERRIDE = int(os.environ.get("FRAME_END", "-1"))
+
+
 def main():
     print("=" * 50)
     print("3Dシーン作成パイプライン開始")
     print("=" * 50)
+
+    # カット情報の表示
+    if CUT_NUMBER != "all":
+        print(f"\n=== カットモード: {CUT_NUMBER} ===")
+        if FRAME_START_OVERRIDE >= 0 and FRAME_END_OVERRIDE >= 0:
+            print(f"フレーム範囲: {FRAME_START_OVERRIDE}-{FRAME_END_OVERRIDE}")
     
     # cars_config.json から車の設定を読み込む
     CARS = load_cars_config()
@@ -852,17 +864,29 @@ def main():
         sys.path.insert(0, SCRIPT_DIR)
     from animation_settings import setup_all_animations
     
-    scene = bpy.context.scene
-    setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
-    
-    # マテリアルの再適用（確認用）- 青い車の色補正を含む
+    # 車の寸法情報を抽出（全長差計算用）
+    car_dimensions = {}
     for key, car_data in CARS.items():
-        adjusted_color = car_data['color']
-        if key == "carB" and car_data['color'][2] > car_data['color'][0]:  # 青成分が強い場合
-            adjusted_color = (0.1, 0.4, 1.0)  # より鮮明な青色
-        apply_clay_material_to_object(imported_cars[key].name, adjusted_color)
+        dims = car_data.get("dimensions_mm", {})
+        car_dimensions[key] = {
+            "length": dims.get("length", 0),
+            "width": dims.get("width", 0),
+            "height": dims.get("height", 0),
+        }
     
-    print("\n=== アニメーション設定完了 ===")
+    scene = bpy.context.scene
+    setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions)
+
+    # カット番号に応じたフレーム範囲を適用
+    if FRAME_START_OVERRIDE >= 0 and FRAME_END_OVERRIDE >= 0:
+        original_end = scene.frame_end
+        scene.frame_start = FRAME_START_OVERRIDE
+        scene.frame_end = FRAME_END_OVERRIDE
+        print(f"\n=== カット{CUT_NUMBER}のフレーム範囲を適用 ===")
+        print(f"元のフレーム範囲: 0-{original_end}")
+        print(f"現在のフレーム範囲: {scene.frame_start}-{scene.frame_end}")
+    
+    # マテリアルの再適用は行わない（アニメーション設定でCarBの半透明化キーフレームが上書きされるため）
     
     # =============================================
     # ステップ4: 3Dテキストラベル生成
