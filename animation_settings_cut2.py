@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール - カット 2
-フレーム 648-1080（シーン 5-7）を処理する。
+フレーム 648-1272（シーン 5-7、各シーン後に停止 2 秒付き）を処理する。
 
 使い方:
     from animation_settings_cut2 import setup_cut2_animations
@@ -18,7 +18,7 @@ from animation_common import (
 
 def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensions=None):
     """
-    カット 2 のアニメーションを設定（フレーム 648-936）
+    カット 2 のアニメーションを設定（フレーム 648-1272、各シーン後に停止 2 秒付き）
 
     Parameters:
         scene: bpy.context.scene
@@ -52,12 +52,14 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 2】シーン 5: フレーム 648-768（真横固定視点・全長差表示エフェクト）
+    # 【カット 2】シーン 5: フレーム 648-768（真横固定視点・全長差表示エフェクト、5 秒）
+    #              停止: フレーム 768-816（2 秒）
     # ============================================================
     print("\n=== 【カット 2】シーン 5 設定開始 ===")
 
     scene5_start = 648
     scene5_end = 768  # 5 秒間（24fps × 5 = 120 フレーム）
+    scene5_pause_end = 816  # 停止 2 秒（24fps × 2 = 48 フレーム）
 
     # カメラ: カット 1 の最終位置を維持（真横固定視点・ピタッと停止）
     camera.location = loc_phase4
@@ -84,13 +86,25 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     # --- シーン 5 の全長差エフェクト（レーザー線＋数値テキスト）---
     _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions)
 
+    # --- 停止（2 秒）: フレーム 816 ---
+    camera.location = loc_phase4
+    camera.rotation_euler = rot_phase4
+    camera.keyframe_insert(data_path="location", frame=scene5_pause_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene5_pause_end)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=scene5_pause_end)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=scene5_pause_end)
+    print(f"[フレーム{scene5_pause_end}] 停止（2 秒）")
+
     # ============================================================
-    # 【カット 2】シーン 6: フレーム 792-936（サイドビューから正面へカメラ移動・6 秒間）
+    # 【カット 2】シーン 6: フレーム 816-984（サイドビューから正面へカメラ移動、7 秒）
+    #                  停止: フレーム 984-1032（2 秒）
     # ============================================================
     print("\n=== 【カット 2】シーン 6 設定開始 ===")
 
-    scene6_start = 768
-    scene6_end = 936  # 7 秒間（24fps × 7 = 168 フレーム）
+    scene6_start = 816
+    scene6_end = 984  # 7 秒間（24fps × 7 = 168 フレーム）
 
     # カメラ: サイドビュー位置から車の正面にゆっくり移動
     # 初期位置：サイドビュー（loc_phase4, rot_phase4）
@@ -103,8 +117,8 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     rot_quat_end = direction_end.to_track_quat('-Z', 'Y')
     end_rot = rot_quat_end.to_euler()
 
-    # 中間地点（フレーム 864）- 距離 50%
-    mid_frame = scene6_start + 72
+    # 中間地点 - 距離 50%
+    mid_frame = scene6_start + 84  # 168/2 = 84 フレーム目
     loc_mid = (start_loc[0] + end_loc[0]) / 2.0, (start_loc[1] + end_loc[1]) / 2.0, (start_loc[2] + end_loc[2]) / 2.0
     direction_mid = Vector(target) - Vector(loc_mid)
     rot_quat_mid = direction_mid.to_track_quat('-Z', 'Y')
@@ -139,13 +153,26 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     print(f"[フレーム{scene6_start}] シーン 6 開始：カメラ移動開始（サイドビュー）")
     print(f"[フレーム{scene6_end}] シーン 6 終了：カメラ={end_loc}（正面ビュー）, 車維持")
 
+    # --- 停止（2 秒）: フレーム 1032 ---
+    scene6_pause_end = scene6_end + 48  # 984 + 48 = 1032
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
+    camera.keyframe_insert(data_path="location", frame=scene6_pause_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene6_pause_end)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=scene6_pause_end)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=scene6_pause_end)
+    print(f"[フレーム{scene6_pause_end}] 停止（2 秒）")
+
     # ============================================================
-    # 【カット 2】シーン 7: フレーム 936-984（正面ビューで静止・2 秒間）
+    # 【カット 2】シーン 7: フレーム 1032-1176（正面ビュー固定・横幅差表示、6 秒）
+    #                    停止: フレーム 1176-1224（2 秒）
     # ============================================================
     print("\n=== 【カット 2】シーン 7 設定開始 ===")
 
-    scene7_start = 936
-    scene7_end = 1080  # 6 秒間（24fps × 6 = 144 フレーム）
+    scene7_start = 1032
+    scene7_end = 1176  # 6 秒間（24fps × 6 = 144 フレーム）
 
     # カメラ: シーン 6 の終了位置に固定
     camera.location = end_loc
@@ -169,20 +196,32 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     # --- シーン 7 の横幅差エフェクト（テキストのみ）---
     _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end, car_dimensions)
 
+    # --- 停止（2 秒）: フレーム 1224 ---
+    scene7_pause_end = 1224
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
+    camera.keyframe_insert(data_path="location", frame=scene7_pause_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene7_pause_end)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=scene7_pause_end)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=scene7_pause_end)
+    print(f"[フレーム{scene7_pause_end}] 停止（2 秒）")
+
     # シーン 5 のテキストをフェードアウト（シーン 6 終了時）
     text_container_name = "LengthDiff_Container_Scene5"
     if text_container_name in bpy.data.objects:
         text_obj = bpy.data.objects[text_container_name]
 
-        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（768→936）")
+        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（816→984）")
 
         # コンテナ自体のスケールをアニメーションで制御（最も確実な方法）
-        # フレーム 768: スケール維持（1.0, 1.0, 1.0）
+        # フレーム 816: スケール維持（1.0, 1.0, 1.0）
         text_obj.scale = (1.0, 1.0, 1.0)
         text_obj.keyframe_insert(data_path="scale", frame=scene6_start)
         
-        # フレーム 936: スケールを 0 に（完全に消える）
-        fade_end_frame = scene6_end  # フレーム 936
+        # フレーム 984: スケールを 0 に（完全に消える）
+        fade_end_frame = scene6_end  # フレーム 984
         text_obj.scale = (0.0, 0.0, 0.0)
         text_obj.keyframe_insert(data_path="scale", frame=fade_end_frame)
 
@@ -192,11 +231,11 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
                 # まず現在のスケールを取得して保存
                 current_scale = char_obj.scale.copy() if hasattr(char_obj, 'scale') else (1.0, 1.0, 1.0)
 
-                # フレーム 768: 現在のスケールを維持（キーフレーム）
+                # フレーム 816: 現在のスケールを維持（キーフレーム）
                 char_obj.scale = current_scale
                 char_obj.keyframe_insert(data_path="scale", frame=scene6_start)
 
-                # フレーム 936: スケールを 0 に
+                # フレーム 984: スケールを 0 に
                 char_obj.scale = (0.0, 0.0, 0.0)
                 char_obj.keyframe_insert(data_path="scale", frame=fade_end_frame)
 
@@ -208,21 +247,21 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
                             if node.type == 'BSDF_EMISSION':
                                 current_strength = node.inputs['Strength'].default_value
 
-                                # フレーム 768: 現在の強度を維持（キーフレーム）
+                                # フレーム 816: 現在の強度を維持（キーフレーム）
                                 node.inputs['Strength'].default_value = current_strength
                                 node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene6_start)
 
-                                # フレーム 936: 強度を 0 に
+                                # フレーム 984: 強度を 0 に
                                 node.inputs['Strength'].default_value = 0.0
                                 node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
                         
                         # Mix Shader の Fac でも透明度を制御（二重確保）
                         for n in mat.node_tree.nodes:
                             if n.type == 'MIX_SHADER':
-                                # フレーム768で完全不透明（Fac=1.0 → Emissionを完全に使用）
+                                # フレーム816で完全不透明（Fac=1.0 → Emissionを完全に使用）
                                 n.inputs['Fac'].default_value = 1.0
                                 n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene6_start)
-                                # フレーム936で完全透明（Fac=0.0 → Transparentを完全に使用）
+                                # フレーム984で完全透明（Fac=0.0 → Transparentを完全に使用）
                                 n.inputs['Fac'].default_value = 0.0
                                 n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
                                 
@@ -231,8 +270,6 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
                         mat.shadow_method = 'BUFFER'
 
         print(f"[フレーム{scene6_end}] テキストオブジェクトのフェードアウト完了（スケール→0）")
-
-    print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ固定（正面ビュー）")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -363,9 +400,9 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
     print(f"text_container.rotation_euler: {text_container.rotation_euler}")
     print(f"text_container.parent: {text_container.parent}")
 
-    # 文字列を作成： "Length: CarB - CarA → 結果"
-    # 例: "Length: 4890mm - 4460mm → +430mm"
-    text_str = f"Length: {length_b_mm}mm - {length_a_mm}mm → {length_diff_mm:+d}mm"
+    # 文字列を作成： "全長: CarB - CarA → 結果"
+    # 例: "全長: 4890mm - 4460mm → +430mm"
+    text_str = f"全長: {length_b_mm}mm - {length_a_mm}mm → {length_diff_mm:+d}mm"
 
     # 各文字を個別のテキストオブジェクトとして作成
     char_objects = []
@@ -568,7 +605,7 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
     scene.collection.objects.link(text_container)
 
-    text_str = f"Width: {width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
+    text_str = f"全幅: {width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
 
     char_objects = []
     spacing = 0.12
