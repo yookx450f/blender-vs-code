@@ -400,13 +400,14 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
     print(f"text_container.rotation_euler: {text_container.rotation_euler}")
     print(f"text_container.parent: {text_container.parent}")
 
-    # 文字列を作成： "全長: CarB - CarA → 結果"
-    # 例: "全長: 4890mm - 4460mm → +430mm"
-    text_str = f"全長: {length_b_mm}mm - {length_a_mm}mm → {length_diff_mm:+d}mm"
+    # 文字列を作成： "全長：CarB - CarA → 結果"
+    # 例: "全長：4890mm - 4460mm → +430mm"
+    text_str = f"全長：{length_b_mm}mm - {length_a_mm}mm → {length_diff_mm:+d}mm"
 
     # 各文字を個別のテキストオブジェクトとして作成
     char_objects = []
-    spacing = 0.12  # 文字間隔（狭めて調整）
+    half_spacing = 0.12  # 半角文字の基本間隔
+    full_spacing = 0.20  # 全角文字の間隔（日本語など）
 
     # 色の定義：CarB=青、CarA=赤、結果=白
     colors = {
@@ -486,17 +487,40 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
         # シーンにリンク
         scene.collection.objects.link(char_obj)
 
-        # 各文字のローカル位置を設定して X 軸に沿って左から右に一列に並べる（親設定後）
-        # テキストがコンテナ中央に見えるように配置
-        local_x = -((len(text_str) - 1) * spacing) / 2 + (i * spacing)
+        char_objects.append(char_obj)
+
+    # 全角/半角を考慮した位置計算
+    # 各文字の幅を計算（全角は wide、半角は narrow）
+    def is_fullwidth(c):
+        """全角文字かどうかを判定"""
+        code = ord(c)
+        return (0x4E00 <= code <= 0x9FFF) or \
+               (0x3000 <= code <= 0x303F) or \
+               (0xFF00 <= code <= 0xFFEF) or \
+               (0x3040 <= code <= 0x309F) or \
+               (0x30A0 <= code <= 0x30FF)
+
+    # 各文字の幅を計算
+    char_widths = []
+    for c in text_str:
+        if is_fullwidth(c):
+            char_widths.append(full_spacing)
+        else:
+            char_widths.append(half_spacing)
+
+    total_width = sum(char_widths)
+
+    # 各文字の位置を設定（中央揃え）
+    current_x = -total_width / 2.0
+    for i, char_obj in enumerate(char_objects):
+        local_x = current_x
+        current_x += char_widths[i]
 
         # ローカル Y は少し上、Z を下げて文字位置を調整
         local_y = 0.5
         local_z = -0.3
 
         char_obj.location = (local_x, local_y, local_z)
-
-        char_objects.append(char_obj)
 
     # アニメーションを設定（コンテナの子オブジェクトに対して）
     _setup_char_by_char_animation(char_objects, start_frame=648, end_frame=768)
@@ -605,10 +629,11 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
     scene.collection.objects.link(text_container)
 
-    text_str = f"全幅: {width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
+    text_str = f"全幅：{width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
 
     char_objects = []
-    spacing = 0.12
+    half_spacing = 0.12  # 半角文字の基本間隔
+    full_spacing = 0.20  # 全角文字の間隔（日本語など）
 
     colors = {
         'blue': (0.0, 1.0, 1.0),
@@ -672,12 +697,36 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
         char_obj.parent = text_container
         scene.collection.objects.link(char_obj)
 
-        local_x = -((len(text_str) - 1) * spacing) / 2 + (i * spacing)
+        char_objects.append(char_obj)
+
+    # 全角/半角を考慮した位置計算
+    def is_fullwidth(c):
+        """全角文字かどうかを判定"""
+        code = ord(c)
+        return (0x4E00 <= code <= 0x9FFF) or \
+               (0x3000 <= code <= 0x303F) or \
+               (0xFF00 <= code <= 0xFFEF) or \
+               (0x3040 <= code <= 0x309F) or \
+               (0x30A0 <= code <= 0x30FF)
+
+    char_widths = []
+    for c in text_str:
+        if is_fullwidth(c):
+            char_widths.append(full_spacing)
+        else:
+            char_widths.append(half_spacing)
+
+    total_width = sum(char_widths)
+
+    current_x = -total_width / 2.0
+    for i, char_obj in enumerate(char_objects):
+        local_x = current_x
+        current_x += char_widths[i]
+
         local_y = 0.5
         local_z = -0.3
 
         char_obj.location = (local_x, local_y, local_z)
-        char_objects.append(char_obj)
 
     _setup_char_by_char_animation(char_objects, start_frame=start_frame, end_frame=end_frame)
 

@@ -4,7 +4,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
 使い方:
     python run.py              # 全カット（カット1+2）のシーンを作成
     python run.py 1            # カット1のみ（シーン1-4、フレーム0-648）
-    python run.py 2            # カット2のみ（シーン5-7、フレーム648-984）
+    python run.py 2            # カット2のみ（シーン5-7、フレーム648-1224）
     python run.py --render     # レンダーのみ実行して終了
 """
 
@@ -18,9 +18,9 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 984, "label": "全カット（シーン1-7）"},
+    "all": {"start": 0, "end": 1224, "label": "全カット（シーン1-7）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
-    "2": {"start": 648, "end": 984, "label": "カット2（シーン5-7）"},
+    "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -115,50 +115,13 @@ print("アニメーションレンダリング完了！")
         f.write(script_content)
 
 
-def convert_png_sequence_to_mp4(input_pattern, output_path, fps=24):
-    """PNGシーケンスをffmpegでmp4に変換する"""
-    import shutil
-    
-    ffmpeg_path = shutil.which("ffmpeg")
-    if not ffmpeg_path:
-        print("警告: ffmpeg がシステムにインストールされていません。")
-        print("PNGシーケンスのまま出力されます。")
-        return False
-    
-    cmd = [
-        ffmpeg_path,
-        "-y",  # 上書き許可
-        "-framerate", str(fps),
-        "-i", input_pattern,
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",  # 偶数サイズにパディング
-        output_path
-    ]
-    
-    print(f"PNGシーケンスをmp4に変換中...")
-    print(f"コマンド: {' '.join(cmd)}")
-    
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"変換完了: {output_path}")
-            return True
-        else:
-            print(f"ffmpeg変換エラー: {result.stderr}")
-            return False
-    except Exception as e:
-        print(f"ffmpeg実行エラー: {e}")
-        return False
-
-
 def main():
     parser = argparse.ArgumentParser(description="Blenderを起動して3Dシーンを作成する")
     parser.add_argument("cut", nargs="?", default="all", type=str,
                         help="実行するカット番号 (all=全カット, 1=カット1のみ, 2=カット2のみ)")
     parser.add_argument("--script", type=str, help="実行するPythonスクリプトのパス")
     parser.add_argument("--render", action="store_true",
-                        help="アニメーションレンダリングを実行（EEVEE、PNGシーケンス出力＋mp4変換）")
+                        help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
     
     args = parser.parse_args()
     
@@ -173,15 +136,6 @@ def main():
         render_only=args.render,
         cut_number=args.cut
     )
-    
-    # PNGシーケンスをmp4に変換（--render オプションの場合のみ）
-    if success and args.render:
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        png_pattern = os.path.join(desktop_path, "mp4.%04d.png")
-        mp4_output = os.path.join(desktop_path, "mp4")
-        
-        print("\n=== PNGシーケンスをmp4に変換 ===")
-        convert_png_sequence_to_mp4(png_pattern, mp4_output, fps=24)
     
     sys.exit(0 if success else 1)
 
