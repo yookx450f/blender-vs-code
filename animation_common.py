@@ -281,3 +281,37 @@ def _calculate_width_difference(car_a, car_b, car_dimensions=None):
     diff_mm = int(round(diff_meters * 1000))
     print(f"  carA 横幅：{width_a:.3f}m, carB 横幅：{width_b:.3f}m（バウンディングボックス）, 差 (carB-carA): {diff_mm:+d}mm")
     return diff_mm
+
+
+def _calculate_ground_clearance_difference(car_a, car_b, car_dimensions=None):
+    """2台の車の最低地上高差を計算（mm単位、carB - carA）
+
+    設定ファイルの寸法値がある場合はそれを使用。
+    """
+    if car_dimensions:
+        clearance_a_mm = car_dimensions.get("carA", {}).get("ground_clearance", 0)
+        clearance_b_mm = car_dimensions.get("carB", {}).get("ground_clearance", 0)
+        diff_mm = clearance_b_mm - clearance_a_mm
+        print(f"  carA 最低地上高：{clearance_a_mm}mm, carB 最低地上高：{clearance_b_mm}mm（設定値）, 差 (carB-carA): {diff_mm:+d}mm")
+        return diff_mm
+    
+    # フォールバック：0を返す（バウンディングボックスからの自動検出は困難）
+    print("  警告: 最低地上高の設定値が見つかりません。差は0として計算します。")
+    return 0
+
+
+def _calculate_turning_radius_difference(car_a, car_b, car_dimensions=None):
+    """2台の車の最小回転半径差を計算（mm単位、carB - carA）
+
+    設定ファイルの寸法値がある場合はそれを使用。
+    """
+    if car_dimensions:
+        radius_a_mm = car_dimensions.get("carA", {}).get("turning_radius", 0)
+        radius_b_mm = car_dimensions.get("carB", {}).get("turning_radius", 0)
+        diff_mm = radius_b_mm - radius_a_mm
+        print(f"  carA 最小回転半径：{radius_a_mm}mm, carB 最小回転半径：{radius_b_mm}mm（設定値）, 差 (carB-carA): {diff_mm:+d}mm")
+        return diff_mm
+    
+    # フォールバック：0を返す
+    print("  警告: 最小回転半径の設定値が見つかりません。差は0として計算します。")
+    return 0

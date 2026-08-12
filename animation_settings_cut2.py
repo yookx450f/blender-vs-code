@@ -276,6 +276,14 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
 
     print("\n=== カット 2 アニメーション完了 ===")
 
+    # 結果を返す（カット3で使用する）
+    return {
+        'car_a_end': car_a_end,
+        'car_b_end': car_b_end,
+        'loc_scene7_end': end_loc,
+        'rot_scene7_end': end_rot,
+    }
+
 
 def _setup_car_b_transparency_for_scene5(car_object, start_frame, end_frame):
     """CarB の全マテリアルをシーン 5 用半透明化する（複数メッシュ対応）"""

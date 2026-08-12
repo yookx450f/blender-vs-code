@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール（統合版）
-カット 1 とカット 2 を統合して使用。
+カット 1、カット 2、カット 3 を統合して使用。
 
 使い方:
     from animation_settings import setup_all_animations
@@ -10,6 +10,7 @@
 import bpy
 from animation_settings_cut1 import setup_cut1_animations
 from animation_settings_cut2 import setup_cut2_animations
+from animation_settings_cut3 import setup_cut3_animations
 
 
 def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=None):
@@ -43,8 +44,11 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #              フレーム 984-1032  停止（2 秒）
     #     シーン 7: フレーム 1032-1176 正面ビュー固定・横幅差表示（6 秒）
     #              フレーム 1176-1224 停止（2 秒）
+    #   【カット 3】= シーン 8（カット 2 の最終位置から開始）
+    #     シーン 8: フレーム 1224-1368 正面から左側低位置へカメラ移動（6 秒）
+    #              フレーム 1368-1416 停止（2 秒）
     scene.frame_start = 0
-    scene.frame_end = 1224
+    scene.frame_end = 1416
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -63,12 +67,24 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         return
 
     # カット 2 を実行
-    setup_cut2_animations(
+    cut2_result = setup_cut2_animations(
         scene=scene,
         camera=camera,
         imported_cars=imported_cars,
         cut1_result=cut1_result,
         car_dimensions=car_dimensions
+    )
+
+    if cut2_result is None:
+        print("エラー: カット 2 の設定に失敗しました")
+        return
+
+    # カット 3 を実行
+    setup_cut3_animations(
+        scene=scene,
+        camera=camera,
+        imported_cars=imported_cars,
+        cut2_result=cut2_result
     )
 
     print("\n=== アニメーション設定完了 ===")
@@ -91,6 +107,9 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"  【カット 2】シーン 7（フレーム 1032-1176):")
     print(f"              正面ビュー固定・横幅差表示（6 秒）")
     print(f"              フレーム 1176-1224:   停止（2 秒）")
+    print(f"  【カット 3】シーン 8（フレーム 1224-1368):")
+    print(f"              正面から左側低位置へカメラ移動（6 秒）")
+    print(f"              フレーム 1368-1416:   停止（2 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に

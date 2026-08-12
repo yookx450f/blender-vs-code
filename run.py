@@ -18,9 +18,10 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 1224, "label": "全カット（シーン1-7）"},
+    "all": {"start": 0, "end": 1416, "label": "全カット（シーン1-8）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
     "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
+    "3": {"start": 1224, "end": 1416, "label": "カット3（シーン8）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス

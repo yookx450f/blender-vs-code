@@ -7,7 +7,9 @@
     "dimensions_mm": {
       "length": 4455,
       "width": 1825,
-      "height": 1620
+      "height": 1620,
+      "ground_clearance": 200,
+      "turning_radius": 5400
     }
   },
   "carB": {
@@ -18,7 +20,9 @@
     "dimensions_mm": {
       "length": 4925,
       "width": 1980,
-      "height": 1935
+      "height": 1935,
+      "ground_clearance": 230,
+      "turning_radius": 5700
     }
   }
 }
