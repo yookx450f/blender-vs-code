@@ -2,9 +2,10 @@
 Blenderをコマンドライン経由で起動してスクリプトを実行するラッパースクリプト
 
 使い方:
-    python run.py              # 全カット（カット1+2）のシーンを作成
+    python run.py              # 全カット（カット1+2+3）のシーンを作成
     python run.py 1            # カット1のみ（シーン1-4、フレーム0-648）
     python run.py 2            # カット2のみ（シーン5-7、フレーム648-1224）
+    python run.py 3            # カット3のみ（シーン8-9、フレーム1224-1584）
     python run.py --render     # レンダーのみ実行して終了
 """
 
@@ -18,10 +19,10 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 1416, "label": "全カット（シーン1-8）"},
+    "all": {"start": 0, "end": 1584, "label": "全カット（シーン1-9）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
     "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
-    "3": {"start": 1224, "end": 1416, "label": "カット3（シーン8）"},
+    "3": {"start": 1224, "end": 1584, "label": "カット3（シーン8-9）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -47,7 +48,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     # カット情報の取得
     cut_info = CUTS.get(cut_number)
     if not cut_info:
-        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2")
+        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3")
         return False
     
     frame_start = cut_info["start"]
@@ -119,7 +120,7 @@ print("アニメーションレンダリング完了！")
 def main():
     parser = argparse.ArgumentParser(description="Blenderを起動して3Dシーンを作成する")
     parser.add_argument("cut", nargs="?", default="all", type=str,
-                        help="実行するカット番号 (all=全カット, 1=カット1のみ, 2=カット2のみ)")
+                        help="実行するカット番号 (all=全カット, 1=カット1のみ, 2=カット2のみ, 3=カット3のみ)")
     parser.add_argument("--script", type=str, help="実行するPythonスクリプトのパス")
     parser.add_argument("--render", action="store_true",
                         help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
@@ -129,7 +130,7 @@ def main():
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2")
+        print(f"使用可能な値: all, 1, 2, 3")
         sys.exit(1)
     
     success = run_blender(

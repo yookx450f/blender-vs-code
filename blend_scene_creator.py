@@ -864,7 +864,7 @@ def main():
         sys.path.insert(0, SCRIPT_DIR)
     from animation_settings import setup_all_animations
     
-    # 車の寸法情報を抽出（全長差計算用）
+    # 車の寸法情報を抽出（全長差・横幅差・最低地上高差計算用）
     car_dimensions = {}
     for key, car_data in CARS.items():
         dims = car_data.get("dimensions_mm", {})
@@ -872,6 +872,7 @@ def main():
             "length": dims.get("length", 0),
             "width": dims.get("width", 0),
             "height": dims.get("height", 0),
+            "ground_clearance": dims.get("ground_clearance", 0),
         }
     
     scene = bpy.context.scene

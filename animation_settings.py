@@ -44,11 +44,13 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #              フレーム 984-1032  停止（2 秒）
     #     シーン 7: フレーム 1032-1176 正面ビュー固定・横幅差表示（6 秒）
     #              フレーム 1176-1224 停止（2 秒）
-    #   【カット 3】= シーン 8（カット 2 の最終位置から開始）
+    #   【カット 3】= シーン 8〜9（カット 2 の最終位置から開始）
     #     シーン 8: フレーム 1224-1368 正面から左側低位置へカメラ移動（6 秒）
     #              フレーム 1368-1416 停止（2 秒）
+    #     シーン 9: フレーム 1416-1536 最低地上高差表示（5 秒）
+    #              フレーム 1536-1584 停止（2 秒）
     scene.frame_start = 0
-    scene.frame_end = 1416
+    scene.frame_end = 1584
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -84,7 +86,8 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         scene=scene,
         camera=camera,
         imported_cars=imported_cars,
-        cut2_result=cut2_result
+        cut2_result=cut2_result,
+        car_dimensions=car_dimensions
     )
 
     print("\n=== アニメーション設定完了 ===")
@@ -110,6 +113,9 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"  【カット 3】シーン 8（フレーム 1224-1368):")
     print(f"              正面から左側低位置へカメラ移動（6 秒）")
     print(f"              フレーム 1368-1416:   停止（2 秒）")
+    print(f"  【カット 3】シーン 9（フレーム 1416-1536):")
+    print(f"              最低地上高差表示（地面に張り付け）（5 秒）")
+    print(f"              フレーム 1536-1584:   停止（2 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に
