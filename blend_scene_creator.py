@@ -832,19 +832,21 @@ def main():
         length_a_m = length_a_mm / 1000.0
         length_b_m = length_b_mm / 1000.0
         
-        # 全長の差を計算（リア端揃え用のYオフセット）
+        # 全長の差を計算（フロント端揃え用のYオフセット）
+        # CarB (Land Cruiser) が CarA (Corolla Cross) より長いので、
+        # フロント端を揃えるには CarA を Y正方向にずらす必要がある
         rear_offset_y = (length_b_m - length_a_m)
         
-        print(f"全長差からリア端揃えオフセットを計算: carA={length_a_mm}mm, carB={length_b_mm}mm -> offset_Y={rear_offset_y:.4f}m")
+        print(f"全長差からフロント端揃えオフセットを計算: carA={length_a_mm}mm, carB={length_b_mm}mm -> offset_Y={rear_offset_y:.4f}m")
         
         # 接地後のZ位置を取得
         grounded_z_a = grounded_z_positions.get(car_a.name, 0.0)
         grounded_z_b = grounded_z_positions.get(car_b.name, 0.0)
         
-        # carB (Land Cruiser): Vector(2.0, 0.0, Z) - Y座標=0.0（基準）
-        car_b.location = (2.0, 0.0, grounded_z_b)
-        # carA: Vector(-2.0, +rear_offset_y, Z) - Y座標を全長差で調整してリア端を揃える
-        car_a.location = (-2.0, rear_offset_y, grounded_z_a)
+        # carB (Land Cruiser): Vector(1.25, 0.0, Z) - Y座標=0.0（基準）、X=1.25m（右側）
+        car_b.location = (1.25, 0.0, grounded_z_b)
+        # carA: Vector(-1.25, +rear_offset_y, Z) - Y座標を全長差で調整してフロント端を揃える、X=-1.25m（左側）
+        car_a.location = (-1.25, rear_offset_y, grounded_z_a)
         
         print(f"初期位置を設定（計算値、Z=接地後）：carA={car_a.location}, carB={car_b.location}")
     
@@ -873,6 +875,7 @@ def main():
             "width": dims.get("width", 0),
             "height": dims.get("height", 0),
             "ground_clearance": dims.get("ground_clearance", 0),
+            "turning_radius": dims.get("turning_radius", 0),
         }
     
     scene = bpy.context.scene
@@ -954,7 +957,11 @@ def main():
     print("=" * 50)
     
     # シーンを.blendファイルとして保存（Blenderで開けるように）
-    blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")
+    # カット番号に応じてファイル名を切り替え（各カット独立保存用）
+    if CUT_NUMBER in ("1", "2", "3", "4"):
+        blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
+    else:
+        blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")
     bpy.ops.wm.save_mainfile(filepath=blend_output_path)
     print(f"シーンを保存しました: {blend_output_path}")
     
