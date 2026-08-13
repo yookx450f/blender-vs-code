@@ -24,29 +24,32 @@ from mathutils import Vector
 from animation_common import set_camera_look_at, _calculate_ground_clearance_difference, create_emission_material
 
 
-def setup_cut3_animations(scene, camera, imported_cars, cut2_result, car_dimensions=None):
+def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
     """
     カット 3 のアニメーションを設定（フレーム 1224-1584）
+
+    【修正: カット完全分離】前のカットの最終状態のみを受け取り、
+    変数を共有しない。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        cut2_result: setup_cut2_animations の戻り値（dict）
+        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
         car_dimensions: {key: {"ground_clearance": mm}} 車の寸法情報
 
     Returns:
-        dict: カメラの最終位置・回転、車の位置など
+        CutState: このカットの最終状態
     """
-    if cut2_result is None:
-        print("エラー: カット 2 の結果が指定されていません")
+    if previous_state is None:
+        print("エラー: 前のカットの状態が指定されていません")
         return None
 
-    # カット 2 から結果を取得
-    car_a_end = cut2_result['car_a_end']
-    car_b_end = cut2_result['car_b_end']
-    loc_scene7_end = cut2_result['loc_scene7_end']
-    rot_scene7_end = cut2_result['rot_scene7_end']
+    # カット完全分離: 前のカットの最終位置のみを取得
+    car_a_end = previous_state.car_a_loc
+    car_b_end = previous_state.car_b_loc
+    loc_scene7_end = previous_state.camera_loc
+    rot_scene7_end = previous_state.camera_rot
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -240,13 +243,15 @@ def setup_cut3_animations(scene, camera, imported_cars, cut2_result, car_dimensi
 
     print("\n=== カット 3 アニメーション完了 ===")
 
-    # 結果を返す
-    return {
-        'car_a_end': car_a_end,
-        'car_b_end': car_b_end,
-        'loc_scene8_end': end_loc,
-        'rot_scene8_end': end_rot,
-    }
+    # 結果を返す（カット4で使用する）
+    # 【修正: カット完全分離】CutState 形式で最終状態のみを返す
+    from animation_common import CutState
+    return CutState(
+        car_a_loc=car_a_end,
+        car_b_loc=car_b_end,
+        camera_loc=end_loc,
+        camera_rot=end_rot,
+    )
 
 
 # ============================================================

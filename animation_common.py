@@ -13,6 +13,25 @@ import math
 from mathutils import Vector
 
 
+class CutState:
+    """カット間の状態継承用データ構造
+    
+    各カットは前のカットの最終状態（位置情報のみ）を受け取り、
+    自分の最終状態を返すことで、完全な分離を実現する。
+    
+    animation_data を共有しないため、後続カットの処理が前面に影響しない。
+    """
+    def __init__(self, car_a_loc, car_b_loc, camera_loc, camera_rot):
+        self.car_a_loc = car_a_loc  # (x, y, z)
+        self.car_b_loc = car_b_loc  # (x, y, z)
+        self.camera_loc = camera_loc  # (x, y, z)
+        self.camera_rot = camera_rot  # (x, y, z) euler
+    
+    def __repr__(self):
+        return (f"CutState(car_a={self.car_a_loc}, car_b={self.car_b_loc}, "
+                f"camera_loc={self.camera_loc}, camera_rot={self.camera_rot})")
+
+
 def set_camera_look_at(cam, loc, tgt):
     """カメラを指定位置に配置し、ターゲット方向に向ける"""
     cam.location = loc

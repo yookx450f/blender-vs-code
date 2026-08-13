@@ -16,31 +16,34 @@ from animation_common import (
 )
 
 
-def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensions=None):
+def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
     """
-    カット 2 のアニメーションを設定（フレーム 648-1272、各シーン後に停止 2 秒付き）
+    カット 2 のアニメーションを設定（フレーム 648-1224、各シーン後に停止 2 秒付き）
+
+    【修正: カット完全分離】前のカットの最終状態のみを受け取り、
+    変数を共有しない。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        cut1_result: setup_cut1_animations の戻り値（dict）
+        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
         car_dimensions: {key: {"length": mm, "width": mm, "height": mm}} 車の寸法情報
 
     Returns:
-        None
+        CutState: このカットの最終状態
     """
-    if cut1_result is None:
-        print("エラー: カット 1 の結果が指定されていません")
+    if previous_state is None:
+        print("エラー: 前のカットの状態が指定されていません")
         return
 
-    # カット 1 から結果を取得
-    car_a_end = cut1_result['car_a_end']
-    car_b_end = cut1_result['car_b_end']
-    loc_phase4 = cut1_result['loc_phase4']
-    rot_phase4 = cut1_result['rot_phase4']
-    grounded_z_a = cut1_result['grounded_z_a']
-    grounded_z_b = cut1_result['grounded_z_b']
+    # カット完全分離: 前のカットの最終位置のみを取得
+    car_a_end = previous_state.car_a_loc
+    car_b_end = previous_state.car_b_loc
+    loc_phase4 = previous_state.camera_loc
+    rot_phase4 = previous_state.camera_rot
+    grounded_z_a = car_a_end[2]
+    grounded_z_b = car_b_end[2]
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -277,12 +280,14 @@ def setup_cut2_animations(scene, camera, imported_cars, cut1_result, car_dimensi
     print("\n=== カット 2 アニメーション完了 ===")
 
     # 結果を返す（カット3で使用する）
-    return {
-        'car_a_end': car_a_end,
-        'car_b_end': car_b_end,
-        'loc_scene7_end': end_loc,
-        'rot_scene7_end': end_rot,
-    }
+    # 【修正: カット完全分離】CutState 形式で最終状態のみを返す
+    from animation_common import CutState
+    return CutState(
+        car_a_loc=car_a_end,
+        car_b_loc=car_b_end,
+        camera_loc=end_loc,
+        camera_rot=end_rot,
+    )
 
 
 def _setup_car_b_transparency_for_scene5(car_object, start_frame, end_frame):

@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール（統合版）
-カット 1、カット 2、カット 3 を統合して使用。
+カット 1、カット 2、カット 3、カット 4 を統合して使用。
 
 使い方:
     from animation_settings import setup_all_animations
@@ -8,9 +8,21 @@
 """
 
 import bpy
+import os
 from animation_settings_cut1 import setup_cut1_animations
 from animation_settings_cut2 import setup_cut2_animations
 from animation_settings_cut3 import setup_cut3_animations
+from animation_settings_cut4 import setup_cut4_animations
+
+
+def _get_target_cut():
+    """環境変数 CUT_NUMBER から実行対象のカット番号を取得。
+    
+    Returns:
+        str: "1", "2", "3", "4", または "all"
+    """
+    cut = os.environ.get("CUT_NUMBER", "all")
+    return cut
 
 
 def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=None):
@@ -29,7 +41,7 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
 
     # タイムライン（カット割り）:
     #   【カット 1】= シーン 1〜4 の連続
-    #     シーン 1: フレーム 0-96      斜め上の固定視点（4 秒）
+    #     シーン 1: フレーム 0-96      斜め上の固定視点。両車が中央に集合して重なる（4 秒）
     #              フレーム 96-144    停止（2 秒）
     #     シーン 2: フレーム 144-264   トップビューへ移動（5 秒）
     #              フレーム 264-312   停止（2 秒）
@@ -49,12 +61,20 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #              フレーム 1368-1416 停止（2 秒）
     #     シーン 9: フレーム 1416-1536 最低地上高差表示（5 秒）
     #              フレーム 1536-1584 停止（2 秒）
+    #   【カット 4】= シーン 10〜11（カット 3 の最終位置から開始）
+    #     シーン 10: フレーム 1584-1704 横並び移動＋CarB不透明化＋地上高表示フェードアウト（5 秒）
+    #               フレーム 1704-1752 停止（2 秒）
+    #     シーン 11: フレーム 1752-1992 最小回転半径で両台が右回り1週（10 秒）
+    # 環境変数 CUT_NUMBER によって実行するカットを制御
+    target_cut = _get_target_cut()
+    print(f"[アニメーション設定] 実行対象カット: {target_cut}")
+    
     scene.frame_start = 0
-    scene.frame_end = 1584
+    scene.frame_end = 1992
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
-    # カット 1 を実行
+    # カット 1 を実行（常に必要。カット2-4はカット1の結果に依存するため）
     cut1_result = setup_cut1_animations(
         scene=scene,
         camera=camera,
@@ -68,27 +88,51 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         print("エラー: カット 1 の設定に失敗しました")
         return
 
-    # カット 2 を実行
-    cut2_result = setup_cut2_animations(
-        scene=scene,
-        camera=camera,
-        imported_cars=imported_cars,
-        cut1_result=cut1_result,
-        car_dimensions=car_dimensions
-    )
+    # カット 2 を実行（カット2-4が対象の場合のみ）
+    if target_cut in ("all", "2", "3", "4"):
+        cut2_result = setup_cut2_animations(
+            scene=scene,
+            camera=camera,
+            imported_cars=imported_cars,
+            previous_state=cut1_result,
+            car_dimensions=car_dimensions
+        )
 
-    if cut2_result is None:
-        print("エラー: カット 2 の設定に失敗しました")
-        return
+        if cut2_result is None:
+            print("エラー: カット 2 の設定に失敗しました")
+            return
+    else:
+        # カット1のみ実行時はダミー結果を生成（カット1の終了状態）
+        cut2_result = cut1_result
 
-    # カット 3 を実行
-    setup_cut3_animations(
-        scene=scene,
-        camera=camera,
-        imported_cars=imported_cars,
-        cut2_result=cut2_result,
-        car_dimensions=car_dimensions
-    )
+    # カット 3 を実行（カット3-4が対象の場合のみ）
+    if target_cut in ("all", "3", "4"):
+        cut3_result = setup_cut3_animations(
+            scene=scene,
+            camera=camera,
+            imported_cars=imported_cars,
+            previous_state=cut2_result,
+            car_dimensions=car_dimensions
+        )
+
+        if cut3_result is None:
+            print("エラー: カット 3 の設定に失敗しました")
+            return
+    else:
+        # カット1-2のみ実行時はダミー結果を生成
+        cut3_result = cut2_result
+
+    # カット 4 を実行（カット4または全カットが対象の場合のみ）
+    if target_cut in ("all", "4"):
+        setup_cut4_animations(
+            scene=scene,
+            camera=camera,
+            imported_cars=imported_cars,
+            previous_state=cut3_result,
+            car_dimensions=car_dimensions
+        )
+    else:
+        print(f"[アニメーション設定] カット 4 をスキップ（対象カット: {target_cut}）")
 
     print("\n=== アニメーション設定完了 ===")
     print("カメラアニメーション:")
@@ -116,6 +160,11 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"  【カット 3】シーン 9（フレーム 1416-1536):")
     print(f"              最低地上高差表示（地面に張り付け）（5 秒）")
     print(f"              フレーム 1536-1584:   停止（2 秒）")
+    print(f"  【カット 4】シーン 10（フレーム 1584-1704):")
+    print(f"              横並び移動＋CarB不透明化＋地上高表示フェードアウト（5 秒）")
+    print(f"              フレーム 1704-1752:   停止（2 秒）")
+    print(f"  【カット 4】シーン 11（フレーム 1752-1992):")
+    print(f"              最小回転半径で両台が右回り1週（CarA出发、CarBは2秒遅れて出发）（10 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に
