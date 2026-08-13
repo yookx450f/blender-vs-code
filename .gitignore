@@ -1,4 +1,5 @@
 # Blender 関連
+*.blend
 *.blend1
 *.blend2
 *.blend3
