@@ -17,50 +17,6 @@ import math
 from mathutils import Vector
 from animation_common import set_camera_look_at, _calculate_turning_radius_difference, create_emission_material
 
-
-def _remove_car_location_keyframes_after_frame(car_obj, start_frame):
-    """指定フレーム以降の location 関連の F-Curve キーフレームを削除する。
-    
-    【修正: 試行#3】animation_data_clear() の代わりに使用。
-    これにより、カット1-3で設定された車の位置キーフレーム（シーン1のスライドなど）
-    を保持したまま、Empty親制御用に不要なキーフレームのみを削除できる。
-    
-    Parameters:
-        car_obj: 車オブジェクト
-        start_frame: このフレーム以降のキーフレームを削除
-    """
-    if not car_obj.animation_data or not car_obj.animation_data.action:
-        return
-    
-    action = car_obj.animation_data.action
-    
-    # Blender 5.x では Action.fcurves が存在しない可能性がある
-    if not hasattr(action, 'fcurves'):
-        # Blender 5.x: animation_data_clear() の代わりに、
-        # location プロパティのキーフレームを直接削除する方法がないため、
-        # 車の親をEmptyに設定するだけで対応（車のローカル位置で制御）
-        return
-    
-    # location 関連の F-Curve を探す
-    location_fcurves = []
-    for fc in action.fcurves:
-        if fc.data_path == 'location':
-            location_fcurves.append(fc)
-    
-    # 指定フレーム以降のキーフレームを削除
-    for fc in location_fcurves:
-        points_to_remove = []
-        for kp in fc.keyframe_points:
-            if kp.co.x >= start_frame:
-                points_to_remove.append(kp)
-        
-        for kp in points_to_remove:
-            fc.keyframe_points.remove(kp)
-    
-    removed_count = len(points_to_remove) if location_fcurves else 0
-    print(f"  [F-Curve削除] {car_obj.name}: フレーム{start_frame}以降のlocationキーフレームを削除")
-
-
 def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
     """
     カット 4 のアニメーションを設定（フレーム 1584-1992）
@@ -132,37 +88,84 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     print(f"[フレーム{scene10_start}] カメラ開始位置: {loc_scene8_end}")
     print(f"[フレーム{scene10_end}] カメラ終了位置: {camera_scene10_end_loc}（斜め上の少し前）")
 
-    # 車: 横並びに移動するアニメーション
-    # carA を左側に、carB を右側に移動（重ならないように）
-    # Y位置は維持し、X方向に分離
-    grounded_z_a = car_a.location.z
-    grounded_z_b = car_b.location.z
+    # 最小回転半径を取得（mm → m に変換）
+    if car_dimensions:
+        turning_radius_a = car_dimensions.get("carA", {}).get("turning_radius", 5200) / 1000.0
+        turning_radius_b = car_dimensions.get("carB", {}).get("turning_radius", 6000) / 1000.0
+    else:
+        turning_radius_a = 5.2  # デフォルト 5.2m
+        turning_radius_b = 6.0  # デフォルト 6.0m
 
-    # 開始位置: 現在地（重なっている）
-    car_a_start_pos = car_a_end
-    car_b_start_pos = car_b_end
+    print(f"[シーン10] CarA 最小回転半径: {turning_radius_a}m, CarB 最小回転半径: {turning_radius_b}m")
 
-    # 終了位置: 横並び（X方向に分離）
-    # carA を左（負のX方向）、carB を右（正のX方向）に移動（距離=2.5m）
-    car_a_scene10_end = (-1.25, car_a_end[1], grounded_z_a)
-    car_b_scene10_end = (1.25, car_b_end[1], grounded_z_b)
+    # Empty親オブジェクトをシーン10から作成（親子関係をフレームに関係なく適用するため）
+    # 既存のEmptyを削除（再実行時の競合防止）
+    bpy.ops.object.select_all(action='DESELECT')
+    empties_to_delete = []
+    for empty_name in ["CarA_TurnPivot", "CarB_TurnPivot"]:
+        if empty_name in bpy.data.objects:
+            empties_to_delete.append(bpy.data.objects[empty_name])
+    for obj in empties_to_delete:
+        obj.select_set(True)
+    if empties_to_delete:
+        bpy.ops.object.delete()
+    bpy.ops.object.select_all(action='DESELECT')
 
-    # 開始位置
-    car_a.location = car_a_start_pos
-    car_a.keyframe_insert(data_path="location", frame=scene10_start)
-    car_b.location = car_b_start_pos
-    car_b.keyframe_insert(data_path="location", frame=scene10_start)
+    # 車の親をNoneに戻す（前の親子関係を解除）
+    if car_a.parent is not None:
+        car_a.parent = None
+    if car_b.parent is not None:
+        car_b.parent = None
 
-    # 終了位置（横並び）
-    car_a.location = car_a_scene10_end
-    car_a.keyframe_insert(data_path="location", frame=scene10_end)
-    car_b.location = car_b_scene10_end
-    car_b.keyframe_insert(data_path="location", frame=scene10_end)
+    # Emptyを作成（回転中心はX=0からturning_radiusだけ左側）
+    empty_a = bpy.data.objects.new("CarA_TurnPivot", None)
+    bpy.context.collection.objects.link(empty_a)
+    empty_a.location = (-turning_radius_a, car_a_end[1], car_a_end[2])
+    empty_a.rotation_euler = (0.0, 0.0, 0.0)
 
-    print(f"[フレーム{scene10_start}] シーン 10 開始：車は重なっている位置")
-    print(f"  carA={car_a_start_pos}, carB={car_b_start_pos}")
-    print(f"[フレーム{scene10_end}] シーン 10 終了：横並びに移動完了")
-    print(f"  carA={car_a_scene10_end}, carB={car_b_scene10_end}")
+    empty_b = bpy.data.objects.new("CarB_TurnPivot", None)
+    bpy.context.collection.objects.link(empty_b)
+    empty_b.location = (-turning_radius_b, car_b_end[1], car_b_end[2])
+    empty_b.rotation_euler = (0.0, 0.0, 0.0)
+
+    # 車をEmptyの子オブジェクトにする
+    # 【重要】前のカットからのアニメーションデータをクリア（Blender 5.xではキーフレーム評価がローカル位置を上書きするため）
+    if car_a.animation_data:
+        car_a.animation_data_clear()
+    if car_b.animation_data:
+        car_b.animation_data_clear()
+
+    bpy.context.view_layer.objects.active = empty_a
+    car_a.parent = empty_a
+    car_a.location = (turning_radius_a, 0.0, 0.0)
+    car_a.rotation_euler = (0.0, 0.0, math.pi / 2)
+
+    bpy.context.view_layer.objects.active = empty_b
+    car_b.parent = empty_b
+    car_b.location = (turning_radius_b, 0.0, 0.0)
+    car_b.rotation_euler = (0.0, 0.0, math.pi / 2)
+
+    bpy.context.view_layer.update()
+
+    print(f"[シーン10] Empty親オブジェクトを作成（アニメーションデータクリア済み）")
+    print(f"  CarA_TurnPivot: {empty_a.location}")
+    print(f"  CarB_TurnPivot: {empty_b.location}")
+    print(f"  CarA グローバル位置: {car_a.matrix_world.to_translation()}")
+    print(f"  CarB グローバル位置: {car_b.matrix_world.to_translation()}")
+
+    # Emptyの回転キーフレームを設定（シーン10では回転しない）
+    empty_a.rotation_euler.z = 0.0
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_start)
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_end)
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_pause_end)
+
+    empty_b.rotation_euler.z = 0.0
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_start)
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_end)
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene10_pause_end)
+
+    print(f"[フレーム{scene10_start}] シーン 10 開始：車はX=0位置（Emptyの子として制御）")
+    print(f"[フレーム{scene10_end}] シーン 10 終了：車はX=0位置を維持")
 
     # --- CarB を不透明に戻す（シーン10の最初の1秒で完了）---
     opaque_end = scene10_start + 24  # 1秒（24fps × 1 = 24フレーム）
@@ -178,113 +181,18 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     camera.rotation_euler = rot_scene10_end
     camera.keyframe_insert(data_path="location", frame=scene10_pause_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene10_pause_end)
-    car_a.location = car_a_scene10_end
-    car_a.keyframe_insert(data_path="location", frame=scene10_pause_end)
-    car_b.location = car_b_scene10_end
-    car_b.keyframe_insert(data_path="location", frame=scene10_pause_end)
     print(f"[フレーム{scene10_pause_end}] 停止（2秒）")
 
     # ============================================================
     # 【カット 4】シーン 11: フレーム 1752-1992（最小回転半径で右回り1週、10秒）
-    # Empty親オブジェクト手法で実装
+    # Empty親オブジェクト手法で実装（シーン10で作成したEmptyをそのまま使用）
     # ============================================================
     print("\n=== 【カット 4】シーン 11 設定開始 ===")
 
     scene11_start = 1752
     scene11_end = 1992  # 10秒間（24fps × 10 = 240フレーム）
 
-    # 車の最終位置（シーン10から継承）
-    car_a_pos = car_a_scene10_end
-    car_b_pos = car_b_scene10_end
-
-    # 最小回転半径を取得（mm → m に変換）
-    if car_dimensions:
-        turning_radius_a = car_dimensions.get("carA", {}).get("turning_radius", 5200) / 1000.0
-        turning_radius_b = car_dimensions.get("carB", {}).get("turning_radius", 6000) / 1000.0
-    else:
-        turning_radius_a = 5.2  # デフォルト 5.2m
-        turning_radius_b = 6.0  # デフォルト 6.0m
-
     print(f"[シーン11] CarA 最小回転半径: {turning_radius_a}m, CarB 最小回転半径: {turning_radius_b}m")
-
-    # 回転中心を計算（車の左側 = -X方向）
-    # 車をEmptyの(R, 0)に配置するので、回転中心は車の左側に設定
-    turn_center_a = (car_a_pos[0] - turning_radius_a, car_a_pos[1], car_a_pos[2])
-    turn_center_b = (car_b_pos[0] - turning_radius_b, car_b_pos[1], car_b_pos[2])
-
-    print(f"[シーン11] CarA 回転中心: {turn_center_a}")
-    print(f"[シーン11] CarB 回転中心: {turn_center_b}")
-
-    # ============================================================
-    # Empty親オブジェクト手法による回転アニメーション実装
-    # ============================================================
-
-    # --- 既存のEmptyを削除（再実行時の競合防止）---
-    bpy.ops.object.select_all(action='DESELECT')
-    empties_to_delete = []
-    for empty_name in ["CarA_TurnPivot", "CarB_TurnPivot"]:
-        if empty_name in bpy.data.objects:
-            empties_to_delete.append(bpy.data.objects[empty_name])
-    for obj in empties_to_delete:
-        obj.select_set(True)
-    if empties_to_delete:
-        bpy.ops.object.delete()
-    bpy.ops.object.select_all(action='DESELECT')
-
-    # --- 車の親をNoneに戻す（前の親子関係を解除）---
-    if car_a.parent is not None:
-        car_a.parent = None
-    if car_b.parent is not None:
-        car_b.parent = None
-
-    # --- CarA用 Empty（ピボット）を作成 ---
-    empty_a = bpy.data.objects.new("CarA_TurnPivot", None)
-    bpy.context.collection.objects.link(empty_a)
-    empty_a.location = turn_center_a
-    empty_a.rotation_euler = (0.0, 0.0, 0.0)
-    print(f"[シーン11] CarA用ピボット '{empty_a.name}' を回転中心 {turn_center_a} に作成")
-
-    # --- CarB用 Empty（ピボット）を作成 ---
-    empty_b = bpy.data.objects.new("CarB_TurnPivot", None)
-    bpy.context.collection.objects.link(empty_b)
-    empty_b.location = turn_center_b
-    empty_b.rotation_euler = (0.0, 0.0, 0.0)
-    print(f"[シーン11] CarB用ピボット '{empty_b.name}' を回転中心 {turn_center_b} に作成")
-
-    # --- 車をEmptyの子オブジェクトにする ---
-    # EmptyのZ軸回転で車の円運動を制御するため、車のローカル位置を設定する。
-    #
-    # 【修正: カット完全分離】animation_data_clear() を削除。
-    # 前面のカットのアニメーションデータに影響しないよう、
-    # 車の親を設定する前に親子関係を解除するのみとする。
-    if car_a.parent:
-        car_a.parent = None
-    if car_b.parent:
-        car_b.parent = None
-    print(f"[シーン11] CarA・CarB の親子関係を解除しました（Empty親制御用）")
-
-    # 車の前方は-Y方向（GLBモデルのデフォルト向き）
-    # Emptyの-Z回転（時計回り）で車が(-R, 0)から-Y方向に移動するので、
-    # 車のZ回転は0のままにする（すでに-Y方向を向いているため）
-    bpy.context.view_layer.objects.active = empty_a
-    car_a.parent = empty_a
-    # 車のローカル座標を Empty から見て (R, 0, 0) に設定（Emptyの右側）
-    # -Z回転(時計回り)で(R,0)の車は+Y方向に移動する
-    # 車のデフォルト前方が+Y方向なので、前進になる！
-    car_a.location = (turning_radius_a, 0.0, 0.0)
-    # Z回転=π/2 で+Y方向を向く
-    car_a.rotation_euler = (0.0, 0.0, math.pi / 2)
-    print(f"[シーン11] CarA をEmptyの子に設定。ローカル位置: {car_a.location}, 回転Z: {car_a.rotation_euler.z}")
-
-    bpy.context.view_layer.objects.active = empty_b
-    car_b.parent = empty_b
-    car_b.location = (turning_radius_b, 0.0, 0.0)
-    car_b.rotation_euler = (0.0, 0.0, math.pi / 2)
-    print(f"[シーン11] CarB をEmptyの子に設定。ローカル位置: {car_b.location}, 回転Z: {car_b.rotation_euler.z}")
-
-    # ★車のグローバル位置が正しくなるか確認
-    print(f"[シーン11] CarA グローバル位置: {car_a.matrix_world.to_translation()}")
-    print(f"[シーン11] CarB グローバル位置: {car_b.matrix_world.to_translation()}")
 
     # --- EmptyのZ軸回転にキーフレームを設定（-Z方向 = 時計回り = 右回り）---
     # CarAが通常通り出发し、CarBは2秒（48フレーム）遅れて出发する
@@ -324,8 +232,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # カメラ: 上から両台の回転を俯瞰できる位置に移動
     # 2つの回転中心の中間点上空
-    mid_turn_center_x = (turn_center_a[0] + turn_center_b[0]) / 2.0
-    mid_turn_center_y = (turn_center_a[1] + turn_center_b[1]) / 2.0
+    mid_turn_center_x = (empty_a.location.x + empty_b.location.x) / 2.0
+    mid_turn_center_y = (empty_a.location.y + empty_b.location.y) / 2.0
     
     # カメラ開始位置（シーン10の最終位置）
     camera.location = camera_scene10_end_loc
@@ -347,8 +255,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # 回転半径の可視化：円を描くガイドラインを作成
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_turning_radius_visualization(turn_center_a, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_end, color=(1.0, 0.2, 0.2))
-    _create_turning_radius_visualization(turn_center_b, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_end, color=(0.2, 0.2, 1.0))
+    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_end, color=(1.0, 0.2, 0.2))
+    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_end, color=(0.2, 0.2, 1.0))
 
     # タイヤ跡軌跡を作成（発光曲線）
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
@@ -364,8 +272,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     # 【修正: カット完全分離】CutState 形式で最終状態のみを返す
     from animation_common import CutState
     return CutState(
-        car_a_loc=car_a_pos,  # 1週するので元の位置に戻る
-        car_b_loc=car_b_pos,
+        car_a_loc=(0.0, car_a_end[1], car_a_end[2]),  # 1週するのでX=0に戻る
+        car_b_loc=(0.0, car_b_end[1], car_b_end[2]),
         camera_loc=camera_scene11_end_loc,
         camera_rot=(rot_scene11_end.x, rot_scene11_end.y, rot_scene11_end.z),
     )
