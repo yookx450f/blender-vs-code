@@ -167,11 +167,6 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     print(f"[フレーム{scene10_start}] シーン 10 開始：車はX=0位置（Emptyの子として制御）")
     print(f"[フレーム{scene10_end}] シーン 10 終了：車はX=0位置を維持")
 
-    # --- CarB を不透明に戻す（シーン10の最初の1秒で完了）---
-    opaque_end = scene10_start + 24  # 1秒（24fps × 1 = 24フレーム）
-    _setup_car_b_opaque_for_scene10(car_b, scene10_start, opaque_end)
-    print(f"[フレーム{scene10_start}-{opaque_end}] CarB 不透明化：Alpha 0.8→1.0（最初の1秒で完了）")
-
     # --- 最低地上高差表示をフェードアウト（早く消えるように1秒で完了）---
     fade_out_end = scene10_start + 24  # 1秒（24fps × 1 = 24フレーム）
     _fade_out_ground_clearance_text(scene10_start, fade_out_end)
@@ -193,6 +188,11 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     scene11_end = 1992  # 10秒間（24fps × 10 = 240フレーム）
 
     print(f"[シーン11] CarA 最小回転半径: {turning_radius_a}m, CarB 最小回転半径: {turning_radius_b}m")
+
+    # --- CarB を不透明に戻す（シーン11の最初の1秒で完了）---
+    opaque_end = scene11_start + 24  # 1秒（24fps × 1 = 24フレーム）
+    _setup_car_b_opaque_for_scene10(car_b, scene11_start, opaque_end)
+    print(f"[フレーム{scene11_start}-{opaque_end}] CarB 不透明化：Alpha 0.8→1.0（最初の1秒で完了）")
 
     # --- EmptyのZ軸回転にキーフレームを設定（-Z方向 = 時計回り = 右回り）---
     # CarAが通常通り出发し、CarBは2秒（48フレーム）遅れて出发する
