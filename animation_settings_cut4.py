@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール - カット 4
-フレーム 1584-1992（シーン 10、シーン 11、停止付き）を処理する。
+フレーム 1584-2208（シーン 10、シーン 11、シーン 12、停止付き）を処理する。
 
 使い方:
     from animation_settings_cut4 import setup_cut4_animations
@@ -10,6 +10,8 @@
 - シーン 10: 2台の車を横並びに移動（5秒）＋ CarBを不透明に戻す ＋ 最低地上高差表示をフェードアウト
 - 停止: 2秒
 - シーン 11: 最小回転半径で両台が右回り1週（10秒）
+- シーン 12: 最小回転半径比較式表示（5秒）
+- 最終停止: 2秒
 """
 
 import bpy
@@ -281,6 +283,55 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=(1.0, 0.2, 0.2))
     _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=(0.2, 0.2, 1.0))
 
+    # ============================================================
+    # 【カット 4】シーン 12: フレーム 2040-2160（最小回転半径比較式表示、5秒）
+    # ============================================================
+    print("\n=== 【カット 4】シーン 12 設定開始 ===")
+    
+    scene12_start = scene11_end  # 2040
+    scene12_end = scene12_start + 120  # 5秒（24fps × 5 = 120フレーム）
+    
+    print(f"[シーン12] CarA 最小回転半径: {turning_radius_a}m ({int(turning_radius_a * 1000)}mm), CarB 最小回転半径: {turning_radius_b}m ({int(turning_radius_b * 1000)}mm)")
+    
+    # カメラ位置を維持（シーン11の最終位置）
+    camera.location = camera_scene11_end_loc
+    camera.rotation_euler = rot_scene11_end
+    camera.keyframe_insert(data_path="location", frame=scene12_start)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene12_start)
+    camera.keyframe_insert(data_path="location", frame=scene12_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene12_end)
+    
+    # Empty回転もシーン12中維持
+    empty_a.rotation_euler.z = total_angle
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene12_end)
+    empty_b.rotation_euler.z = total_angle
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene12_end)
+    
+    # 最小回転半径比較式テキストを作成（2つの回転円の中央に配置）
+    turning_radius_diff_mm = _calculate_turning_radius_difference(car_a, car_b, car_dimensions)
+    _create_turning_radius_diff_text(scene, camera, int(turning_radius_a * 1000), int(turning_radius_b * 1000), turning_radius_diff_mm,
+                                     empty_a.location, empty_b.location, scene12_start, scene12_end)
+    
+    print(f"[フレーム{scene12_end}] シーン 12 終了：最小回転半径比較式表示完了")
+
+    # ============================================================
+    # 【カット 4】最終停止: フレーム 2160-2208（2秒）
+    # ============================================================
+    final_pause_end = scene12_end + 48  # 2秒（24fps × 2 = 48フレーム）
+    
+    camera.location = camera_scene11_end_loc
+    camera.rotation_euler = rot_scene11_end
+    camera.keyframe_insert(data_path="location", frame=final_pause_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=final_pause_end)
+    
+    # Empty回転も最終停止フレームまで固定
+    empty_a.rotation_euler.z = total_angle
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=final_pause_end)
+    empty_b.rotation_euler.z = total_angle
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=final_pause_end)
+    
+    print(f"[フレーム{final_pause_end}] 最終停止（2秒）")
+
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
 
@@ -456,8 +507,12 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
     # セグメント数
     num_segments = 30
     
-    # 軌跡幅（タイヤ跡の太さ）
-    track_width = 0.2
+    # 軌跡幅を車の横幅に設定（バウンディングボックスから計算）
+    x_coords = [c.x for c in corners_local]
+    car_width_m = max(x_coords) - min(x_coords)
+    track_width = car_width_m
+    
+    print(f"[シーン11] {car_object.name} の横幅: {car_width_m:.3f}m → 軌跡幅として設定")
     
     # 発光マテリアルを作成（EEVEE対応: Principled BSDF使用）
     mat_name = f"{name_prefix}_Mat"
@@ -679,3 +734,226 @@ def _fade_out_ground_clearance_text(start_frame, end_frame):
                     mat.shadow_method = 'BUFFER'
 
     print(f"[フレーム{end_frame}] 最低地上高差テキストのフェードアウト完了（スケール→0）")
+
+
+def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, radius_diff_mm,
+                                     empty_a_loc, empty_b_loc, start_frame, end_frame):
+    """最小回転半径の計算式を表示するテキストを作成（2つの回転円の中央に配置）"""
+    
+    # 2つの回転中心の中間点を計算
+    mid_x = (empty_a_loc[0] + empty_b_loc[0]) / 2.0
+    mid_y = (empty_a_loc[1] + empty_b_loc[1]) / 2.0
+    
+    # テキストコンテナの位置（回転円の中央上空）
+    text_container_location = (mid_x, mid_y, 2.0)
+    
+    bpy.ops.object.empty_add(location=text_container_location)
+    text_container = bpy.context.active_object
+    text_container.name = "TurningRadiusDiff_Container_Scene12"
+    
+    # 俯瞰カメラの場合、テキストは地面に平行に表示されるようにする
+    # カメラが上からなので、Y軸回転でカメラ方向に向ける
+    cam_pos = camera.location
+    container_pos = Vector(text_container_location)
+    direction = cam_pos - container_pos
+    
+    # 水平面（XY平面）の方向ベクトルを取得
+    horizontal_dir = Vector((direction.x, direction.y, 0.0)).normalized()
+    
+    # Y軸回転角を計算（カメラが上からなので、X-Z回転は不要）
+    import math as m
+    angle_y = m.atan2(horizontal_dir.x, horizontal_dir.y)
+    
+    text_container.rotation_euler = (0.0, 0.0, angle_y + math.pi)
+    
+    scene.collection.objects.link(text_container)
+    
+    print(f"=== TEXT CONTAINER DEBUG (Scene 12) ===")
+    print(f"text_container.location: {text_container.location}")
+    print(f"text_container.rotation_euler: {text_container.rotation_euler}")
+    
+    # 文字列を2行に分ける（円にかからないように）
+    text_line1 = "最小回転半径："
+    text_line2 = f"{radius_b_mm}mm - {radius_a_mm}mm → {radius_diff_mm:+d}mm"
+    
+    # 色の定義：CarB=青、CarA=赤、結果=白
+    colors = {
+        'blue': (0.0, 1.0, 1.0),
+        'red': (1.0, 0.0, 0.0),
+        'white': (1.0, 1.0, 1.0)
+    }
+    
+    # 全角/半角を考慮した位置計算
+    def is_fullwidth(c):
+        """全角文字かどうかを判定"""
+        code = ord(c)
+        return (0x4E00 <= code <= 0x9FFF) or \
+               (0x3000 <= code <= 0x303F) or \
+               (0xFF00 <= code <= 0xFFEF) or \
+               (0x3040 <= code <= 0x309F) or \
+               (0x30A0 <= code <= 0x30FF)
+    
+    # 2行分の文字を処理
+    all_char_objects = []
+    line1_chars = []
+    line2_chars = []
+    
+    # --- 2行目（数値式）の色マップを作成 ---
+    color_map_line2 = ['white'] * len(text_line2)
+    
+    number_blocks = []
+    current_block = []
+    
+    for i, char in enumerate(text_line2):
+        if char in '0123456789':
+            current_block.append(i)
+        else:
+            if current_block:
+                number_blocks.append(current_block)
+                current_block = []
+    if current_block:
+        number_blocks.append(current_block)
+    
+    for idx, block in enumerate(number_blocks):
+        if idx == 0:
+            color = 'blue'   # CarB (最初の数字)
+        elif idx == 1:
+            color = 'red'    # CarA (2番目の数字)
+        else:
+            color = 'white'  # 結果やその他
+        
+        for pos in block:
+            if pos < len(color_map_line2):
+                color_map_line2[pos] = color
+    
+    # --- 1行目（タイトル）の文字を作成 ---
+    half_spacing = 0.30  # サイズ1.5倍に合わせて間隔も拡大
+    full_spacing = 0.60  # 全角文字の間隔をさらに拡大
+    
+    for i, char in enumerate(text_line1):
+        bpy.ops.object.text_add(location=(0, 0, 0))
+        char_obj = bpy.context.active_object
+        char_obj.name = f"TurningRadiusDiff_Line1_Char_{i}"
+        
+        if hasattr(char_obj.data, 'string'):
+            char_obj.data.string = char
+        else:
+            char_obj.data.body = char
+        
+        if hasattr(char_obj.data, 'size'):
+            char_obj.data.size = 0.66  # 0.44の1.5倍
+        
+        char_obj.scale = (1.0, 1.0, 1.0)
+        
+        mat_name = f"emission_label_scene12_char_white"
+        if mat_name not in bpy.data.materials:
+            emission_mat = create_emission_material(colors['white'], 5.0)
+            emission_mat.name = mat_name
+        else:
+            emission_mat = bpy.data.materials[mat_name]
+        
+        if len(char_obj.data.materials) == 0:
+            char_obj.data.materials.append(emission_mat)
+        
+        char_obj.parent = text_container
+        scene.collection.objects.link(char_obj)
+        
+        line1_chars.append(char_obj)
+        all_char_objects.append(char_obj)
+    
+    # --- 2行目（数値式）の文字を作成 ---
+    for i, char in enumerate(text_line2):
+        bpy.ops.object.text_add(location=(0, 0, 0))
+        char_obj = bpy.context.active_object
+        char_obj.name = f"TurningRadiusDiff_Line2_Char_{i}"
+        
+        if hasattr(char_obj.data, 'string'):
+            char_obj.data.string = char
+        else:
+            char_obj.data.body = char
+        
+        if hasattr(char_obj.data, 'size'):
+            char_obj.data.size = 0.66  # 0.44の1.5倍
+        
+        char_obj.scale = (1.0, 1.0, 1.0)
+        
+        color_name = color_map_line2[i] if i < len(color_map_line2) else 'white'
+        mat_name = f"emission_label_scene12_char_{color_name}"
+        if mat_name not in bpy.data.materials:
+            emission_mat = create_emission_material(colors[color_name], 5.0)
+            emission_mat.name = mat_name
+        else:
+            emission_mat = bpy.data.materials[mat_name]
+        
+        if len(char_obj.data.materials) == 0:
+            char_obj.data.materials.append(emission_mat)
+        
+        char_obj.parent = text_container
+        scene.collection.objects.link(char_obj)
+        
+        line2_chars.append(char_obj)
+        all_char_objects.append(char_obj)
+    
+    # --- 各文字の位置を設定（中央揃え、2行配置）---
+    def calc_line_width(text):
+        widths = []
+        for c in text:
+            if is_fullwidth(c):
+                widths.append(full_spacing)
+            else:
+                widths.append(half_spacing)
+        return sum(widths), widths
+    
+    line1_width, line1_widths = calc_line_width(text_line1)
+    line2_width, line2_widths = calc_line_width(text_line2)
+    
+    # 1行目の位置を設定（上部）
+    current_x = -line1_width / 2.0
+    for i, char_obj in enumerate(line1_chars):
+        local_x = current_x
+        current_x += line1_widths[i]
+        char_obj.location = (local_x, 0.5, -0.3)
+    
+    # 2行目の位置を設定（下部）
+    current_x = -line2_width / 2.0
+    for i, char_obj in enumerate(line2_chars):
+        local_x = current_x
+        current_x += line2_widths[i]
+        char_obj.location = (local_x, -0.5, -0.3)
+    
+    # アニメーションを設定（フェードイン）
+    _setup_char_by_char_animation_scene12(all_char_objects, start_frame=start_frame, end_frame=end_frame)
+    
+    print(f"[シーン 12] 計算式テキストを2行で作成（Line1: {len(line1_chars)}文字, Line2: {len(line2_chars)}文字）")
+    return text_container
+
+
+def _setup_char_by_char_animation_scene12(char_objects, start_frame, end_frame):
+    """各文字に単一フェードインアニメーションを設定（シーン12用）"""
+    
+    # 初期状態：全て透明でスケール 0
+    for char_obj in char_objects:
+        char_obj.scale = (0.0, 0.0, 0.0)
+        char_obj.keyframe_insert(data_path="scale", frame=start_frame)
+        
+        # 発光強度を 0 に設定
+        if len(char_obj.data.materials) > 0:
+            for node in char_obj.data.materials[0].node_tree.nodes:
+                if node.type == 'BSDF_EMISSION':
+                    node.inputs['Strength'].default_value = 0.0
+                    node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=start_frame)
+    
+    # 全ての文字が同時にフェードインするアニメーション
+    for char_obj in char_objects:
+        char_obj.scale = (1.0, 1.0, 1.0)
+        char_obj.keyframe_insert(data_path="scale", frame=start_frame + 8)
+        
+        if len(char_obj.data.materials) > 0:
+            for node in char_obj.data.materials[0].node_tree.nodes:
+                if node.type == 'BSDF_EMISSION':
+                    node.inputs['Strength'].default_value = 5.0
+                    node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=start_frame + 8)
+        
+        char_obj.keyframe_insert(data_path="scale", frame=end_frame)
+    
+    print(f"[シーン 12] {len(char_objects)} 文字に単一フェードインアニメーションを設定")

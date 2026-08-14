@@ -61,16 +61,18 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #              フレーム 1368-1416 停止（2 秒）
     #     シーン 9: フレーム 1416-1536 最低地上高差表示（5 秒）
     #              フレーム 1536-1584 停止（2 秒）
-    #   【カット 4】= シーン 10〜11（カット 3 の最終位置から開始）
+    #   【カット 4】= シーン 10〜12（カット 3 の最終位置から開始）
     #     シーン 10: フレーム 1584-1704 横並び移動＋CarB不透明化＋地上高表示フェードアウト（5 秒）
     #               フレーム 1704-1752 停止（2 秒）
     #     シーン 11: フレーム 1752-2040 最小回転半径で両台が右回り1週（CarA:10秒、CarBは出发/到达ともに2秒遅延）
+    #     シーン 12: フレーム 2040-2160 最小回転半径比較式表示（5 秒）
+    #               フレーム 2160-2208 最終停止（2 秒）
     # 環境変数 CUT_NUMBER によって実行するカットを制御
     target_cut = _get_target_cut()
     print(f"[アニメーション設定] 実行対象カット: {target_cut}")
     
     scene.frame_start = 0
-    scene.frame_end = 2040
+    scene.frame_end = 2208
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -165,6 +167,9 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"              フレーム 1704-1752:   停止（2 秒）")
     print(f"  【カット 4】シーン 11（フレーム 1752-2040):")
     print(f"              最小回転半径で両台が右回り1週（CarA:10秒、CarBは出发/到达ともに2秒遅延）（12 秒）")
+    print(f"  【カット 4】シーン 12（フレーム 2040-2160):")
+    print(f"              最小回転半径比較式表示（5 秒）")
+    print(f"              フレーム 2160-2208:     最終停止（2 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に
