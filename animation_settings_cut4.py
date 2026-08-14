@@ -185,7 +185,10 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     print("\n=== 【カット 4】シーン 11 設定開始 ===")
 
     scene11_start = 1752
-    scene11_end = 1992  # 10秒間（24fps × 10 = 240フレーム）
+    scene11_car_a_end = 1992  # CarAの回転終了（10秒間、24fps × 10 = 240フレーム）
+    car_b_delay = 48  # 2秒遅延（24fps × 2）
+    scene11_car_b_end = scene11_car_a_end + car_b_delay  # CarBはCarA終了後2秒で完了
+    scene11_end = scene11_car_b_end  # シーン全体の終了フレーム
 
     print(f"[シーン11] CarA 最小回転半径: {turning_radius_a}m, CarB 最小回転半径: {turning_radius_b}m")
 
@@ -196,6 +199,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # --- EmptyのZ軸回転にキーフレームを設定（-Z方向 = 時計回り = 右回り）---
     # CarAが通常通り出发し、CarBは2秒（48フレーム）遅れて出发する
+    # CarAが先に戻り、その2秒後にCarBも戻る
     # ease-in/ease-outでゆっくり加速・減速するように角度を計算
     num_keyframes = 25  # 24分割で滑らかに
     total_angle = -2.0 * math.pi  # -360度（右回り）
@@ -204,25 +208,28 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
         """ease-in-out曲線: 0→1 の範囲でゆっくり加速・減速"""
         return t * t * (3.0 - 2.0 * t)
 
-    # CarA: scene11_start から通常通り回転（ease-in/out）
+    # CarA: scene11_start から scene11_car_a_end まで回転（ease-in/out）
+    car_a_duration = scene11_car_a_end - scene11_start
     for i in range(num_keyframes):
-        frame = scene11_start + int((scene11_end - scene11_start) * i / (num_keyframes - 1))
+        frame = scene11_start + int(car_a_duration * i / (num_keyframes - 1))
         t = i / (num_keyframes - 1)  # 0 → 1
         eased_t = ease_in_out(t)
         angle = total_angle * eased_t  # ease-in/out適用
 
         empty_a.rotation_euler.z = angle
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=frame)
+    # CarAが戻った後、scene11_endまで静止
+    empty_a.rotation_euler.z = total_angle
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene11_end)
 
     # CarB: CarA出发から2秒（48フレーム）後に出发（ease-in/out）
-    car_b_delay = 48  # 2秒遅延（24fps × 2）
     car_b_start = scene11_start + car_b_delay
     # CarBはdelay分だけ待機（angle=0で固定）
     empty_b.rotation_euler.z = 0.0
     empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene11_start)
     empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=car_b_start)
     # CarBの回転アニメーション（delay後のフレーム範囲で1週完了、ease-in/out）
-    car_b_duration = scene11_end - car_b_start
+    car_b_duration = scene11_car_b_end - car_b_start
     for i in range(num_keyframes):
         frame = car_b_start + int(car_b_duration * i / (num_keyframes - 1))
         t = i / (num_keyframes - 1)  # 0 → 1
@@ -235,7 +242,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     print(f"[フレーム{scene11_start}] シーン11開始：CarAが回転を開始（EmptyのZ回転=0）")
     print(f"[フレーム{car_b_start}] CarBが回転を開始（CarA出发から{car_b_delay}フレーム={car_b_delay/24:.1f}秒後）")
-    print(f"[フレーム{scene11_end}] シーン11終了：両台が右回り1週完了（EmptyのZ回転={total_angle}ラジアン=-360度）")
+    print(f"[フレーム{scene11_car_a_end}] CarAが元の位置に戻る（右回り1週完了）")
+    print(f"[フレーム{scene11_car_b_end}] CarBが元の位置に戻る（CarA戻りから{car_b_delay}フレーム={car_b_delay/24:.1f}秒後）")
 
     # CarBの軌跡表示用開始フレームを保存
     car_b_track_start = car_b_start
@@ -265,13 +273,13 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # 回転半径の可視化：円を描くガイドラインを作成
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_end, color=(1.0, 0.2, 0.2))
-    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_end, color=(0.2, 0.2, 1.0))
+    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_car_a_end, color=(1.0, 0.2, 0.2))
+    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_car_b_end, color=(0.2, 0.2, 1.0))
 
     # タイヤ跡軌跡を作成（発光曲線）
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_end, color=(1.0, 0.2, 0.2))
-    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_end, color=(0.2, 0.2, 1.0))
+    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=(1.0, 0.2, 0.2))
+    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=(0.2, 0.2, 1.0))
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -295,6 +303,8 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
     円を複数のセグメントに分割し、フレームごとに順に表示することで
     徐々に描画される軌跡を実現する。
     
+    車の動きに合わせて軌跡を表示するために、線形タイミングに遅延を追加。
+    
     Parameters:
         center: 回転中心の座標 (x, y, z)
         radius: 回転半径 (m)
@@ -307,7 +317,6 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
     
     # セグメント数
     num_segments = 60
-    frames_per_segment = (end_frame - start_frame) / num_segments
     
     # 軌跡幅（細く設定）
     track_width = 0.05
@@ -386,8 +395,14 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
         if len(obj.data.materials) == 0:
             obj.data.materials.append(bpy.data.materials[mat_name])
         
-        # このセグメントが表示されるフレームを計算
-        show_frame = start_frame + int(seg * frames_per_segment)
+        # このセグメントが表示されるフレームを計算（ease-inカーブ + 固定遅延）
+        # 初動は固定遅延でカバー、カーブはease-inで後半を速く
+        t = seg / num_segments  # 0 → 1
+        eased_t = t ** 1.5  # ease-inカーブ（前半を遅く、後半を速く）
+        # 固定遅延：2.5秒（60フレーム）で軌跡の表示を遅らせる
+        track_delay = 60  # 2.5秒遅延
+        # 範囲を調整して、最後のセグメントがend_frameに収まるように
+        show_frame = start_frame + track_delay + int(eased_t * (end_frame - start_frame - track_delay))
         
         # フレーム0から非表示（確実に初期状態が非表示になる）
         obj.hide_viewport = True
@@ -410,6 +425,8 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
     
     円弧を複数のセグメントに分割し、フレームごとに順に表示することで
     徐々に描画されるタイヤ跡を実現する。
+    
+    車の動きに合わせて軌跡を表示するために、線形タイミングに遅延を追加。
     
     Parameters:
         car_object: 車オブジェクト
@@ -438,7 +455,6 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
     
     # セグメント数
     num_segments = 30
-    frames_per_segment = (end_frame - start_frame) / num_segments
     
     # 軌跡幅（タイヤ跡の太さ）
     track_width = 0.2
@@ -521,8 +537,14 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
         if len(obj.data.materials) == 0:
             obj.data.materials.append(bpy.data.materials[mat_name])
         
-        # このセグメントが表示されるフレームを計算
-        show_frame = start_frame + int(seg * frames_per_segment)
+        # このセグメントが表示されるフレームを計算（ease-inカーブ + 固定遅延）
+        # 初動は固定遅延でカバー、カーブはease-inで後半を速く
+        t = seg / num_segments  # 0 → 1
+        eased_t = t ** 1.5  # ease-inカーブ（前半を遅く、後半を速く）
+        # 固定遅延：2.5秒（60フレーム）で軌跡の表示を遅らせる
+        track_delay = 60  # 2.5秒遅延
+        # 範囲を調整して、最後のセグメントがend_frameに収まるように
+        show_frame = start_frame + track_delay + int(eased_t * (end_frame - start_frame - track_delay))
         
         # フレーム0から非表示（確実に初期状態が非表示になる）
         obj.hide_viewport = True

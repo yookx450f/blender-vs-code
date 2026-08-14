@@ -941,9 +941,19 @@ def main():
     # =============================================
     print("\n=== レンダリング出力設定 ===")
     
-    desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-    output_filepath = os.path.join(desktop_path, "mp4")
+    desktop_path = os.path.expanduser("~").replace("\\", "/") + "/Desktop"
+    
+    # カット番号に応じてファイル名を設定（cut1.mp4, cut2.mp4, ... allの場合はmp4.mp4）
+    if CUT_NUMBER in ("1", "2", "3", "4"):
+        output_filename = f"cut{CUT_NUMBER}.mp4"
+    else:
+        output_filename = "mp4.mp4"
+    
+    output_filepath = f"{desktop_path}/{output_filename}"
     scene.render.filepath = output_filepath
+    
+    # ファイル拡張子の自動付与を無効化
+    scene.render.use_file_extension = False
     
     # レンダーエンジンを EEVEE に設定
     scene.render.engine = 'BLENDER_EEVEE'
@@ -970,6 +980,8 @@ def main():
     print(f"出力フォーマット: MP4 (FFMPEG / H.264)")
     print(f"レンダーエンジン: EEVEE")
     print(f"保存先: {output_filepath}.mp4")
+    print(f"  file_extension: {scene.render.file_extension}")
+    print(f"  use_file_extension: {scene.render.use_file_extension}")
     
     print("\n" + "=" * 50)
     print("シーン作成完了！")

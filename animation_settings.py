@@ -64,13 +64,13 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #   【カット 4】= シーン 10〜11（カット 3 の最終位置から開始）
     #     シーン 10: フレーム 1584-1704 横並び移動＋CarB不透明化＋地上高表示フェードアウト（5 秒）
     #               フレーム 1704-1752 停止（2 秒）
-    #     シーン 11: フレーム 1752-1992 最小回転半径で両台が右回り1週（10 秒）
+    #     シーン 11: フレーム 1752-2040 最小回転半径で両台が右回り1週（CarA:10秒、CarBは出发/到达ともに2秒遅延）
     # 環境変数 CUT_NUMBER によって実行するカットを制御
     target_cut = _get_target_cut()
     print(f"[アニメーション設定] 実行対象カット: {target_cut}")
     
     scene.frame_start = 0
-    scene.frame_end = 1992
+    scene.frame_end = 2040
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -163,8 +163,8 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"  【カット 4】シーン 10（フレーム 1584-1704):")
     print(f"              横並び移動＋CarB不透明化＋地上高表示フェードアウト（5 秒）")
     print(f"              フレーム 1704-1752:   停止（2 秒）")
-    print(f"  【カット 4】シーン 11（フレーム 1752-1992):")
-    print(f"              最小回転半径で両台が右回り1週（CarA出发、CarBは2秒遅れて出发）（10 秒）")
+    print(f"  【カット 4】シーン 11（フレーム 1752-2040):")
+    print(f"              最小回転半径で両台が右回り1週（CarA:10秒、CarBは出发/到达ともに2秒遅延）（12 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に

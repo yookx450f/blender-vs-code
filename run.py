@@ -20,11 +20,11 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 1992, "label": "全カット（シーン1-11）"},
+    "all": {"start": 0, "end": 2040, "label": "全カット（シーン1-11）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
     "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
     "3": {"start": 1224, "end": 1584, "label": "カット3（シーン8-9）"},
-    "4": {"start": 1584, "end": 1992, "label": "カット4（シーン10-11）"},
+    "4": {"start": 1584, "end": 2040, "label": "カット4（シーン10-11）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -159,7 +159,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
         # バックグラウンドモードでアニメーションレンダリング実行
         cmd.extend(["--background"])
         cmd.extend(["--python", scene_script])
-        cmd.extend(["--render-output", "//output/"])
+        # --render-output は削除（blend_scene_creator.py で出力パスを設定しているため）
         # レンダリング用スクリプトを追加（シーン作成後にレンダリングを実行）
         render_script = os.path.join(SCRIPT_DIR, "render_animation.py")
         if not os.path.exists(render_script):
