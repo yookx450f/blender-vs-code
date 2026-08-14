@@ -196,32 +196,42 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # --- EmptyのZ軸回転にキーフレームを設定（-Z方向 = 時計回り = 右回り）---
     # CarAが通常通り出发し、CarBは2秒（48フレーム）遅れて出发する
+    # ease-in/ease-outでゆっくり加速・減速するように角度を計算
     num_keyframes = 25  # 24分割で滑らかに
     total_angle = -2.0 * math.pi  # -360度（右回り）
 
-    # CarA: scene11_start から通常通り回転
+    def ease_in_out(t):
+        """ease-in-out曲線: 0→1 の範囲でゆっくり加速・減速"""
+        return t * t * (3.0 - 2.0 * t)
+
+    # CarA: scene11_start から通常通り回転（ease-in/out）
     for i in range(num_keyframes):
         frame = scene11_start + int((scene11_end - scene11_start) * i / (num_keyframes - 1))
-        angle = total_angle * i / (num_keyframes - 1)  # 0 → -2π
+        t = i / (num_keyframes - 1)  # 0 → 1
+        eased_t = ease_in_out(t)
+        angle = total_angle * eased_t  # ease-in/out適用
 
         empty_a.rotation_euler.z = angle
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=frame)
 
-    # CarB: CarA出发から2秒（48フレーム）後に出发
+    # CarB: CarA出发から2秒（48フレーム）後に出发（ease-in/out）
     car_b_delay = 48  # 2秒遅延（24fps × 2）
     car_b_start = scene11_start + car_b_delay
     # CarBはdelay分だけ待機（angle=0で固定）
     empty_b.rotation_euler.z = 0.0
     empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene11_start)
     empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=car_b_start)
-    # CarBの回転アニメーション（delay後のフレーム範囲で1週完了）
+    # CarBの回転アニメーション（delay後のフレーム範囲で1週完了、ease-in/out）
     car_b_duration = scene11_end - car_b_start
     for i in range(num_keyframes):
         frame = car_b_start + int(car_b_duration * i / (num_keyframes - 1))
-        angle = total_angle * i / (num_keyframes - 1)  # 0 → -2π
+        t = i / (num_keyframes - 1)  # 0 → 1
+        eased_t = ease_in_out(t)
+        angle = total_angle * eased_t  # ease-in/out適用
 
         empty_b.rotation_euler.z = angle
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=frame)
+
 
     print(f"[フレーム{scene11_start}] シーン11開始：CarAが回転を開始（EmptyのZ回転=0）")
     print(f"[フレーム{car_b_start}] CarBが回転を開始（CarA出发から{car_b_delay}フレーム={car_b_delay/24:.1f}秒後）")
