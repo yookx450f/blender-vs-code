@@ -818,37 +818,56 @@ def main():
         print(f"  - 位置: {imported_object.location}")
     
     # ============================================================
-    # 新しい演出：リア端を揃えて全長差を可視化（左右配置版）
+    # 新しい演出：後端を揃えて全長差を可視化（左右配置版）
+    # バウンディングボックスから実際の後端Y座標を測定して揃える
     # ============================================================
     
-    # 初期位置は左右に配置（X軸方向）かつリア端を揃える - 全長の差から計算
+    def get_rear_end_y(car_obj):
+        """バウンディングボックスから後端（Y最大）のワールド座標を取得"""
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        corners_world = [car_obj.matrix_world @ corner for corner in bounds]
+        return max(c.y for c in corners_world)
+    
+    def get_car_length_from_bbox(car_obj):
+        """バウンディングボックスから車の全長（Y方向の長さ）を取得"""
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        corners_world = [car_obj.matrix_world @ corner for corner in bounds]
+        min_y = min(c.y for c in corners_world)
+        max_y = max(c.y for c in corners_world)
+        return max_y - min_y
+    
+    # 初期位置は左右に配置（X軸方向）かつ後端を揃える
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
     
     if car_a and car_b:
-        # 両車の全長（mm）を取得し、メートルに変換
-        length_a_mm = CARS["carA"]["dimensions_mm"].get("length", 4460)
-        length_b_mm = CARS["carB"]["dimensions_mm"].get("length", 4890)
-        length_a_m = length_a_mm / 1000.0
-        length_b_m = length_b_mm / 1000.0
-        
-        # 全長の差を計算（フロント端揃え用のYオフセット）
-        # CarB (Land Cruiser) が CarA (Corolla Cross) より長いので、
-        # フロント端を揃えるには CarA を Y正方向にずらす必要がある
-        rear_offset_y = (length_b_m - length_a_m)
-        
-        print(f"全長差からフロント端揃えオフセットを計算: carA={length_a_mm}mm, carB={length_b_mm}mm -> offset_Y={rear_offset_y:.4f}m")
-        
         # 接地後のZ位置を取得
         grounded_z_a = grounded_z_positions.get(car_a.name, 0.0)
         grounded_z_b = grounded_z_positions.get(car_b.name, 0.0)
         
-        # carB (Land Cruiser): Vector(1.25, 0.0, Z) - Y座標=0.0（基準）、X=1.25m（右側）
+        # carB (Land Cruiser) を基準位置に配置
         car_b.location = (1.25, 0.0, grounded_z_b)
-        # carA: Vector(-1.25, +rear_offset_y, Z) - Y座標を全長差で調整してフロント端を揃える、X=-1.25m（左側）
+        rear_y_b = get_rear_end_y(car_b)
+        
+        # carAを一時的に基準位置に配置して後端Yを測定
+        car_a.location = (-1.25, 0.0, grounded_z_a)
+        rear_y_a = get_rear_end_y(car_a)
+        
+        # 後端を揃えるためのYオフセットを計算
+        # carAの後端が carBの後端と一致するように調整
+        rear_offset_y = rear_y_b - rear_y_a
+        
+        # carAの最終位置を設定
         car_a.location = (-1.25, rear_offset_y, grounded_z_a)
         
-        print(f"初期位置を設定（計算値、Z=接地後）：carA={car_a.location}, carB={car_b.location}")
+        # バウンディングボックスから測定した実際の全長を表示
+        length_a_m = get_car_length_from_bbox(car_a)
+        length_b_m = get_car_length_from_bbox(car_b)
+        
+        print(f"バウンディングボックスから後端Y座標を測定: carA={rear_y_a:.4f}m, carB={rear_y_b:.4f}m")
+        print(f"後端揃えオフセット: offset_Y={rear_offset_y:.4f}m")
+        print(f"実際の全長: carA={length_a_m*1000:.0f}mm, carB={length_b_m*1000:.0f}mm")
+        print(f"初期位置を設定（後端揃え、Z=接地後）：carA={car_a.location}, carB={car_b.location}")
     
     # 結果を表示
     print("\n=== インポート結果 ===")

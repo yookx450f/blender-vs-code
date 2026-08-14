@@ -361,12 +361,12 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
         log_fp.flush()
     
     # ワールド座標での目標位置を計算
-    # offset_a/b は GLBモデルの原点オフセット補正値
-    # 視覚的中心を X=0 に配置するには、オブジェクト位置から offset を引く
+    # offset_a/b は GLBモデルの原点オフセット補正値（X方向のみ使用）
+    # Y座標は後端揃えを維持するため、rear_offset_y をそのまま使用する
     car_a_start = (-1.25, rear_offset_y, grounded_z_a)
-    car_a_end = (0.0 - offset_a[0], rear_offset_y - offset_a[1], grounded_z_a)
+    car_a_end = (0.0 - offset_a[0], rear_offset_y, grounded_z_a)
     car_b_start = (1.25, 0.0, grounded_z_b)
-    car_b_end = (0.0 - offset_b[0], 0.0 - offset_b[1], grounded_z_b)
+    car_b_end = (0.0 - offset_b[0], 0.0, grounded_z_b)
 
     print(f"  carA: start={car_a_start} -> end={car_a_end}", file=log_fp)
     print(f"  carB: start={car_b_start} -> end={car_b_end}", file=log_fp)
