@@ -1,17 +1,17 @@
 {
   "carA": {
-    "name": "Corolla Cross 2025",
-    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2025.glb",
+    "name": "Land Cruiser FJ 2026",
+    "glb_path": "C:\\3d\\Modly\\glb\\landCruiserFJ2026.glb",
     "position": [-2.0, 0.0, 0],
     "color": [0.8, 0.2, 0.2],
     "dimensions_mm": {
-      "length": 4455,
-      "width": 1825,
-      "height": 1620,
-      "ground_clearance": 160,
-      "turning_radius": 5200
+      "length": 4575,
+      "width": 1855,
+      "height": 1960,
+      "ground_clearance": 250,
+      "turning_radius": 5500
     },
-    "acceleration_0_to_100_km_h": 9.9
+    "acceleration_0_to_100_km_h": 12.5
   },
   "carB": {
     "name": "Land Cruiser 250 2025",
