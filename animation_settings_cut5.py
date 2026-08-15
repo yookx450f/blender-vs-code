@@ -57,21 +57,21 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     fade_out_end = 2328  # フェードアウト完了（3秒：24fps × 3 = 72フレーム）
     scene13_end = 2352  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
 
-    # カメラ: 6秒間、シーン12終了時の位置・回転を維持（90度回転した状態を保つ）
+    # カメラ: 6秒かけてゆっくり90度回転（フェードアウト中も含めて）
+    # 開始位置: シーン12終了時のカメラ位置・回転
     camera.location = loc_scene12_end
     camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
     
-    # フェードアウト終了時点でも同じ位置（固定）
-    camera.location = loc_scene12_end
-    camera.rotation_euler = rot_scene12_end
-    camera.keyframe_insert(data_path="location", frame=fade_out_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=fade_out_end)
-
-    # シーン13終了時も同じ位置・回転を維持（90度回転したカメラアングルを保つ）
-    camera.location = loc_scene12_end
-    camera.rotation_euler = rot_scene12_end
+    # 終了位置: 90度回転したカメラ位置（車の前方を見る方向へ）
+    # Z軸を中心に90度（π/2ラジアン）回転
+    import mathutils
+    start_rot = rot_scene12_end.copy()
+    end_rot = (start_rot[0], start_rot[1], start_rot[2] + math.pi / 2)
+    
+    camera.location = loc_scene12_end  # 位置は変えずに回転のみ
+    camera.rotation_euler = end_rot
     camera.keyframe_insert(data_path="location", frame=scene13_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_end)
 
