@@ -79,7 +79,6 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     print(f"[フレーム{scene13_start}] カメラ位置をシーン12と同じに維持: {loc_scene12_end}")
 
     # 車の位置: 6秒かけてX軸方向に3m離す（carA: X=-1.5m, carB: X=+1.5m）
-    # Emptyの位置は変えず、車のローカル位置（Emptyからの相対位置）を動かす
     empty_a = bpy.data.objects.get("CarA_TurnPivot")
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
@@ -93,15 +92,19 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
 
+        # Emptyの位置からturning_radiusを取得（Empty.location.x = -turning_radius）
+        turning_radius_a = abs(empty_a.location.x)
+        turning_radius_b = abs(empty_b.location.x)
+
         # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
         if car_a.animation_data:
             car_a.animation_data_clear()
         if car_b.animation_data:
             car_b.animation_data_clear()
 
-        # Emptyの位置からturning_radiusを取得（Empty.location.x = -turning_radius）
-        turning_radius_a = abs(empty_a.location.x)
-        turning_radius_b = abs(empty_b.location.x)
+        # シーン13開始フレームに移動してEmptyの変換を評価
+        bpy.context.scene.frame_set(scene13_start)
+        bpy.context.view_layer.update()
 
         # 開始位置: ローカルX = turning_radius（グローバルX=0、2台が重なる状態）
         car_a.location.x = turning_radius_a
