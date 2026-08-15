@@ -64,10 +64,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     camera.keyframe_insert(data_path="location", frame=scene13_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
     
-    # 終了位置: 90度回転したカメラ位置（車の前方を見る方向へ）
-    # Z軸を中心に90度（π/2ラジアン）回転
-    import mathutils
-    start_rot = rot_scene12_end.copy()
+    # 終了位置: Z軸を中心に90度（π/2ラジアン）回転したカメラ
+    start_rot = rot_scene12_end  # タプル
     end_rot = (start_rot[0], start_rot[1], start_rot[2] + math.pi / 2)
     
     camera.location = loc_scene12_end  # 位置は変えずに回転のみ
