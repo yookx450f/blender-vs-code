@@ -78,7 +78,7 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
 
     print(f"[フレーム{scene13_start}] カメラ位置をシーン12と同じに維持: {loc_scene12_end}")
 
-    # Empty回転も維持（車の位置は固定）
+    # 車の位置: 6秒かけてX軸方向に3m離す（carA: X=-1.5m, carB: X=+1.5m）
     empty_a = bpy.data.objects.get("CarA_TurnPivot")
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
@@ -86,11 +86,28 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         total_angle = -2.0 * math.pi
         empty_a.rotation_euler.z = total_angle
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=fade_out_end)
         empty_b.rotation_euler.z = total_angle
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=fade_out_end)
-        print(f"[シーン13] Empty回転を維持（車の位置固定）")
+
+        # 開始位置: X=0（シーン12終了時の位置）
+        start_loc_a = empty_a.location.copy()
+        start_loc_b = empty_b.location.copy()
+        empty_a.keyframe_insert(data_path="location", frame=scene13_start)
+        empty_b.keyframe_insert(data_path="location", frame=scene13_start)
+
+        # 終了位置: X軸方向に±1.5m離す（合計3m）
+        end_loc_a = (start_loc_a[0] - 1.5, start_loc_a[1], start_loc_a[2])
+        end_loc_b = (start_loc_b[0] + 1.5, start_loc_b[1], start_loc_b[2])
+        empty_a.location = end_loc_a
+        empty_a.keyframe_insert(data_path="location", frame=scene13_end)
+        empty_b.location = end_loc_b
+        empty_b.keyframe_insert(data_path="location", frame=scene13_end)
+
+        # Empty回転も維持
+        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+
+        print(f"[シーン13] 車をX軸方向に3m離す (carA: X={end_loc_a[0]:.2f}, carB: X={end_loc_b[0]:.2f})")
 
     # 軌跡ガイドラインのフェードアウト（3秒）
     _fade_out_track_objects("CarA_TurningCircle", scene13_start, fade_out_end)
