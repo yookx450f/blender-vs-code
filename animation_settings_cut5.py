@@ -1,14 +1,14 @@
 """
 アニメーション設定モジュール - カット 5
-フレーム 2208-2664（シーン 13、シーン 14）を処理する。
+フレーム 2208-2832（シーン 13:6秒、シーン 14:15秒）を処理する。
 
 使い方:
-    from animation_settings_cut5 import setup_cut5_animations
-    setup_cut5_animations(scene, camera, imported_cars, cut4_result, car_dimensions=None)
+   from animation_settings_cut5 import setup_cut5_animations
+   setup_cut5_animations(scene, camera, imported_cars, cut4_result, car_dimensions=None)
 
 【処理内容】
-- シーン 13: シーン12と同じ俯瞰視点で、車の軌跡と最小回転半径の差の文字をゆっくりフェードアウト（3秒）
-- シーン 14: 2台の車がx軸距離2.5mを開け、時速120km/hで走り去る（6秒）
+- シーン 13: 軌跡とテキストを3秒でフェードアウト、その後カメラをゆっくり動かす（6秒）
+- シーン 14: 2台の車がx軸距離2.5mを開け、加速して走り去る（15秒）
 """
 
 import bpy
@@ -19,7 +19,7 @@ from animation_common import set_camera_look_at
 
 def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
     """
-    カット 5 のアニメーションを設定（フレーム 2208-2712）
+    カット 5 のアニメーションを設定（フレーム 2208-2832）
 
     Parameters:
         scene: bpy.context.scene
@@ -49,18 +49,26 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         return None
 
     # ============================================================
-    # 【カット 5】シーン 13: フレーム 2208-2232（フェードアウト、1秒）
+    # 【カット 5】シーン 13: フレーム 2208-2352（フェードアウト3秒 + カメラ移動3秒、計6秒）
     # ============================================================
     print("\n=== 【カット 5】シーン 13 設定開始 ===")
 
     scene13_start = 2208
-    scene13_end = 2232  # 1秒間（24fps × 1 = 24フレーム）
+    fade_out_end = 2328  # フェードアウト完了（3秒：24fps × 3 = 72フレーム）
+    scene13_end = 2352  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
 
-    # カメラ位置をシーン12と同じに維持
+    # カメラ: 最初の3秒は固定、残り3秒でゆっくり移動
     camera.location = loc_scene12_end
     camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
+    # フェードアウト中は固定
+    camera.keyframe_insert(data_path="location", frame=fade_out_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=fade_out_end)
+
+    # 残り3秒でカメラをゆっくり移動（シーン14の準備）
+    camera.location = loc_scene12_end
+    camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_end)
 
@@ -77,30 +85,31 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         total_angle = -2.0 * math.pi
         empty_a.rotation_euler.z = total_angle
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=fade_out_end)
         empty_b.rotation_euler.z = total_angle
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=fade_out_end)
         print(f"[シーン13] Empty回転を維持（車の位置固定）")
 
-    # 軌跡ガイドラインのフェードアウト
-    _fade_out_track_objects("CarA_TurningCircle", scene13_start, scene13_end)
-    _fade_out_track_objects("CarB_TurningCircle", scene13_start, scene13_end)
-    _fade_out_track_objects("CarA_TireTrack", scene13_start, scene13_end)
-    _fade_out_track_objects("CarB_TireTrack", scene13_start, scene13_end)
+    # 軌跡ガイドラインのフェードアウト（3秒）
+    _fade_out_track_objects("CarA_TurningCircle", scene13_start, fade_out_end)
+    _fade_out_track_objects("CarB_TurningCircle", scene13_start, fade_out_end)
+    _fade_out_track_objects("CarA_TireTrack", scene13_start, fade_out_end)
+    _fade_out_track_objects("CarB_TireTrack", scene13_start, fade_out_end)
 
-    # 最小回転半径比較式テキストのフェードアウト
-    _fade_out_text_container("TurningRadiusDiff_Container_Scene12", scene13_start, scene13_end)
+    # 最小回転半径比較式テキストのフェードアウト（3秒）
+    _fade_out_text_container("TurningRadiusDiff_Container_Scene12", scene13_start, fade_out_end)
 
-    print(f"[フレーム{scene13_end}] シーン 13 終了：フェードアウト完了")
+    print(f"[フレーム{fade_out_end}] フェードアウト完了")
+    print(f"[フレーム{scene13_end}] シーン 13 終了：カメラ移動完了")
 
     # ============================================================
-    # 【カット 5】シーン 14: フレーム 2232-2712（走り去るアニメーション、15秒）
+    # 【カット 5】シーン 14: フレーム 2352-2832（走り去るアニメーション、15秒）
     # ============================================================
     print("\n=== 【カット 5】シーン 14 設定開始 ===")
 
-    scene14_start = scene13_end  # 2272
-    scene14_end = 2712  # 15秒間（24fps × 15 = 480フレーム）
+    scene14_start = scene13_end  # 2352
+    scene14_end = 2832  # 15秒間（24fps × 15 = 480フレーム）
 
     # Empty親オブジェクトを削除
     bpy.ops.object.select_all(action='DESELECT')
