@@ -83,14 +83,6 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
     if empty_a and empty_b:
-        # デバッグ: 車のオブジェクト情報を出力
-        print(f"[DEBUG] car_a name: {car_a.name}, type: {car_a.type}")
-        print(f"[DEBUG] car_b name: {car_b.name}, type: {car_b.type}")
-        print(f"[DEBUG] car_a parent before: {car_a.parent.name if car_a.parent else None}")
-        print(f"[DEBUG] car_b parent before: {car_b.parent.name if car_b.parent else None}")
-        print(f"[DEBUG] car_a matrix_world translation: {car_a.matrix_world.to_translation()}")
-        print(f"[DEBUG] car_b matrix_world translation: {car_b.matrix_world.to_translation()}")
-
         # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
         if car_a.animation_data:
             car_a.animation_data_clear()
@@ -104,17 +96,11 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         global_loc_a = car_a.matrix_world.to_translation().copy()
         global_loc_b = car_b.matrix_world.to_translation().copy()
         
-        print(f"[DEBUG] global_loc_a: {global_loc_a}")
-        print(f"[DEBUG] global_loc_b: {global_loc_b}")
-        
         # 親を直接Noneに設定（bpy.ops.object.parent_clearより確実）
         car_a.parent = None
         car_b.parent = None
 
         bpy.context.view_layer.update()
-
-        print(f"[DEBUG] car_a location after parent=None: {car_a.location}")
-        print(f"[DEBUG] car_b location after parent=None: {car_b.location}")
 
         # === 開始フレームに移動してからキーフレームを挿入 ===
         bpy.context.scene.frame_set(scene13_start)
@@ -123,9 +109,6 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         # 開始位置: グローバルX=0に固定（Y, Zは維持）
         car_a.location = (0.0, global_loc_a.y, global_loc_a.z)
         car_b.location = (0.0, global_loc_b.y, global_loc_b.z)
-        
-        print(f"[DEBUG] car_a location before keyframe: {car_a.location}")
-        print(f"[DEBUG] car_b location before keyframe: {car_b.location}")
         
         car_a.keyframe_insert(data_path="location", frame=scene13_start)
         car_b.keyframe_insert(data_path="location", frame=scene13_start)
@@ -282,6 +265,9 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # 各フレームで車の実際の位置を計算し、カメラの注視点をそれに合わせる
     # 2台の車の平均位置を追う
+    # シーン13終了時の車のY位置の平均を基準にする
+    car_start_y_avg = (scene13_end_loc_a.y + scene13_end_loc_b.y) / 2.0
+    
     for i in range(num_keyframes + 1):
         t = i / num_keyframes
         eased_t = ease_in_acceleration(t)
@@ -295,11 +281,11 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         # 車の位置の少し手前を注視点にする（車が遠ざかるにつれて注視点も追従）
         if t < 0.5:
             # 前半は車の近くを追う
-            look_at_target = Vector((0.0, car_start_y - distance_avg - 3.0, 1.0))
+            look_at_target = Vector((0.0, car_start_y_avg - distance_avg - 3.0, 1.0))
         else:
             # 後半は車が遠ざかる方向を見る
             progress_second_half = (t - 0.5) / 0.5
-            look_at_y = car_start_y - distance_avg - 3.0 - progress_second_half * 20.0
+            look_at_y = car_start_y_avg - distance_avg - 3.0 - progress_second_half * 20.0
             look_at_z = 1.0 - progress_second_half * 0.5
             look_at_target = Vector((0.0, look_at_y, look_at_z))
 
@@ -311,8 +297,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     rot_scene14_end = camera.rotation_euler.copy()
 
     print(f"[フレーム{scene14_start}] カメラ位置固定: {fixed_camera_loc}")
-    print(f"[フレーム{scene14_start}] 注視点: (0.0, {car_start_y - 3.0}, 1.0)（車の近く）")
-    print(f"[フレーム{scene14_end}] 注視点: (0.0, {car_start_y - (final_distance_a + final_distance_b)/2 - 23.0}, 0.5)（遠くへ・点がなる方向）")
+    print(f"[フレーム{scene14_start}] 注視点: (0.0, {car_start_y_avg - 3.0}, 1.0)（車の近く）")
+    print(f"[フレーム{scene14_end}] 注視点: (0.0, {car_start_y_avg - (final_distance_a + final_distance_b)/2 - 23.0}, 0.5)（遠くへ・点がなる方向）")
 
     # カメラ終了位置も固定位置を使用
     camera_end_loc = fixed_camera_loc
