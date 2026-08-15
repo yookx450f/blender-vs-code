@@ -7,6 +7,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py 2            # カット2のみ（シーン5-7、フレーム648-1224）
     python run.py 3            # カット3のみ（シーン8-9、フレーム1224-1584）
     python run.py 4            # カット4のみ（シーン10-12、フレーム1584-2208）
+    python run.py 5            # カット5のみ（シーン13-14、フレーム2208-2712）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -20,11 +21,12 @@ BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "all": {"start": 0, "end": 2208, "label": "全カット（シーン1-12）"},
+    "all": {"start": 0, "end": 2712, "label": "全カット（シーン1-14）"},
     "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
     "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
     "3": {"start": 1224, "end": 1584, "label": "カット3（シーン8-9）"},
     "4": {"start": 1584, "end": 2208, "label": "カット4（シーン10-12）"},
+    "5": {"start": 2208, "end": 2712, "label": "カット5（シーン13-14）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -91,7 +93,7 @@ def run_all_cuts_independent():
     print("="*60)
 
     results = {}
-    for cut in ["1", "2", "3", "4"]:
+    for cut in ["1", "2", "3", "4", "5"]:
         success = run_single_cut(cut)
         results[cut] = success
         if not success:
@@ -111,7 +113,7 @@ def run_all_cuts_independent():
     if all_success:
         print("\n全カットの.blendファイルを生成しました。")
         print("確認方法:")
-        for cut in ["1", "2", "3", "4"]:
+        for cut in ["1", "2", "3", "4", "5"]:
             print(f"  - cut{cut}_scene.blend をBlenderで開いて確認")
         print("\nレンダリング合成するには: python run.py --render")
     else:
@@ -142,7 +144,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     # 単一カット実行
     cut_info = CUTS.get(cut_number)
     if not cut_info:
-        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4")
+        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 5")
         return False
 
     frame_start = cut_info["start"]
@@ -214,7 +216,7 @@ print("アニメーションレンダリング完了！")
 def main():
     parser = argparse.ArgumentParser(description="Blenderを起動して3Dシーンを作成する")
     parser.add_argument("cut", nargs="?", default="all", type=str,
-                        help="実行するカット番号 (all=全カット独立実行, 1=カット1のみ, 2=カット2のみ, 3=カット3のみ, 4=カット4のみ)")
+                        help="実行するカット番号 (all=全カット独立実行, 1=カット1のみ, 2=カット2のみ, 3=カット3のみ, 4=カット4のみ, 5=カット5のみ)")
     parser.add_argument("--script", type=str, help="実行するPythonスクリプトのパス")
     parser.add_argument("--render", action="store_true",
                         help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
@@ -224,7 +226,7 @@ def main():
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2, 3, 4")
+        print(f"使用可能な値: all, 1, 2, 3, 4, 5")
         sys.exit(1)
 
     success = run_blender(

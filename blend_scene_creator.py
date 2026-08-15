@@ -512,6 +512,13 @@ def setup_camera_and_lighting():
     key_light.name = "KeyLight"
     key_light.data.energy = 800  # さらに明るさを抑える
     key_light.data.size = 3
+    key_light.data.shadow_soft_size = 1.0
+    # 照射距離を無限に設定（Distance=0）
+    key_light.data.use_shadow = True
+    if hasattr(key_light.data, 'distance'):
+        key_light.data.distance = 0  # 0=無限
+    if hasattr(key_light.data, 'use_custom_distance'):
+        key_light.data.use_custom_distance = False
     
     # SubLightもカメラに合わせて拡大
     bpy.ops.object.light_add(type='AREA', location=(-8.5*0.6, 8.5*0.6, 6))
@@ -519,6 +526,11 @@ def setup_camera_and_lighting():
     sub_light.name = "SubLight"
     sub_light.data.energy = 800  # さらに明るさを抑える
     sub_light.data.size = 2
+    sub_light.data.shadow_soft_size = 1.0
+    if hasattr(sub_light.data, 'distance'):
+        sub_light.data.distance = 0  # 0=無限
+    if hasattr(sub_light.data, 'use_custom_distance'):
+        sub_light.data.use_custom_distance = False
     
     # RimLightもカメラに合わせて拡大
     bpy.ops.object.light_add(type='SPOT', location=(0, 7*1.7, 5))
@@ -526,6 +538,10 @@ def setup_camera_and_lighting():
     rim_light.name = "RimLight"
     rim_light.data.energy = 800  # さらに明るさを抑える
     rim_light.data.spot_size = 1.2
+    if hasattr(rim_light.data, 'distance'):
+        rim_light.data.distance = 0  # 0=無限
+    if hasattr(rim_light.data, 'use_custom_distance'):
+        rim_light.data.use_custom_distance = False
     
     print(f"カメラを設定しました: {camera.name}")
     print(f"  - 位置: {camera.location}")
@@ -896,6 +912,10 @@ def main():
             "ground_clearance": dims.get("ground_clearance", 0),
             "turning_radius": dims.get("turning_radius", 0),
         }
+        # 0-100km/h 加速時間（秒）を取得
+        accel = car_data.get("acceleration_0_to_100_km_h")
+        if accel:
+            car_dimensions[key]["acceleration_0_to_100_km_h"] = accel
     
     scene = bpy.context.scene
     setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions)
@@ -944,7 +964,7 @@ def main():
     desktop_path = os.path.expanduser("~").replace("\\", "/") + "/Desktop"
     
     # カット番号に応じてファイル名を設定（cut1.mp4, cut2.mp4, ... allの場合はmp4.mp4）
-    if CUT_NUMBER in ("1", "2", "3", "4"):
+    if CUT_NUMBER in ("1", "2", "3", "4", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
         output_filename = "mp4.mp4"
@@ -989,7 +1009,7 @@ def main():
     
     # シーンを.blendファイルとして保存（Blenderで開けるように）
     # カット番号に応じてファイル名を切り替え（各カット独立保存用）
-    if CUT_NUMBER in ("1", "2", "3", "4"):
+    if CUT_NUMBER in ("1", "2", "3", "4", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:
         blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")

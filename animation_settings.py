@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール（統合版）
-カット 1、カット 2、カット 3、カット 4 を統合して使用。
+カット 1、カット 2、カット 3、カット 4、カット 5 を統合して使用。
 
 使い方:
     from animation_settings import setup_all_animations
@@ -13,6 +13,7 @@ from animation_settings_cut1 import setup_cut1_animations
 from animation_settings_cut2 import setup_cut2_animations
 from animation_settings_cut3 import setup_cut3_animations
 from animation_settings_cut4 import setup_cut4_animations
+from animation_settings_cut5 import setup_cut5_animations
 
 
 def _get_target_cut():
@@ -67,12 +68,15 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     #     シーン 11: フレーム 1752-2040 最小回転半径で両台が右回り1週（CarA:10秒、CarBは出发/到达ともに2秒遅延）
     #     シーン 12: フレーム 2040-2160 最小回転半径比較式表示（5 秒）
     #               フレーム 2160-2208 最終停止（2 秒）
+    #   【カット 5】= シーン 13〜14（カット 4 の最終位置から開始）
+    #     シーン 13: フレーム 2208-2272 軌跡・テキストをフェードアウト（3 秒）
+    #     シーン 14: フレーム 2272-2424 2台の車がx軸距離2.5mを開け、時速120km/hで走り去る（6 秒）
     # 環境変数 CUT_NUMBER によって実行するカットを制御
     target_cut = _get_target_cut()
     print(f"[アニメーション設定] 実行対象カット: {target_cut}")
     
     scene.frame_start = 0
-    scene.frame_end = 2208
+    scene.frame_end = 2424
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -90,8 +94,8 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         print("エラー: カット 1 の設定に失敗しました")
         return
 
-    # カット 2 を実行（カット2-4が対象の場合のみ）
-    if target_cut in ("all", "2", "3", "4"):
+    # カット 2 を実行（カット2-5が対象の場合のみ）
+    if target_cut in ("all", "2", "3", "4", "5"):
         cut2_result = setup_cut2_animations(
             scene=scene,
             camera=camera,
@@ -107,8 +111,8 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         # カット1のみ実行時はダミー結果を生成（カット1の終了状態）
         cut2_result = cut1_result
 
-    # カット 3 を実行（カット3-4が対象の場合のみ）
-    if target_cut in ("all", "3", "4"):
+    # カット 3 を実行（カット3-5が対象の場合のみ）
+    if target_cut in ("all", "3", "4", "5"):
         cut3_result = setup_cut3_animations(
             scene=scene,
             camera=camera,
@@ -124,9 +128,9 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         # カット1-2のみ実行時はダミー結果を生成
         cut3_result = cut2_result
 
-    # カット 4 を実行（カット4または全カットが対象の場合のみ）
-    if target_cut in ("all", "4"):
-        setup_cut4_animations(
+    # カット 4 を実行（カット4-5または全カットが対象の場合のみ）
+    if target_cut in ("all", "4", "5"):
+        cut4_result = setup_cut4_animations(
             scene=scene,
             camera=camera,
             imported_cars=imported_cars,
@@ -134,7 +138,20 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
             car_dimensions=car_dimensions
         )
     else:
+        cut4_result = cut3_result
         print(f"[アニメーション設定] カット 4 をスキップ（対象カット: {target_cut}）")
+
+    # カット 5 を実行（カット5または全カットが対象の場合のみ）
+    if target_cut in ("all", "5"):
+        setup_cut5_animations(
+            scene=scene,
+            camera=camera,
+            imported_cars=imported_cars,
+            previous_state=cut4_result,
+            car_dimensions=car_dimensions
+        )
+    else:
+        print(f"[アニメーション設定] カット 5 をスキップ（対象カット: {target_cut}）")
 
     print("\n=== アニメーション設定完了 ===")
     print("カメラアニメーション:")
@@ -170,6 +187,10 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"  【カット 4】シーン 12（フレーム 2040-2160):")
     print(f"              最小回転半径比較式表示（5 秒）")
     print(f"              フレーム 2160-2208:     最終停止（2 秒）")
+    print(f"  【カット 5】シーン 13（フレーム 2208-2272):")
+    print(f"              シーン12と同じ俯瞰視点で軌跡・テキストをフェードアウト（3 秒）")
+    print(f"  【カット 5】シーン 14（フレーム 2272-2424):")
+    print(f"              2台の車がx軸距離2.5mを開け、時速120km/hで走り去る（6 秒）")
 
 
 # 互換性のため、元の関数名でもインポート可能に

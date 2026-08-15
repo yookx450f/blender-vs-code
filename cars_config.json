@@ -10,7 +10,8 @@
       "height": 1620,
       "ground_clearance": 160,
       "turning_radius": 5200
-    }
+    },
+    "acceleration_0_to_100_km_h": 9.9
   },
   "carB": {
     "name": "Land Cruiser 250 2025",
@@ -23,6 +24,7 @@
       "height": 1935,
       "ground_clearance": 225,
       "turning_radius": 6000
-    }
+    },
+    "acceleration_0_to_100_km_h": 10.0
   }
 }
