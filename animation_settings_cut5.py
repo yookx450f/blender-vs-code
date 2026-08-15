@@ -83,15 +83,6 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
     if empty_a and empty_b:
-        total_angle = -2.0 * math.pi
-        empty_a.rotation_euler.z = total_angle
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_b.rotation_euler.z = total_angle
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        # Empty回転も終了時まで維持
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
-
         # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
         if car_a.animation_data:
             car_a.animation_data_clear()
@@ -130,6 +121,16 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         car_a.keyframe_insert(data_path="location", frame=scene13_end)
         car_b.location = (1.5, global_loc_b.y, global_loc_b.z)
         car_b.keyframe_insert(data_path="location", frame=scene13_end)
+
+        # Emptyの回転キーフレームは車の位置設定後に設定（Emptyが車の位置に影響しないように）
+        total_angle = -2.0 * math.pi
+        empty_a.rotation_euler.z = total_angle
+        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
+        empty_b.rotation_euler.z = total_angle
+        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
+        # Empty回転も終了時まで維持
+        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
 
         print(f"[シーン13] グローバルX: 開始=(0, 0), 終了=(-1.5, +1.5)")
 
