@@ -79,6 +79,7 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     print(f"[フレーム{scene13_start}] カメラ位置をシーン12と同じに維持: {loc_scene12_end}")
 
     # 車の位置: 6秒かけてX軸方向に3m離す（carA: X=-1.5m, carB: X=+1.5m）
+    # Emptyの位置は変えず、車のローカル位置（Emptyからの相対位置）を動かす
     empty_a = bpy.data.objects.get("CarA_TurnPivot")
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
@@ -88,26 +89,26 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
         empty_b.rotation_euler.z = total_angle
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-
-        # 開始位置: X=0（シーン12終了時の位置）
-        start_loc_a = empty_a.location.copy()
-        start_loc_b = empty_b.location.copy()
-        empty_a.keyframe_insert(data_path="location", frame=scene13_start)
-        empty_b.keyframe_insert(data_path="location", frame=scene13_start)
-
-        # 終了位置: X軸方向に±1.5m離す（合計3m）
-        end_loc_a = (start_loc_a[0] - 1.5, start_loc_a[1], start_loc_a[2])
-        end_loc_b = (start_loc_b[0] + 1.5, start_loc_b[1], start_loc_b[2])
-        empty_a.location = end_loc_a
-        empty_a.keyframe_insert(data_path="location", frame=scene13_end)
-        empty_b.location = end_loc_b
-        empty_b.keyframe_insert(data_path="location", frame=scene13_end)
-
-        # Empty回転も維持
+        # Empty回転も終了時まで維持
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
 
-        print(f"[シーン13] 車をX軸方向に3m離す (carA: X={end_loc_a[0]:.2f}, carB: X={end_loc_b[0]:.2f})")
+        # 車のローカル位置をアニメーション（Emptyからの相対位置）
+        # 開始: ローカルX = turning_radius（グローバルX=0）
+        start_local_x_a = car_a.location.x
+        start_local_x_b = car_b.location.x
+        car_a.keyframe_insert(data_path="location", index=0, frame=scene13_start)
+        car_b.keyframe_insert(data_path="location", index=0, frame=scene13_start)
+
+        # 終了: ローカルXを±1.5mずらす（グローバルで合計3m離れる）
+        end_local_x_a = start_local_x_a - 1.5
+        end_local_x_b = start_local_x_b + 1.5
+        car_a.location.x = end_local_x_a
+        car_a.keyframe_insert(data_path="location", index=0, frame=scene13_end)
+        car_b.location.x = end_local_x_b
+        car_b.keyframe_insert(data_path="location", index=0, frame=scene13_end)
+
+        print(f"[シーン13] 車のローカルXを±1.5mずらす (carA: {end_local_x_a:.2f}, carB: {end_local_x_b:.2f})")
 
     # 軌跡ガイドラインのフェードアウト（3秒）
     _fade_out_track_objects("CarA_TurningCircle", scene13_start, fade_out_end)
