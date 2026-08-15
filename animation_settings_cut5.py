@@ -317,8 +317,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
 
     from animation_common import CutState
     return CutState(
-        car_a_loc=(car_a_start_x, car_start_y + final_distance_a, car_a_end[2]),
-        car_b_loc=(car_b_start_x, car_start_y + final_distance_b, car_b_end[2]),
+        car_a_loc=(scene13_end_loc_a.x, scene13_end_loc_a.y - final_distance_a, car_a_end[2]),
+        car_b_loc=(scene13_end_loc_b.x, scene13_end_loc_b.y - final_distance_b, car_b_end[2]),
         camera_loc=camera_end_loc,
         camera_rot=(rot_scene14_end.x, rot_scene14_end.y, rot_scene14_end.z),
     )
