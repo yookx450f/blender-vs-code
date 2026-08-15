@@ -92,35 +92,30 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
         empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
 
-        # Emptyの位置からturning_radiusを取得（Empty.location.x = -turning_radius）
-        turning_radius_a = abs(empty_a.location.x)
-        turning_radius_b = abs(empty_b.location.x)
-
         # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
         if car_a.animation_data:
             car_a.animation_data_clear()
         if car_b.animation_data:
             car_b.animation_data_clear()
 
-        # シーン13開始フレームに移動してEmptyの変換を評価
-        bpy.context.scene.frame_set(scene13_start)
         bpy.context.view_layer.update()
 
-        # 開始位置: ローカルX = turning_radius（グローバルX=0、2台が重なる状態）
-        car_a.location.x = turning_radius_a
-        car_b.location.x = turning_radius_b
-        car_a.keyframe_insert(data_path="location", index=0, frame=scene13_start)
-        car_b.keyframe_insert(data_path="location", index=0, frame=scene13_start)
+        # Emptyの親子関係を解除してグローバル位置を直接操作
+        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+        
+        # 開始位置: グローバルX=0に固定（Y, Zは維持）
+        car_a.location.x = 0.0
+        car_b.location.x = 0.0
+        car_a.keyframe_insert(data_path="location", frame=scene13_start)
+        car_b.keyframe_insert(data_path="location", frame=scene13_start)
 
-        # 終了位置: ローカルXを±1.5mずらす（グローバルで合計3m離れる）
-        end_local_x_a = turning_radius_a - 1.5
-        end_local_x_b = turning_radius_b + 1.5
-        car_a.location.x = end_local_x_a
-        car_a.keyframe_insert(data_path="location", index=0, frame=scene13_end)
-        car_b.location.x = end_local_x_b
-        car_b.keyframe_insert(data_path="location", index=0, frame=scene13_end)
+        # 終了位置: グローバルXを±1.5m（合計3m離れる）
+        car_a.location.x = -1.5
+        car_a.keyframe_insert(data_path="location", frame=scene13_end)
+        car_b.location.x = 1.5
+        car_b.keyframe_insert(data_path="location", frame=scene13_end)
 
-        print(f"[シーン13] 車のローカルXを±1.5mずらす (carA: {end_local_x_a:.2f}, carB: {end_local_x_b:.2f})")
+        print(f"[シーン13] グローバルX: 開始=(0, 0), 終了=(-1.5, +1.5)")
 
     # 軌跡ガイドラインのフェードアウト（3秒）
     _fade_out_track_objects("CarA_TurningCircle", scene13_start, fade_out_end)
