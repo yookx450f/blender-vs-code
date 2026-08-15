@@ -83,6 +83,14 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     empty_b = bpy.data.objects.get("CarB_TurnPivot")
 
     if empty_a and empty_b:
+        # デバッグ: 車のオブジェクト情報を出力
+        print(f"[DEBUG] car_a name: {car_a.name}, type: {car_a.type}")
+        print(f"[DEBUG] car_b name: {car_b.name}, type: {car_b.type}")
+        print(f"[DEBUG] car_a parent before: {car_a.parent.name if car_a.parent else None}")
+        print(f"[DEBUG] car_b parent before: {car_b.parent.name if car_b.parent else None}")
+        print(f"[DEBUG] car_a matrix_world translation: {car_a.matrix_world.to_translation()}")
+        print(f"[DEBUG] car_b matrix_world translation: {car_b.matrix_world.to_translation()}")
+
         # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
         if car_a.animation_data:
             car_a.animation_data_clear()
@@ -96,11 +104,17 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         global_loc_a = car_a.matrix_world.to_translation().copy()
         global_loc_b = car_b.matrix_world.to_translation().copy()
         
+        print(f"[DEBUG] global_loc_a: {global_loc_a}")
+        print(f"[DEBUG] global_loc_b: {global_loc_b}")
+        
         # 親を直接Noneに設定（bpy.ops.object.parent_clearより確実）
         car_a.parent = None
         car_b.parent = None
 
         bpy.context.view_layer.update()
+
+        print(f"[DEBUG] car_a location after parent=None: {car_a.location}")
+        print(f"[DEBUG] car_b location after parent=None: {car_b.location}")
 
         # === 開始フレームに移動してからキーフレームを挿入 ===
         bpy.context.scene.frame_set(scene13_start)
@@ -109,6 +123,10 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         # 開始位置: グローバルX=0に固定（Y, Zは維持）
         car_a.location = (0.0, global_loc_a.y, global_loc_a.z)
         car_b.location = (0.0, global_loc_b.y, global_loc_b.z)
+        
+        print(f"[DEBUG] car_a location before keyframe: {car_a.location}")
+        print(f"[DEBUG] car_b location before keyframe: {car_b.location}")
+        
         car_a.keyframe_insert(data_path="location", frame=scene13_start)
         car_b.keyframe_insert(data_path="location", frame=scene13_start)
 
@@ -172,34 +190,29 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     if car_b.parent is not None:
         car_b.parent = None
 
-    # アニメーションデータをクリア
-    if car_a.animation_data:
-        car_a.animation_data_clear()
-    if car_b.animation_data:
-        car_b.animation_data_clear()
+    # シーン13で設定した車の位置キーフレームを保持する
+    # そのため、アニメーションデータはクリアせず、新しいキーフレームを追加するのみ
 
     bpy.context.view_layer.update()
 
-    print(f"[シーン14] Empty親オブジェクトを削除、車のアニメーションデータをクリア")
-
-    # 車の初期位置を設定（x軸距離2.5m = 各車±1.25m）
-    car_a_start_x = -1.25
-    car_b_start_x = 1.25
-    car_start_y = 0.0
+    print(f"[シーン14] Empty親オブジェクトを削除（車のアニメーションデータは保持）")
 
     # 車の向きをY負方向（前方）に向ける（-Z回転で後方に進む）
-    car_a.location = (car_a_start_x, car_start_y, car_a_end[2])
+    # 位置はシーン13の終了キーフレームから連続させる
     car_a.rotation_euler = (0.0, 0.0, -math.pi / 2)
-    car_a.keyframe_insert(data_path="location", frame=scene14_start)
     car_a.keyframe_insert(data_path="rotation_euler", frame=scene14_start)
 
-    car_b.location = (car_b_start_x, car_start_y, car_b_end[2])
     car_b.rotation_euler = (0.0, 0.0, -math.pi / 2)
-    car_b.keyframe_insert(data_path="location", frame=scene14_start)
     car_b.keyframe_insert(data_path="rotation_euler", frame=scene14_start)
 
-    print(f"[フレーム{scene14_start}] carA 開始位置: ({car_a_start_x}, {car_start_y}, {car_a_end[2]})")
-    print(f"[フレーム{scene14_start}] carB 開始位置: ({car_b_start_x}, {car_start_y}, {car_b_end[2]})")
+    # シーン13終了時の車の位置を取得（キーフレームから）
+    bpy.context.scene.frame_set(scene14_start)
+    bpy.context.view_layer.update()
+    scene13_end_loc_a = car_a.location.copy()
+    scene13_end_loc_b = car_b.location.copy()
+
+    print(f"[フレーム{scene14_start}] carA 開始位置（シーン13終了から連続）: {scene13_end_loc_a}")
+    print(f"[フレーム{scene14_start}] carB 開始位置（シーン13終了から連続）: {scene13_end_loc_b}")
 
     # 加速アニメーション（JSONの0-100km/h加速時間に基づいて各車個別に計算）
     duration_seconds = 15.0
@@ -244,22 +257,23 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         distance_b = total_distance_b * eased_t
 
         # Y負方向に移動（前方に進む）
-        car_a.location = (car_a_start_x, car_start_y - distance_a, car_a_end[2])
+        # X位置はシーン13終了時から維持、Y位置を加速カーブで移動
+        car_a.location = (scene13_end_loc_a.x, scene13_end_loc_a.y - distance_a, scene13_end_loc_a.z)
         car_a.keyframe_insert(data_path="location", frame=frame)
 
-        car_b.location = (car_b_start_x, car_start_y - distance_b, car_b_end[2])
+        car_b.location = (scene13_end_loc_b.x, scene13_end_loc_b.y - distance_b, scene13_end_loc_b.z)
         car_b.keyframe_insert(data_path="location", frame=frame)
 
     final_distance_a = total_distance_a
     final_distance_b = total_distance_b
-    car_a.location = (car_a_start_x, car_start_y - final_distance_a, car_a_end[2])
+    car_a.location = (scene13_end_loc_a.x, scene13_end_loc_a.y - final_distance_a, scene13_end_loc_a.z)
     car_a.keyframe_insert(data_path="location", frame=scene14_end)
 
-    car_b.location = (car_b_start_x, car_start_y - final_distance_b, car_b_end[2])
+    car_b.location = (scene13_end_loc_b.x, scene13_end_loc_b.y - final_distance_b, scene13_end_loc_b.z)
     car_b.keyframe_insert(data_path="location", frame=scene14_end)
 
-    print(f"[フレーム{scene14_end}] carA 終了位置: ({car_a_start_x}, {car_start_y - final_distance_a:.2f}, {car_a_end[2]})")
-    print(f"[フレーム{scene14_end}] carB 終了位置: ({car_b_start_x}, {car_start_y - final_distance_b:.2f}, {car_b_end[2]})")
+    print(f"[フレーム{scene14_end}] carA 終了位置: ({scene13_end_loc_a.x}, {scene13_end_loc_a.y - final_distance_a:.2f}, {scene13_end_loc_a.z})")
+    print(f"[フレーム{scene14_end}] carB 終了位置: ({scene13_end_loc_b.x}, {scene13_end_loc_b.y - final_distance_b:.2f}, {scene13_end_loc_b.z})")
 
     # カメラアニメーション（位置固定・回転のみで車を追う）
     # 車の加速カーブに合わせて注視点を逐次更新
