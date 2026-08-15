@@ -101,20 +101,18 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         bpy.context.view_layer.update()
 
         # Emptyの親子関係を解除してグローバル位置を直接操作
-        # 車のグローバル位置を保持したまま親を解除
+        # 車のグローバル位置を取得してから親をNoneに設定
         global_loc_a = car_a.matrix_world.to_translation().copy()
         global_loc_b = car_b.matrix_world.to_translation().copy()
         
-        bpy.context.view_layer.objects.active = car_a
-        car_a.select_set(True)
-        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
-        car_a.select_set(False)
-        
-        bpy.context.view_layer.objects.active = car_b
-        car_b.select_set(True)
-        bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
-        car_b.select_set(False)
+        # 親を直接Noneに設定（bpy.ops.object.parent_clearより確実）
+        car_a.parent = None
+        car_b.parent = None
 
+        bpy.context.view_layer.update()
+
+        # === 開始フレームに移動してからキーフレームを挿入 ===
+        bpy.context.scene.frame_set(scene13_start)
         bpy.context.view_layer.update()
 
         # 開始位置: グローバルX=0に固定（Y, Zは維持）
@@ -122,6 +120,10 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         car_b.location = (0.0, global_loc_b.y, global_loc_b.z)
         car_a.keyframe_insert(data_path="location", frame=scene13_start)
         car_b.keyframe_insert(data_path="location", frame=scene13_start)
+
+        # === 終了フレームに移動してからキーフレームを挿入 ===
+        bpy.context.scene.frame_set(scene13_end)
+        bpy.context.view_layer.update()
 
         # 終了位置: グローバルXを±1.5m（合計3m離れる）
         car_a.location = (-1.5, global_loc_a.y, global_loc_a.z)
