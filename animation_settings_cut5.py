@@ -49,7 +49,7 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
         return None
 
     # ============================================================
-    # 【カット 5】シーン 13: フレーム 2208-2352（フェードアウト3秒 + カメラ移動3秒、計6秒）
+    # 【カット 5】シーン 13: フレーム 2208-2352（カメラ回転6秒、最初の3秒で軌跡とテキストをフェードアウト）
     # ============================================================
     print("\n=== 【カット 5】シーン 13 設定開始 ===")
 
@@ -57,16 +57,19 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     fade_out_end = 2328  # フェードアウト完了（3秒：24fps × 3 = 72フレーム）
     scene13_end = 2352  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
 
-    # カメラ: 最初の3秒は固定、残り3秒でゆっくり移動
+    # カメラ: 6秒間、シーン12終了時の位置・回転を維持（90度回転した状態を保つ）
     camera.location = loc_scene12_end
     camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
-    # フェードアウト中は固定
+    
+    # フェードアウト終了時点でも同じ位置（固定）
+    camera.location = loc_scene12_end
+    camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=fade_out_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=fade_out_end)
 
-    # 残り3秒でカメラをゆっくり移動（シーン14の準備）
+    # シーン13終了時も同じ位置・回転を維持（90度回転したカメラアングルを保つ）
     camera.location = loc_scene12_end
     camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_end)
