@@ -61,8 +61,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 4】シーン 10 設定開始 ===")
 
-    scene10_start = 1584
-    scene10_end = 1704  # 5秒間（24fps × 5 = 120フレーム）
+    scene10_start = 1632
+    scene10_end = 1752  # 5秒間（24fps × 5 = 120フレーム）
     scene10_pause_end = 1752  # 停止2秒（24fps × 2 = 48フレーム）
 
     # カメラ: シーン8の位置から始まり、車に対して斜め上の少し前にゆっくり移動
@@ -186,8 +186,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 4】シーン 11 設定開始 ===")
 
-    scene11_start = 1752
-    scene11_car_a_end = 1992  # CarAの回転終了（10秒間、24fps × 10 = 240フレーム）
+    scene11_start = 1800
+    scene11_car_a_end = 2040  # CarAの回転終了（10秒間、24fps × 10 = 240フレーム）
     car_b_delay = 48  # 2秒遅延（24fps × 2）
     scene11_car_b_end = scene11_car_a_end + car_b_delay  # CarBはCarA終了後2秒で完了
     scene11_end = scene11_car_b_end  # シーン全体の終了フレーム
@@ -288,7 +288,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 4】シーン 12 設定開始 ===")
     
-    scene12_start = scene11_end  # 2040
+    scene12_start = scene11_end  # 2088
     scene12_end = scene12_start + 120  # 5秒（24fps × 5 = 120フレーム）
     
     print(f"[シーン12] CarA 最小回転半径: {turning_radius_a}m ({int(turning_radius_a * 1000)}mm), CarB 最小回転半径: {turning_radius_b}m ({int(turning_radius_b * 1000)}mm)")

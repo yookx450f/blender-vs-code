@@ -521,26 +521,12 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
 
     print(f"[フレーム 456] 停止（2 秒）")
 
-    # --- シーン 4: フレーム 600（サイドビュー到達）---
-    bpy.context.scene.frame_set(600)
+    # --- シーン 4: フレーム 648（サイドビュー到達、8秒）---
+    bpy.context.scene.frame_set(648)
     loc_phase4 = (8.0, 0.0, 2.5)
     direction_phase4 = Vector(target) - Vector(loc_phase4)
     rot_quat_phase4 = direction_phase4.to_track_quat('-Z', 'Y')
     rot_phase4 = rot_quat_phase4.to_euler()
-    camera.location = loc_phase4
-    camera.rotation_euler = rot_phase4
-    _set_camera_location_keyframe(camera, 600, loc_phase4)
-    _set_rotation_keyframe(camera, 600, rot_phase4)
-
-    car_a.location = car_a_end
-    _set_location_keyframe(car_a, 600, car_a_end[0], car_a_end[1], car_a_end[2])
-    car_b.location = car_b_end
-    _set_location_keyframe(car_b, 600, car_b_end[0], car_b_end[1], car_b_end[2])
-
-    print(f"[フレーム 600] シーン 4 終了：カメラ={loc_phase4}（サイドビュー）, 車維持")
-
-    # --- サイドビュー静止（2 秒）: フレーム 648 ---
-    bpy.context.scene.frame_set(648)
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
     _set_camera_location_keyframe(camera, 648, loc_phase4)
@@ -551,7 +537,21 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 648, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 648] サイドビュー静止（2 秒）, 車維持")
+    print(f"[フレーム 648] シーン 4 終了：カメラ={loc_phase4}（サイドビュー）, 車維持")
+
+    # --- サイドビュー静止（2 秒）: フレーム 696 ---
+    bpy.context.scene.frame_set(696)
+    camera.location = loc_phase4
+    camera.rotation_euler = rot_phase4
+    _set_camera_location_keyframe(camera, 696, loc_phase4)
+    _set_rotation_keyframe(camera, 696, rot_phase4)
+
+    car_a.location = car_a_end
+    _set_location_keyframe(car_a, 696, car_a_end[0], car_a_end[1], car_a_end[2])
+    car_b.location = car_b_end
+    _set_location_keyframe(car_b, 696, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    print(f"[フレーム 696] サイドビュー静止（2 秒）, 車維持")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)

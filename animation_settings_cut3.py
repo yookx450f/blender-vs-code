@@ -66,8 +66,8 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 3】シーン 8 設定開始 ===")
 
-    scene8_start = 1224
-    scene8_end = 1368  # 6秒間（24fps × 6 = 144フレーム）
+    scene8_start = 1272
+    scene8_end = 1416  # 6秒間（24fps × 6 = 144フレーム）
     scene8_pause_end = 1416  # 停止2秒（24fps × 2 = 48フレーム）
 
     # カメラ: 正面ビューから左側の低い位置へ移動
@@ -134,7 +134,7 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
     if text_container_name in bpy.data.objects:
         text_obj = bpy.data.objects[text_container_name]
 
-        print(f"[フレーム{scene8_start}] 全幅差テキストフェードアウト開始（1224→1368）")
+        print(f"[フレーム{scene8_start}] 全幅差テキストフェードアウト開始（1272→1416）")
 
         # コンテナ自体のスケールをアニメーションで制御
         # フレーム 1224: スケール維持（1.0, 1.0, 1.0）
@@ -182,7 +182,7 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
                                 # フレーム 1224 で完全不透明（Fac=1.0 → Emission を完全に使用）
                                 n.inputs['Fac'].default_value = 1.0
                                 n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene8_start)
-                                # フレーム 1368 で完全透明（Fac=0.0 → Transparent を完全に使用）
+                                # フレーム 1416 で完全透明（Fac=0.0 → Transparent を完全に使用）
                                 n.inputs['Fac'].default_value = 0.0
                                 n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=fade_end_frame)
                                 
@@ -198,8 +198,8 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 3】シーン 9 設定開始 ===")
 
-    scene9_start = 1416
-    scene9_end = 1536  # 5秒間（24fps × 5 = 120フレーム）
+    scene9_start = 1464
+    scene9_end = 1584  # 5秒間（24fps × 5 = 120フレーム）
     scene9_pause_end = 1584  # 停止2秒（24fps × 2 = 48フレーム）
 
     # カメラ: シーン8の終了位置を維持

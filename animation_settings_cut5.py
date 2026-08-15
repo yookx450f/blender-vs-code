@@ -53,9 +53,9 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 5】シーン 13 設定開始 ===")
 
-    scene13_start = 2208
-    fade_out_end = 2328  # フェードアウト完了（3秒：24fps × 3 = 72フレーム）
-    scene13_end = 2352  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
+    scene13_start = 2256
+    fade_out_end = 2376  # フェードアウト完了（3秒：24fps × 3 = 72フレーム）
+    scene13_end = 2400  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
 
     # カメラ: 6秒かけてゆっくり90度回転（フェードアウト中も含めて）
     # 開始位置: シーン12終了時のカメラ位置・回転
@@ -152,8 +152,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     # ============================================================
     print("\n=== 【カット 5】シーン 14 設定開始 ===")
 
-    scene14_start = scene13_end  # 2352
-    scene14_end = 2832  # 15秒間（24fps × 15 = 480フレーム）
+    scene14_start = scene13_end  # 2400
+    scene14_end = 2880  # 15秒間（24fps × 15 = 480フレーム）
 
     # Empty親オブジェクトを削除
     bpy.ops.object.select_all(action='DESELECT')
