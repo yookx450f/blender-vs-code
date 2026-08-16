@@ -12,38 +12,52 @@ import math
 from mathutils import Vector
 from animation_common import (
     set_camera_look_at, _calculate_length_difference, _calculate_width_difference,
-    create_emission_material, _setup_char_by_char_animation
+    create_emission_material, _setup_char_by_char_animation, _setup_transparency_animation
 )
 
 
-def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
+def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
     カット 2 のアニメーションを設定（フレーム 648-1224、各シーン後に停止 2 秒付き）
 
-    【修正: カット完全分離】前のカットの最終状態のみを受け取り、
-    変数を共有しない。
+    【修正: カット完全分離】previous_state をオプション化し、
+    指定されていない場合は固定位置から読み込む。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
+        previous_state: CutState — 前のカットの最終状態（オプション、未指定時は固定位置使用）
         car_dimensions: {key: {"length": mm, "width": mm, "height": mm}} 車の寸法情報
 
     Returns:
         CutState: このカットの最終状態
     """
-    if previous_state is None:
-        print("エラー: 前のカットの状態が指定されていません")
-        return
-
-    # カット完全分離: 前のカットの最終位置のみを取得
-    car_a_end = previous_state.car_a_loc
-    car_b_end = previous_state.car_b_loc
-    loc_phase4 = previous_state.camera_loc
-    rot_phase4 = previous_state.camera_rot
-    grounded_z_a = car_a_end[2]
-    grounded_z_b = car_b_end[2]
+    # 【カット完全分離】previous_state が指定された場合は従来通り使用、
+    # 未指定の場合は固定位置から読み込む
+    from animation_cut_positions import CAMERA_POSITIONS, get_car_positions, get_ground_z_positions
+    
+    if previous_state is not None:
+        car_a_end = previous_state.car_a_loc
+        car_b_end = previous_state.car_b_loc
+        loc_phase4 = previous_state.camera_loc
+        rot_phase4 = previous_state.camera_rot
+    else:
+        # 固定位置から読み込み
+        car_a_end, car_b_end = get_car_positions()
+        grounded_z_a = get_ground_z_positions().get('carA', 0.85)
+        grounded_z_b = get_ground_z_positions().get('carB', 0.92)
+        # カット2以降は車が中心位置にあるのでX座標を明示的に0.0に設定
+        car_a_end = (0.0, car_a_end[1], car_a_end[2])
+        car_b_end = (0.0, car_b_end[1], car_b_end[2])
+        # カメラの開始位置は Cut1終了時の固定位置を使用
+        cam_data = CAMERA_POSITIONS.get("cut1_end", {})
+        loc_phase4 = cam_data.get("loc", (8.0, 0.0, 2.5))
+        target = cam_data.get("target", (0.0, 0.0, 1.5))
+        # rot_phase4はカメラの現在位置から計算
+        direction = Vector(target) - Vector(loc_phase4)
+        rot_quat = direction.to_track_quat('-Z', 'Y')
+        rot_phase4 = rot_quat.to_euler()
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -64,11 +78,28 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dime
     scene5_end = 816  # 5 秒間（24fps × 5 = 120 フレーム）
     scene5_pause_end = 864  # 停止 2 秒（24fps × 2 = 48 フレーム）
 
-    # カメラ: カット 1 の最終位置を維持（真横固定視点・ピタッと停止）
+    # カメラ: 全長差表示時に少し寄せる（X方向を8.0→6.0に接近）
+    loc_phase4_close = (6.0, 0.0, 2.5)
+    direction_close = Vector(target) - Vector(loc_phase4_close)
+    rot_quat_close = direction_close.to_track_quat('-Z', 'Y')
+    rot_phase4_close = rot_quat_close.to_euler()
+
+    # フレーム 696: 元のサイドビュー位置から開始
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
     camera.keyframe_insert(data_path="location", frame=scene5_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene5_start)
+
+    # フレーム 720 (約1秒後): より近い位置に滑らかに移動
+    close_frame = scene5_start + 24
+    camera.location = loc_phase4_close
+    camera.rotation_euler = rot_phase4_close
+    camera.keyframe_insert(data_path="location", frame=close_frame)
+    camera.keyframe_insert(data_path="rotation_euler", frame=close_frame)
+
+    # フレーム 816: 近い位置を維持
+    camera.location = loc_phase4_close
+    camera.rotation_euler = rot_phase4_close
     camera.keyframe_insert(data_path="location", frame=scene5_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene5_end)
 
@@ -80,16 +111,19 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dime
     car_b.keyframe_insert(data_path="location", frame=scene5_start)
     car_b.keyframe_insert(data_path="location", frame=scene5_end)
 
-    print(f"[フレーム{scene5_start}] カット 2 開始：カメラ={loc_phase4}（真横固定）, 車維持")
+    print(f"[フレーム{scene5_start}] シーン 5 開始：カメラ={loc_phase4} → {loc_phase4_close}（全長差表示時に接近）, 車維持")
 
-    # --- CarB の半透明化（シーン 5 用：0.35 の不透明度で表示）---
-    _setup_car_b_transparency_for_scene5(car_b, scene5_start, scene5_end)
-    print(f"[フレーム{scene5_start}-{scene5_end}] CarB 半透明化：1.0→0.35")
+    # --- CarB の半透明化（カット1と同じ方式で半透明化）---
+    # カット2単独実行時はカット1がスキップされるため、透明度の初期化が必要
+    # カット1終了時(CarB alpha=0.4)の状態を維持し、さらに半透明にする
+    _setup_transparency_animation(car_b, scene5_start, scene5_end, 0.4, 0.4)
+    print(f"[フレーム{scene5_start}-{scene5_end}] CarB 半透明化：0.4（カット1終了時の状態を維持）")
 
     # --- シーン 5 の全長差エフェクト（レーザー線＋数値テキスト）---
     _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions)
 
-    # --- 停止（2 秒）: フレーム 816 ---
+    # --- 停止（2 秒）: フレーム 816-864 ---
+    # カメラを元の位置に戻す（シーン6の移行のため）
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
     camera.keyframe_insert(data_path="location", frame=scene5_pause_end)
@@ -98,7 +132,7 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dime
     car_a.keyframe_insert(data_path="location", frame=scene5_pause_end)
     car_b.location = car_b_end
     car_b.keyframe_insert(data_path="location", frame=scene5_pause_end)
-    print(f"[フレーム{scene5_pause_end}] 停止（2 秒）")
+    print(f"[フレーム{scene5_pause_end}] 停止（2 秒）：カメラ={loc_phase4}（元の位置に戻す）")
 
     # ============================================================
     # 【カット 2】シーン 6: フレーム 864-1032（サイドビューから正面へカメラ移動、7 秒）
@@ -290,18 +324,48 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state, car_dime
     )
 
 
+def _ensure_eevee_transparency(car_object):
+    """CarB の全マテリアルにEEVEE透過設定を確実に適用する（複数メッシュ対応）"""
+    if car_object is None:
+        return
+    
+    all_meshes = _collect_all_mesh_objects(car_object)
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None:
+                continue
+            try:
+                material.blend_method = 'BLEND'
+                material.shadow_method = 'BUFFER'
+            except AttributeError:
+                pass
+
+
+def _collect_all_mesh_objects(obj):
+    """オブジェクトとその全子オブジェクトからMESHタイプを再帰的に収集
+    親がEMPTYの場合でも子メッシュを収集する"""
+    meshes = []
+    if obj.type == 'MESH':
+        meshes.append(obj)
+    # すべての子オブジェクトを再帰的に探索
+    for child in obj.children:
+        meshes.extend(_collect_all_mesh_objects(child))
+    return meshes
+
+
 def _setup_car_b_transparency_for_scene5(car_object, start_frame, end_frame):
     """CarB の全マテリアルをシーン 5 用半透明化する（複数メッシュ対応）"""
     if car_object is None:
         return
 
-    # オブジェクト自体のマテリアルを設定
-    _apply_transparency_to_materials(car_object, start_frame, end_frame)
-
-    # 子オブジェクトのマテリアルも設定（GLB インポートで複数のメッシュがある場合）
-    for child in car_object.children:
-        if child.type == 'MESH':
-            _apply_transparency_to_materials(child, start_frame, end_frame)
+    # 親オブジェクトとすべての子メッシュを取得
+    all_meshes = _collect_all_mesh_objects(car_object)
+    print(f"  [_setup_car_b_transparency] 対象メッシュ数: {len(all_meshes)}")
+    
+    for mesh_obj in all_meshes:
+        _apply_transparency_to_materials(mesh_obj, start_frame, end_frame)
 
 
 def _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions=None):
@@ -328,14 +392,14 @@ def _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end,
     print(f"[シーン 5] 全長差：{length_diff_mm:+d}mm (CarB: {length_b_mm}mm, CarA: {length_a_mm}mm)")
 
     # --- 数値テキストの作成（ピピピッ出現アニメーション付き）---
-    text_obj = _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b)
+    text_obj = _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, car_dimensions)
     if text_obj:
         print(f"[シーン 5] 数値テキスト '{text_obj.name}' を作成しました")
 
     print(f"[フレーム{scene5_end}] シーン 5 終了：全長差表示完了")
 
 
-def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b):
+def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, car_dimensions=None):
     """計算式を表示するテキストを作成（CarB - CarA → 結果）"""
 
     # 各車の中心座標を取得
@@ -422,16 +486,26 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
     half_spacing = 0.12  # 半角文字の基本間隔
     full_spacing = 0.20  # 全角文字の間隔（日本語など）
 
-    # 色の定義：CarB=青、CarA=赤、結果=白
+    # 車の色を取得（car_dimensions から、なければデフォルト使用）
+    if car_dimensions:
+        car_a_color = car_dimensions.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+        car_b_color = car_dimensions.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)  # デフォルトグレー系
+        car_b_color = (0.0, 0.7, 1.0)  # デフォルト鮮やかな青
+
+    print(f"[シーン5] carAの色: {car_a_color}, carBの色: {car_b_color}")
+
+    # 色の定義：CarB=車の色、CarA=車の色、結果=白
     colors = {
-        'blue': (0.0, 1.0, 1.0),      # シアンブルー（発光）
-        'red': (1.0, 0.0, 0.0),       # 赤
-        'white': (1.0, 1.0, 1.0)      # 白
+        'carb': car_b_color,
+        'cara': car_a_color,
+        'yellow': (1.0, 1.0, 0.2)     # 黄色（結果）
     }
 
     # 文字ごとの色を定義（インデックスで管理）
     # "4890mm - 4460mm → +430mm" の各部分
-    color_map = ['white'] * len(text_str)  # 初期値は全て白
+    color_map = ['yellow'] * len(text_str)  # 初期値は全て黄色
 
     # 数字のブロックを特定：CarB (最初の数字), CarA (2 番目の数字), 結果 (3 番目の数字)
     number_blocks = []
@@ -450,11 +524,11 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
     # 各ブロックに色を割り当て
     for idx, block in enumerate(number_blocks):
         if idx == 0:
-            color = 'blue'   # CarB (最初の数字)
+            color = 'carb'   # CarB (最初の数字) - carBの色
         elif idx == 1:
-            color = 'red'    # CarA (2 番目の数字)
+            color = 'cara'    # CarA (2 番目の数字) - carAの色
         else:
-            color = 'white'  # 結果やその他
+            color = 'yellow'  # 結果やその他
 
         for pos in block:
             if pos < len(color_map):
@@ -483,7 +557,7 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
         char_obj.scale = (1.0, 1.0, 1.0)
 
         # 発光マテリアルを適用（色付き）
-        color_name = color_map[i] if i < len(color_map) else 'white'
+        color_name = color_map[i] if i < len(color_map) else 'yellow'
         mat_name = f"emission_label_scene5_char_{color_name}"
         if mat_name not in bpy.data.materials:
             emission_mat = create_emission_material(colors[color_name], 5.0)
@@ -543,31 +617,48 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
 
 
 def _apply_transparency_to_materials(car_object, start_frame, end_frame):
-    """オブジェクトの全マテリアルを指定フレーム間で半透明化する"""
+    """オブジェクトの全マテリアルを指定フレーム間で半透明化する
+    Principled BSDFのAlpha入力を使用（シーン9と同じ方式）"""
     if car_object is None:
         return
 
-    for material in car_object.data.materials:
-        if material and 'transparency' in material:
-            # 既存のトランスペアレンシーアニメーションがあれば削除
-            _cleanup_transparency_keyframes(material, start_frame, end_frame)
+    # デバッグ出力
+    print(f"  [_apply_transparency] {car_object.name}: type={car_object.type}, materials={len(car_object.data.materials) if hasattr(car_object, 'data') and car_object.data else 0}")
 
-            # トランスペアレンシー値をキーフレーム設定
-            material.transparency = 1.0
-            material.keyframe_insert(data_path="transparency", frame=start_frame)
-
-            material.transparency = 0.65  # 不透明度 0.35（1 - 0.65）
-            material.keyframe_insert(data_path="transparency", frame=end_frame)
-
-
-def _cleanup_transparency_keyframes(material, start_frame, end_frame):
-    """指定フレーム範囲のトランスペアレンシーキーフレームを削除"""
-    if not material or not material.keyframes:
+    if not hasattr(car_object, 'data') or car_object.data is None:
         return
 
-    kf_keys = [k for k in material.keyframes if k.frame >= start_frame and k.frame <= end_frame]
-    for kf in kf_keys:
-        material.keyframes.remove(kf)
+    for material in car_object.data.materials:
+        if material is None:
+            continue
+
+        # EEVEE 透過対応 - 確実に有効化
+        try:
+            material.blend_method = 'BLEND'
+            material.shadow_method = 'BUFFER'
+        except AttributeError:
+            pass
+
+        if not material.use_nodes:
+            continue
+
+        nodes = material.node_tree.nodes
+        principled_node = None
+        for node in nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                principled_node = node
+                break
+
+        if principled_node is None or 'Alpha' not in principled_node.inputs:
+            continue
+
+        alpha_input = principled_node.inputs['Alpha']
+        # 開始フレーム: Alpha=1.0（完全不透明）
+        alpha_input.default_value = 1.0
+        alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
+        # 終了フレーム: Alpha=0.35（半透明）
+        alpha_input.default_value = 0.35
+        alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
 
 
 def _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end, car_dimensions=None):
@@ -589,15 +680,20 @@ def _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end,
 
     print(f"[シーン 7] 横幅差：{width_diff_mm:+d}mm (CarB: {width_b_mm}mm, CarA: {width_a_mm}mm)")
 
-    text_obj = _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, scene7_start, scene7_end)
+    text_obj = _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, scene7_start, scene7_end, car_dimensions)
     if text_obj:
         print(f"[シーン 7] 数値テキスト '{text_obj.name}' を作成しました")
 
     print(f"[フレーム{scene7_end}] シーン 7 終了：横幅差表示完了")
 
 
-def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, start_frame, end_frame):
-    """横幅の計算式を表示するテキストを作成（CarB - CarA → 結果）"""
+def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm, car_a, car_b, start_frame, end_frame, car_dimensions=None, setup_animation=True):
+    """横幅の計算式を表示するテキストを作成（CarB - CarA → 結果）
+    
+    Parameters:
+        setup_animation: Trueの場合、フェードインアニメーションを設定する。
+                        Falseの場合、アニメーションキーフレームは設定しない（カット3独立実行用）。
+    """
     def get_car_center(car_obj):
         bounds = [Vector(b) for b in car_obj.bound_box]
         world_bounds = [car_obj.matrix_world @ b for b in bounds]
@@ -648,13 +744,23 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
     half_spacing = 0.12  # 半角文字の基本間隔
     full_spacing = 0.20  # 全角文字の間隔（日本語など）
 
+    # 車の色を取得（car_dimensions から、なければデフォルト使用）
+    if car_dimensions:
+        car_a_color = car_dimensions.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+        car_b_color = car_dimensions.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)
+        car_b_color = (0.0, 0.7, 1.0)
+
+    print(f"[シーン7] carAの色: {car_a_color}, carBの色: {car_b_color}")
+
     colors = {
-        'blue': (0.0, 1.0, 1.0),
-        'red': (1.0, 0.0, 0.0),
-        'white': (1.0, 1.0, 1.0)
+        'carb': car_b_color,
+        'cara': car_a_color,
+        'yellow': (1.0, 1.0, 0.2)     # 黄色（結果）
     }
 
-    color_map = ['white'] * len(text_str)
+    color_map = ['yellow'] * len(text_str)
 
     number_blocks = []
     current_block = []
@@ -671,11 +777,11 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
     for idx, block in enumerate(number_blocks):
         if idx == 0:
-            color = 'blue'
+            color = 'carb'   # CarBの色
         elif idx == 1:
-            color = 'red'
+            color = 'cara'   # CarAの色
         else:
-            color = 'white'
+            color = 'yellow'
 
         for pos in block:
             if pos < len(color_map):
@@ -696,7 +802,7 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
         char_obj.scale = (1.0, 1.0, 1.0)
 
-        color_name = color_map[i] if i < len(color_map) else 'white'
+        color_name = color_map[i] if i < len(color_map) else 'yellow'
         mat_name = f"emission_label_scene7_char_{color_name}"
         if mat_name not in bpy.data.materials:
             emission_mat = create_emission_material(colors[color_name], 5.0)
@@ -741,7 +847,17 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
         char_obj.location = (local_x, local_y, local_z)
 
-    _setup_char_by_char_animation(char_objects, start_frame=start_frame, end_frame=end_frame)
+    if setup_animation:
+        _setup_char_by_char_animation(char_objects, start_frame=start_frame, end_frame=end_frame)
+    else:
+        # アニメーションなし：初めから完全表示状態（スケール1.0）に設定
+        for char_obj in char_objects:
+            char_obj.scale = (1.0, 1.0, 1.0)
+            # 発光強度も最大値に設定
+            if len(char_obj.data.materials) > 0:
+                for node in char_obj.data.materials[0].node_tree.nodes:
+                    if node.type == 'BSDF_EMISSION':
+                        node.inputs['Strength'].default_value = 5.0
 
     print(f"[シーン 7] 計算式テキスト '{text_str}' を {len(char_objects)} 文字で作成")
     return text_container

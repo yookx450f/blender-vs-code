@@ -1,13 +1,13 @@
 {
   "carA": {
-    "name": "日産 サクラ",
-    "glb_path": "C:\\3d\\Modly\\glb\\sakura.glb",
+    "name": "カローラクロス 2025",
+    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2025.glb",
     "position": [2.0, 0.0, 0],
     "color": [0.5, 0.5, 0.5],
     "dimensions_mm": {
-      "length": 3395,
-      "width": 1475,
-      "height": 1655,
+      "length": 4455,
+      "width": 1825,
+      "height": 1620,
       "ground_clearance": 145,
       "turning_radius": 4800
     },
@@ -15,18 +15,18 @@
     "rotation_z_degrees": 0
   },
   "carB": {
-    "name": "BYD ラッコ",
-    "glb_path": "C:\\3d\\Modly\\glb\\racco.glb",
+    "name": "ランドクルーザー 250 2025",
+    "glb_path": "C:\\3d\\Modly\\glb\\landCluser250-8.5-20000.glb",
     "position": [-2.0, 0.0, 0],
     "color": [0.0, 0.7, 1.0],
     "dimensions_mm": {
-      "length": 3395,
-      "width": 1475,
-      "height": 1800,
-      "ground_clearance": 130,
-      "turning_radius": 4800
+      "length": 4925,
+      "width": 1940,
+      "height": 1925,
+      "ground_clearance": 230,
+      "turning_radius": 5800
     },
     "acceleration_0_to_100_km_h": 14.0,
-    "rotation_z_degrees": 90
+    "rotation_z_degrees": 0
   }
 }

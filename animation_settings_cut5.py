@@ -17,29 +17,57 @@ from mathutils import Vector
 from animation_common import set_camera_look_at
 
 
-def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
+def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
     カット 5 のアニメーションを設定（フレーム 2208-2832）
+
+    【修正: カット完全分離】previous_state をオプション化し、
+    指定されていない場合は固定位置から読み込む。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
+        previous_state: CutState — 前のカットの最終状態（オプション、未指定時は固定位置使用）
         car_dimensions: {key: {"turning_radius": mm}} 車の寸法情報
 
     Returns:
         CutState: このカットの最終状態
     """
-    if previous_state is None:
-        print("エラー: 前のカットの状態が指定されていません")
-        return None
-
-    # カット完全分離: 前のカットの最終位置のみを取得
-    car_a_end = previous_state.car_a_loc
-    car_b_end = previous_state.car_b_loc
-    loc_scene12_end = previous_state.camera_loc
-    rot_scene12_end = previous_state.camera_rot
+    # 【カット完全分離】previous_state が指定された場合は従来通り使用、
+    # 未指定の場合は固定位置から読み込む
+    from animation_cut_positions import CAMERA_POSITIONS, get_car_positions
+    
+    if previous_state is not None:
+        car_a_end = previous_state.car_a_loc
+        car_b_end = previous_state.car_b_loc
+        loc_scene12_end = previous_state.camera_loc
+        rot_scene12_end = previous_state.camera_rot
+    else:
+        # 固定位置から読み込み（Cut4終了時のカメラ位置を計算）
+        car_a_end, car_b_end = get_car_positions()
+        
+        # Cut4の終了カメラ位置は俯瞰視点であり、回転中心の中間点上空にある
+        # 回転半径デフォルト値: carA=5.2m, carB=6.0m
+        default_turning_radius_a = 5.2
+        default_turning_radius_b = 6.0
+        
+        # Emptyピボット位置（回転中心）を計算
+        empty_a_loc = (-default_turning_radius_a, car_a_end[1], car_a_end[2])
+        empty_b_loc = (-default_turning_radius_b, car_b_end[1], car_b_end[2])
+        
+        # 回転中心の中間点
+        mid_turn_center_x = (empty_a_loc[0] + empty_b_loc[0]) / 2.0
+        mid_turn_center_y = (empty_a_loc[1] + empty_b_loc[1]) / 2.0
+        
+        # カメラ位置: Cut4終了時の俯瞰視点（Z=25m, Y=-3m手前）
+        loc_scene12_end = (mid_turn_center_x, mid_turn_center_y - 3.0, 25.0)
+        
+        # 注視点は回転中心の中間点
+        target_cam = (mid_turn_center_x, mid_turn_center_y, 0.0)
+        direction = Vector(target_cam) - Vector(loc_scene12_end)
+        rot_quat = direction.to_track_quat('-Z', 'Y')
+        rot_scene12_end = rot_quat.to_euler()
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -79,62 +107,63 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     print(f"[フレーム{scene13_start}] カメラ位置をシーン12と同じに維持: {loc_scene12_end}")
 
     # 車の位置: 6秒かけてX軸方向に3m離す（carA: X=-1.5m, carB: X=+1.5m）
-    empty_a = bpy.data.objects.get("CarA_TurnPivot")
-    empty_b = bpy.data.objects.get("CarB_TurnPivot")
+    # カット5はEmptyを使わず、車の位置を直接制御する
+    
+    # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
+    if car_a.animation_data:
+        car_a.animation_data_clear()
+    if car_b.animation_data:
+        car_b.animation_data_clear()
 
-    if empty_a and empty_b:
-        # 車のアニメーションデータをクリア（前のカットのキーフレームと競合しないように）
-        if car_a.animation_data:
-            car_a.animation_data_clear()
-        if car_b.animation_data:
-            car_b.animation_data_clear()
+    bpy.context.view_layer.update()
 
-        bpy.context.view_layer.update()
-
-        # Emptyの親子関係を解除してグローバル位置を直接操作
-        # 車のグローバル位置を取得してから親をNoneに設定
-        global_loc_a = car_a.matrix_world.to_translation().copy()
-        global_loc_b = car_b.matrix_world.to_translation().copy()
-        
-        # 親を直接Noneに設定（bpy.ops.object.parent_clearより確実）
+    # Emptyの親子関係を解除（もし親が設定されていれば）
+    if car_a.parent is not None:
         car_a.parent = None
+    if car_b.parent is not None:
         car_b.parent = None
 
-        bpy.context.view_layer.update()
+    bpy.context.view_layer.update()
 
-        # === 開始フレームに移動してからキーフレームを挿入 ===
-        bpy.context.scene.frame_set(scene13_start)
-        bpy.context.view_layer.update()
+    # 開始位置: カット4終了時の車の位置（X=0, Y, Z）
+    # car_a_end/car_b_end はカット4の戻り値から取得（X=0に設定されているはず）
+    start_loc_a = (0.0, car_a_end[1], car_a_end[2])
+    start_loc_b = (0.0, car_b_end[1], car_b_end[2])
 
-        # 開始位置: グローバルX=0に固定（Y, Zは維持）
-        car_a.location = (0.0, global_loc_a.y, global_loc_a.z)
-        car_b.location = (0.0, global_loc_b.y, global_loc_b.z)
-        
-        car_a.keyframe_insert(data_path="location", frame=scene13_start)
-        car_b.keyframe_insert(data_path="location", frame=scene13_start)
+    print(f"[シーン13] 車の開始位置 carA: {start_loc_a}")
+    print(f"[シーン13] 車の開始位置 carB: {start_loc_b}")
 
-        # === 終了フレームに移動してからキーフレームを挿入 ===
-        bpy.context.scene.frame_set(scene13_end)
-        bpy.context.view_layer.update()
+    # === 開始フレームに移動してからキーフレームを挿入 ===
+    bpy.context.scene.frame_set(scene13_start)
+    bpy.context.view_layer.update()
 
-        # 終了位置: グローバルXを±1.5m（合計3m離れる）
-        car_a.location = (-1.5, global_loc_a.y, global_loc_a.z)
-        car_a.keyframe_insert(data_path="location", frame=scene13_end)
-        car_b.location = (1.5, global_loc_b.y, global_loc_b.z)
-        car_b.keyframe_insert(data_path="location", frame=scene13_end)
+    car_a.location = start_loc_a
+    car_b.location = start_loc_b
+    
+    car_a.keyframe_insert(data_path="location", frame=scene13_start)
+    car_b.keyframe_insert(data_path="location", frame=scene13_start)
 
-        # Emptyの回転キーフレームは車の位置設定後に設定（Emptyが車の位置に影響しないように）
-        total_angle = -2.0 * math.pi
-        empty_a.rotation_euler.z = total_angle
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        empty_b.rotation_euler.z = total_angle
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_start)
-        # Empty回転も終了時まで維持
-        empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
-        empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+    print(f"[フレーム{scene13_start}] キーフレーム挿入後 carA: ({car_a.location.x:.4f}, {car_a.location.y:.4f}, {car_a.location.z:.4f})")
+    print(f"[フレーム{scene13_start}] キーフレーム挿入後 carB: ({car_b.location.x:.4f}, {car_b.location.y:.4f}, {car_b.location.z:.4f})")
 
-        print(f"[シーン13] グローバルX: 開始=(0, 0), 終了=(-1.5, +1.5)")
+    # === 終了フレームに移動してからキーフレームを挿入 ===
+    bpy.context.scene.frame_set(scene13_end)
+    bpy.context.view_layer.update()
 
+    # 終了位置: グローバルXを±1.5m（合計3m離れる）
+    end_loc_a = (-1.5, car_a_end[1], car_a_end[2])
+    end_loc_b = (1.5, car_b_end[1], car_b_end[2])
+
+    car_a.location = end_loc_a
+    car_a.keyframe_insert(data_path="location", frame=scene13_end)
+    car_b.location = end_loc_b
+    car_b.keyframe_insert(data_path="location", frame=scene13_end)
+
+    print(f"[シーン13] グローバルX: 開始=(0, 0), 終了=(-1.5, +1.5)")
+
+    # 軌跡ガイドラインとテキストが存在しない場合は作成（独立実行時の対応）
+    _ensure_fade_out_targets_exist(car_a, car_b, camera, car_dimensions)
+    
     # 軌跡ガイドラインのフェードアウト（3秒）
     _fade_out_track_objects("CarA_TurningCircle", scene13_start, fade_out_end)
     _fade_out_track_objects("CarB_TurningCircle", scene13_start, fade_out_end)
@@ -324,6 +353,375 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state, car_dime
     )
 
 
+def _ensure_fade_out_targets_exist(car_a, car_b, camera, car_dimensions=None):
+    """
+    フェードアウト対象（軌跡ガイドライン、タイヤ跡、最小回転半径テキスト）が存在するか確認し、
+    存在しない場合はカット4と同じ方法で完全なオブジェクトを作成する。
+    カット5を独立実行した時の対応用。
+    """
+    import bmesh
+    
+    # 軌跡オブジェクトが既に存在するか確認
+    has_track = False
+    for obj in bpy.data.objects:
+        if "TurningCircle" in obj.name or "TireTrack" in obj.name:
+            has_track = True
+            break
+    
+    if has_track:
+        print("[シーン13] 軌跡オブジェクトが既に存在します（フェードアウト対象あり）")
+        return
+    
+    print("[シーン13] 軌跡オブジェクトが見つかりません。カット4と同じ方法で完全な軌跡を作成します...")
+    
+    # 回転半径を取得
+    if car_dimensions:
+        turning_radius_a = car_dimensions.get("carA", {}).get("turning_radius", 5200) / 1000.0
+        turning_radius_b = car_dimensions.get("carB", {}).get("turning_radius", 6000) / 1000.0
+        radius_a_mm = car_dimensions.get("carA", {}).get("turning_radius", 5200)
+        radius_b_mm = car_dimensions.get("carB", {}).get("turning_radius", 6000)
+    else:
+        turning_radius_a = 5.2
+        turning_radius_b = 6.0
+        radius_a_mm = 5200
+        radius_b_mm = 6000
+    
+    # Emptyピボット位置（回転中心）を計算
+    empty_a_loc = (-turning_radius_a, car_a.location.y, car_a.location.z)
+    empty_b_loc = (-turning_radius_b, car_b.location.y, car_b.location.z)
+    
+    # カット4と同じ方法で軌跡ガイドラインを作成（60セグメント）
+    _create_turning_radius_visualization_for_cut5(empty_a_loc, turning_radius_a, "CarA_TurningCircle", 2256, 2400, (0.5, 0.5, 0.5))
+    _create_turning_radius_visualization_for_cut5(empty_b_loc, turning_radius_b, "CarB_TurningCircle", 2256, 2400, (0.0, 0.7, 1.0))
+    
+    # カット4と同じ方法でタイヤ跡軌跡を作成（車の横幅に合わせる）
+    _create_tire_track_for_cut5(car_a, empty_a_loc, turning_radius_a, "CarA_TireTrack", 2256, 2400, (0.5, 0.5, 0.5))
+    _create_tire_track_for_cut5(car_b, empty_b_loc, turning_radius_b, "CarB_TireTrack", 2256, 2400, (0.0, 0.7, 1.0))
+    
+    # カット4と同じ方法で最小回転半径比較式テキストを作成
+    radius_diff_mm = radius_b_mm - radius_a_mm
+    _create_turning_radius_diff_text_for_cut5(camera, radius_a_mm, radius_b_mm, radius_diff_mm,
+                                              empty_a_loc, empty_b_loc, 2256, 2400, car_dimensions)
+    
+    print("[シーン13] 完全な軌跡オブジェクトとテキストコンテナを作成完了")
+
+
+def _create_turning_radius_visualization_for_cut5(center, radius, name_prefix, start_frame, end_frame, color=(1.0, 1.0, 1.0)):
+    """カット4と同じ方法で回転半径ガイドラインを作成（60セグメント）"""
+    import bmesh
+    
+    num_segments = 60
+    track_width = 0.05
+    
+    # 発光マテリアル
+    mat_name = f"{name_prefix}_Mat"
+    if mat_name not in bpy.data.materials:
+        mat = bpy.data.materials.new(mat_name)
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        nodes.clear()
+        output = nodes.new('ShaderNodeOutputMaterial')
+        principled = nodes.new('ShaderNodeBsdfPrincipled')
+        principled.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+        principled.inputs['Metallic'].default_value = 0.0
+        principled.inputs['Roughness'].default_value = 1.0
+        principled.inputs['Emission Color'].default_value = (*color, 1.0)
+        principled.inputs['Emission Strength'].default_value = 3.0
+        mat.node_tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
+    
+    # 各セグメントを細長い面として作成
+    for seg in range(num_segments):
+        seg_start_angle = -2.0 * math.pi * seg / num_segments
+        seg_end_angle = -2.0 * math.pi * (seg + 1) / num_segments
+        
+        mesh = bpy.data.meshes.new(f"{name_prefix}_Seg{seg}")
+        bm = bmesh.new()
+        
+        arc_points = 3
+        inner_verts = []
+        outer_verts = []
+        
+        for p in range(arc_points + 1):
+            t = p / arc_points
+            angle = seg_start_angle + (seg_end_angle - seg_start_angle) * t
+            
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            
+            inner_r = radius - track_width / 2
+            wx_inner = center[0] + (inner_r * cos_a)
+            wy_inner = center[1] + (inner_r * sin_a)
+            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.05)))
+            
+            outer_r = radius + track_width / 2
+            wx_outer = center[0] + (outer_r * cos_a)
+            wy_outer = center[1] + (outer_r * sin_a)
+            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.05)))
+        
+        for p in range(arc_points):
+            bm.faces.new([inner_verts[p], inner_verts[p+1], outer_verts[p+1], outer_verts[p]])
+        
+        bm.to_mesh(mesh)
+        bm.free()
+        
+        obj = bpy.data.objects.new(f"{name_prefix}_Seg{seg}_Obj", mesh)
+        bpy.context.collection.objects.link(obj)
+        
+        if len(obj.data.materials) == 0:
+            obj.data.materials.append(bpy.data.materials[mat_name])
+        
+        # カット5では既に表示されている状態なので、frame=0から表示
+        obj.hide_viewport = False
+        obj.hide_render = False
+        obj.keyframe_insert(data_path="hide_viewport", frame=0)
+        obj.keyframe_insert(data_path="hide_render", frame=0)
+
+
+def _create_tire_track_for_cut5(car_object, empty_pivot_loc, turning_radius, name_prefix, start_frame, end_frame, color=(1.0, 0.2, 0.2)):
+    """カット4と同じ方法でタイヤ跡軌跡を作成（車の横幅に合わせる）"""
+    import bmesh
+    
+    # 車のバウンディングボックスから後輪のYオフセットと横幅を計算
+    car_object.update_tag()
+    bpy.context.view_layer.update()
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        print(f"[警告] {car_object.name} のバウンディングボックスが取得できません")
+        return
+    
+    corners_local = [Vector(corner) for corner in local_bounds]
+    rear_y = min(c.y for c in corners_local)
+    
+    # 軌跡幅を車の横幅に設定
+    x_coords = [c.x for c in corners_local]
+    car_width_m = max(x_coords) - min(x_coords)
+    track_width = car_width_m
+    
+    print(f"[シーン13] {car_object.name} の横幅: {car_width_m:.3f}m → 軌跡幅として設定")
+    
+    num_segments = 30
+    
+    # 発光マテリアル
+    mat_name = f"{name_prefix}_Mat"
+    if mat_name not in bpy.data.materials:
+        mat = bpy.data.materials.new(mat_name)
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        nodes.clear()
+        output = nodes.new('ShaderNodeOutputMaterial')
+        principled = nodes.new('ShaderNodeBsdfPrincipled')
+        principled.inputs['Base Color'].default_value = (0.0, 0.0, 0.0, 1.0)
+        principled.inputs['Metallic'].default_value = 0.0
+        principled.inputs['Roughness'].default_value = 1.0
+        principled.inputs['Emission Color'].default_value = (*color, 1.0)
+        principled.inputs['Emission Strength'].default_value = 5.0
+        mat.node_tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
+    
+    for seg in range(num_segments):
+        seg_start_angle = -2.0 * math.pi * seg / num_segments
+        seg_end_angle = -2.0 * math.pi * (seg + 1) / num_segments
+        
+        mesh = bpy.data.meshes.new(f"{name_prefix}_Seg{seg}")
+        bm = bmesh.new()
+        
+        arc_points = 4
+        inner_verts = []
+        outer_verts = []
+        
+        for p in range(arc_points + 1):
+            t = p / arc_points
+            angle = seg_start_angle + (seg_end_angle - seg_start_angle) * t
+            
+            cos_a = math.cos(angle)
+            sin_a = math.sin(angle)
+            
+            inner_r = turning_radius - track_width / 2
+            wx_inner = empty_pivot_loc[0] + (inner_r * cos_a - rear_y * sin_a)
+            wy_inner = empty_pivot_loc[1] + (inner_r * sin_a + rear_y * cos_a)
+            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.06)))
+            
+            outer_r = turning_radius + track_width / 2
+            wx_outer = empty_pivot_loc[0] + (outer_r * cos_a - rear_y * sin_a)
+            wy_outer = empty_pivot_loc[1] + (outer_r * sin_a + rear_y * cos_a)
+            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.06)))
+        
+        for p in range(arc_points):
+            bm.faces.new([inner_verts[p], inner_verts[p+1], outer_verts[p+1], outer_verts[p]])
+        
+        bm.to_mesh(mesh)
+        bm.free()
+        
+        obj = bpy.data.objects.new(f"{name_prefix}_Seg{seg}_Obj", mesh)
+        bpy.context.collection.objects.link(obj)
+        
+        if len(obj.data.materials) == 0:
+            obj.data.materials.append(bpy.data.materials[mat_name])
+        
+        # カット5では既に表示されている状態
+        obj.hide_viewport = False
+        obj.hide_render = False
+        obj.keyframe_insert(data_path="hide_viewport", frame=0)
+        obj.keyframe_insert(data_path="hide_render", frame=0)
+    
+    print(f"[シーン13] タイヤ跡軌跡 '{name_prefix}' を作成（セグメント数={num_segments}, 色={color}）")
+
+
+def _create_turning_radius_diff_text_for_cut5(camera, radius_a_mm, radius_b_mm, radius_diff_mm,
+                                              empty_a_loc, empty_b_loc, start_frame, end_frame, car_dimensions=None):
+    """カット4と同じ方法で最小回転半径比較式テキストを作成"""
+    from animation_common import create_emission_material
+    
+    mid_x = (empty_a_loc[0] + empty_b_loc[0]) / 2.0
+    mid_y = (empty_a_loc[1] + empty_b_loc[1]) / 2.0
+    
+    text_container_location = (mid_x, mid_y, 2.0)
+    
+    bpy.ops.object.empty_add(location=text_container_location)
+    text_container = bpy.context.active_object
+    text_container.name = "TurningRadiusDiff_Container_Scene12"
+    
+    # テキストをX軸と平行にする（Z回転=0）
+    # 俯瞰カメラから見たときに水平に表示されるようにする
+    text_container.rotation_euler = (0.0, 0.0, 0.0)
+    
+    # 2行のテキスト
+    text_line1 = "最小回転半径："
+    text_line2 = f"{radius_b_mm}mm - {radius_a_mm}mm → {radius_diff_mm:+d}mm"
+    
+    # 車の色を取得
+    if car_dimensions:
+        car_a_color = car_dimensions.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+        car_b_color = car_dimensions.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)
+        car_b_color = (0.0, 0.7, 1.0)
+    
+    colors = {
+        'carb': car_b_color,
+        'cara': car_a_color,
+        'yellow': (1.0, 1.0, 0.2)
+    }
+    
+    def is_fullwidth(c):
+        code = ord(c)
+        return (0x4E00 <= code <= 0x9FFF) or \
+               (0x3000 <= code <= 0x303F) or \
+               (0xFF00 <= code <= 0xFFEF) or \
+               (0x3040 <= code <= 0x309F) or \
+               (0x30A0 <= code <= 0x30FF)
+    
+    # 2行目の色マップ
+    color_map_line2 = ['yellow'] * len(text_line2)
+    number_blocks = []
+    current_block = []
+    
+    for i, char in enumerate(text_line2):
+        if char in '0123456789':
+            current_block.append(i)
+        else:
+            if current_block:
+                number_blocks.append(current_block)
+                current_block = []
+    if current_block:
+        number_blocks.append(current_block)
+    
+    for idx, block in enumerate(number_blocks):
+        if idx == 0:
+            color = 'carb'
+        elif idx == 1:
+            color = 'cara'
+        else:
+            color = 'yellow'
+        for pos in block:
+            if pos < len(color_map_line2):
+                color_map_line2[pos] = color
+    
+    half_spacing = 0.30
+    full_spacing = 0.60
+    
+    all_char_objects = []
+    
+    # 1行目の文字を作成
+    for i, char in enumerate(text_line1):
+        bpy.ops.object.text_add(location=(0, 0, 0))
+        char_obj = bpy.context.active_object
+        char_obj.name = f"TurningRadiusDiff_Line1_Char_{i}"
+        if hasattr(char_obj.data, 'string'):
+            char_obj.data.string = char
+        else:
+            char_obj.data.body = char
+        if hasattr(char_obj.data, 'size'):
+            char_obj.data.size = 0.66
+        mat_name = "emission_label_scene12_char_yellow"
+        if mat_name not in bpy.data.materials:
+            emission_mat = create_emission_material(colors['yellow'], 5.0)
+            emission_mat.name = mat_name
+        else:
+            emission_mat = bpy.data.materials[mat_name]
+        if len(char_obj.data.materials) == 0:
+            char_obj.data.materials.append(emission_mat)
+        char_obj.parent = text_container
+        all_char_objects.append(char_obj)
+    
+    # 2行目の文字を作成
+    for i, char in enumerate(text_line2):
+        bpy.ops.object.text_add(location=(0, 0, 0))
+        char_obj = bpy.context.active_object
+        char_obj.name = f"TurningRadiusDiff_Line2_Char_{i}"
+        if hasattr(char_obj.data, 'string'):
+            char_obj.data.string = char
+        else:
+            char_obj.data.body = char
+        if hasattr(char_obj.data, 'size'):
+            char_obj.data.size = 0.66
+        color_name = color_map_line2[i] if i < len(color_map_line2) else 'yellow'
+        mat_name = f"emission_label_scene12_char_{color_name}"
+        if mat_name not in bpy.data.materials:
+            emission_mat = create_emission_material(colors[color_name], 5.0)
+            emission_mat.name = mat_name
+        else:
+            emission_mat = bpy.data.materials[mat_name]
+        if len(char_obj.data.materials) == 0:
+            char_obj.data.materials.append(emission_mat)
+        char_obj.parent = text_container
+        all_char_objects.append(char_obj)
+    
+    # 文字の位置を設定（2行配置）
+    def calc_line_width(text):
+        widths = []
+        for c in text:
+            if is_fullwidth(c):
+                widths.append(full_spacing)
+            else:
+                widths.append(half_spacing)
+        return sum(widths), widths
+    
+    line1_width, line1_widths = calc_line_width(text_line1)
+    line2_width, line2_widths = calc_line_width(text_line2)
+    
+    # 1行目（上部）
+    current_x = -line1_width / 2.0
+    char_idx = 0
+    for i in range(len(text_line1)):
+        local_x = current_x
+        current_x += line1_widths[i]
+        all_char_objects[char_idx].location = (local_x, 0.5, -0.3)
+        char_idx += 1
+    
+    # 2行目（下部）
+    current_x = -line2_width / 2.0
+    for i in range(len(text_line2)):
+        local_x = current_x
+        current_x += line2_widths[i]
+        all_char_objects[char_idx].location = (local_x, -0.5, -0.3)
+        char_idx += 1
+    
+    # カット5では既に表示されている状態なので、スケール=1.0で固定
+    for char_obj in all_char_objects:
+        char_obj.scale = (1.0, 1.0, 1.0)
+        char_obj.keyframe_insert(data_path="scale", frame=start_frame)
+
+
 def _fade_out_track_objects(name_prefix, start_frame, end_frame):
     """軌跡オブジェクトのセグメントをフェードアウト"""
     faded_count = 0
@@ -387,8 +785,8 @@ def _create_acceleration_texts(car_a, car_b, accel_a, accel_b, start_frame, end_
     from animation_common import create_emission_material
 
     # 車のマテリアルから色を取得して、同じ色で発光させる
-    car_a_color = (0.8, 0.2, 0.2)  # デフォルト赤系
-    car_b_color = (0.2, 0.2, 0.8)  # デフォルト青系
+    car_a_color = (0.5, 0.5, 0.5)  # デフォルトグレー系
+    car_b_color = (0.0, 0.7, 1.0)  # デフォルト鮮やかな青
 
     # 車のマテリアルから色を取得
     for obj in [car_a, car_b]:

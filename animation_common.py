@@ -83,33 +83,66 @@ def create_emission_material(color_rgb, strength):
     return mat
 
 
+def _collect_all_mesh_objects_recursive(obj):
+    """オブジェクトとその全子オブジェクトからMESHタイプを再帰的に収集"""
+    meshes = []
+    if obj and obj.type == 'MESH':
+        meshes.append(obj)
+    if obj:
+        for child in obj.children:
+            meshes.extend(_collect_all_mesh_objects_recursive(child))
+    return meshes
+
+
 def _setup_transparency_animation(car_object, start_frame, end_frame, start_alpha, end_alpha):
-    """車のマテリアル不透明度をアニメーションさせる（内部用）"""
-    if car_object is None or len(car_object.data.materials) == 0:
+    """車のマテリアル不透明度をアニメーションさせる（内部用）
+    
+    GLBインポートでは親オブジェクトがEMPTYで子メッシュにマテリアルがあるため、
+    再帰的にすべての子メッシュを処理する。
+    """
+    if car_object is None:
         return
 
-    material = car_object.data.materials[0]
-    if not material.use_nodes:
-        return
+    # 親オブジェクトとすべての子メッシュを取得
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+    
+    # 親がMESHで子がない場合は親のみを処理
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
 
-    # EEVEE 透過対応
-    material.blend_method = 'BLEND'
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None:
+                continue
+            if not material.use_nodes:
+                continue
 
-    nodes = material.node_tree.nodes
-    principled_node = None
-    for node in nodes:
-        if node.type == 'BSDF_PRINCIPLED':
-            principled_node = node
-            break
+            # EEVEE 透過対応
+            try:
+                material.blend_method = 'BLEND'
+            except AttributeError:
+                pass
 
-    if principled_node is None or 'Alpha' not in principled_node.inputs:
-        return
+            nodes = material.node_tree.nodes
+            principled_node = None
+            for node in nodes:
+                if node.type == 'BSDF_PRINCIPLED':
+                    principled_node = node
+                    break
 
-    alpha_input = principled_node.inputs['Alpha']
-    alpha_input.default_value = start_alpha
-    alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
-    alpha_input.default_value = end_alpha
-    alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
+            if principled_node is None or 'Alpha' not in principled_node.inputs:
+                continue
+
+            alpha_input = principled_node.inputs['Alpha']
+            alpha_input.default_value = start_alpha
+            alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
+            alpha_input.default_value = end_alpha
+            alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
 
 
 def _apply_transparency_to_materials(obj, start_frame, end_frame):

@@ -427,6 +427,23 @@ def auto_ground_car(car_object):
     
     return offset_z
 
+def _apply_clay_to_all_meshes(obj, clay_material):
+    """オブジェクトとその全子オブジェクトのメッシュにクレイマテリアルを強制適用
+    GLBインポート時の元マテリアル（透明など）を完全に上書きする。
+    """
+    if obj is None:
+        return
+    
+    # 自身がMESHの場合、全スロットをクレイマテリアルに置換
+    if obj.type == 'MESH' and obj.data is not None:
+        obj.data.materials.clear()
+        obj.data.materials.append(clay_material)
+    
+    # 子オブジェクトも再帰的に処理
+    for child in obj.children:
+        _apply_clay_to_all_meshes(child, clay_material)
+
+
 def setup_car(key, car_data, imported_object):
     """車の設定（位置、名前、マテリアル、サイズ）を適用"""
     if imported_object is None:
@@ -464,10 +481,10 @@ def setup_car(key, car_data, imported_object):
     mat_name = f"clay_{key}_{car_data['name']}"
     clay_material = create_clay_material(mat_name, adjusted_color)
     
-    if len(imported_object.data.materials) == 0:
-        imported_object.data.materials.append(clay_material)
-    else:
-        imported_object.data.materials[0] = clay_material
+    # ★重要: 親オブジェクトと全子メッシュのマテリアルをすべてクレイマテリアルに置換
+    # GLBインポート時の元マテリアル（透明設定など）を完全に上書きする
+    _apply_clay_to_all_meshes(imported_object, clay_material)
+    print(f"  マテリアルを全メッシュに適用: {mat_name}")
     
     return imported_object
 
@@ -729,12 +746,12 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
         text_x_offset = -half_width_x - 0.15   # 車体の中央
 
     # テキストを車のリア端より後ろに配置（Y負方向）
-    # carAの文字をX軸マイナス方向にずらしてcarBと重ならないようにする
+    # carAとcarBの文字が重ならないようにY軸方向に分離する
     if car_key == "carA":
-        text_y_offset = min_y + 0.4   # リア端からY正方向へ0.4mずらす（車と重ならない位置）
+        text_y_offset = min_y + 0.2   # リア端からY正方向へ0.2mずらす
     else:
-        text_y_offset = min_y + 0.3   # carBはもう少し上に（リア端から0.3m）
-    text_obj.location = (text_x_offset, text_y_offset, 0.05)
+        text_y_offset = min_y - 0.3   # carBはcarAより1文字分下（-Y方向）に大きくずらす
+    text_obj.location = (text_x_offset, text_y_offset, 0.02)  # Zを0.02に低下させて地面に近づける
     
     # Emissionマテリアルを作成（車の色と同じRGB）
     mat_name = f"emission_label_{car_key}"
@@ -936,29 +953,36 @@ def main():
     # =============================================
     if SCRIPT_DIR not in sys.path:
         sys.path.insert(0, SCRIPT_DIR)
-    from animation_settings import setup_all_animations
-    
-    # 車の寸法情報を抽出（全長差・横幅差・最低地上高差計算用）
-    car_dimensions = {}
-    for key, car_data in CARS.items():
-        dims = car_data.get("dimensions_mm", {})
-        car_dimensions[key] = {
-            "length": dims.get("length", 0),
-            "width": dims.get("width", 0),
-            "height": dims.get("height", 0),
-            "ground_clearance": dims.get("ground_clearance", 0),
-            "turning_radius": dims.get("turning_radius", 0),
-        }
-        # 0-100km/h 加速時間（秒）を取得
-        accel = car_data.get("acceleration_0_to_100_km_h")
-        if accel:
-            car_dimensions[key]["acceleration_0_to_100_km_h"] = accel
-        # 車の色を取得（比較テキストの数字の色に使用）
-        color = car_data.get("color", (1.0, 1.0, 1.0))
-        car_dimensions[key]["color"] = color
     
     scene = bpy.context.scene
-    setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions)
+    
+    # ショート動画モードの場合は独立したアニメーション設定を使用
+    if CUT_NUMBER == "short":
+        from animation_settings_short import setup_short_animations
+        setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+    else:
+        from animation_settings import setup_all_animations
+        
+        # 車の寸法情報を抽出（全長差・横幅差・最低地上高差計算用）
+        car_dimensions = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            car_dimensions[key] = {
+                "length": dims.get("length", 0),
+                "width": dims.get("width", 0),
+                "height": dims.get("height", 0),
+                "ground_clearance": dims.get("ground_clearance", 0),
+                "turning_radius": dims.get("turning_radius", 0),
+            }
+            # 0-100km/h 加速時間（秒）を取得
+            accel = car_data.get("acceleration_0_to_100_km_h")
+            if accel:
+                car_dimensions[key]["acceleration_0_to_100_km_h"] = accel
+            # 車の色を取得（比較テキストの数字の色に使用）
+            color = car_data.get("color", (1.0, 1.0, 1.0))
+            car_dimensions[key]["color"] = color
+        
+        setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions)
 
     # カット番号に応じたフレーム範囲を適用
     if FRAME_START_OVERRIDE >= 0 and FRAME_END_OVERRIDE >= 0:
@@ -1003,8 +1027,10 @@ def main():
     
     desktop_path = os.path.expanduser("~").replace("\\", "/") + "/Desktop"
     
-    # カット番号に応じてファイル名を設定（cut1.mp4, cut2.mp4, ... allの場合はmp4.mp4）
-    if CUT_NUMBER in ("1", "2", "3", "4", "5"):
+    # カット番号に応じてファイル名を設定
+    if CUT_NUMBER == "short":
+        output_filename = "short_overlap.mp4"
+    elif CUT_NUMBER in ("1", "2", "3", "4", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
         output_filename = "mp4.mp4"
@@ -1025,6 +1051,16 @@ def main():
         pass  # Blender 5.x では use_gi が廃止されている
     scene.eevee.use_raytracing = True
     print("EEVEEレイトレーシングを有効化しました")
+    
+    # 解像度設定（ショート動画は縦長9:16）
+    if CUT_NUMBER == "short":
+        scene.render.resolution_x = 1080
+        scene.render.resolution_y = 1920
+        scene.render.resolution_percentage = 100
+        print("解像度: 1080x1920 (縦長9:16)")
+    else:
+        # デフォルトの横長設定を維持（1920x1080）
+        print(f"解像度: {scene.render.resolution_x}x{scene.render.resolution_y} (デフォルト)")
     
     # FFMPEGで直接動画出力（メディアタイプ=動画）
     scene.render.image_settings.media_type = 'VIDEO'
@@ -1049,7 +1085,9 @@ def main():
     
     # シーンを.blendファイルとして保存（Blenderで開けるように）
     # カット番号に応じてファイル名を切り替え（各カット独立保存用）
-    if CUT_NUMBER in ("1", "2", "3", "4", "5"):
+    if CUT_NUMBER == "short":
+        blend_output_path = os.path.join(SCRIPT_DIR, "short_scene.blend")
+    elif CUT_NUMBER in ("1", "2", "3", "4", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:
         blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")

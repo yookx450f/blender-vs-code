@@ -21,35 +21,53 @@ CarBの透明度アニメーションは以下の場所で制御されていま�
 import bpy
 import math
 from mathutils import Vector
-from animation_common import set_camera_look_at, _calculate_ground_clearance_difference, create_emission_material
+from animation_common import (
+    set_camera_look_at, _calculate_ground_clearance_difference,
+    create_emission_material, _setup_transparency_animation,
+    _calculate_width_difference
+)
+from animation_settings_cut2 import _create_width_diff_text
 
 
-def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
+def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
     カット 3 のアニメーションを設定（フレーム 1224-1584）
 
-    【修正: カット完全分離】前のカットの最終状態のみを受け取り、
-    変数を共有しない。
+    【修正: カット完全分離】previous_state をオプション化し、
+    指定されていない場合は固定位置から読み込む。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
+        previous_state: CutState — 前のカットの最終状態（オプション、未指定時は固定位置使用）
         car_dimensions: {key: {"ground_clearance": mm}} 車の寸法情報
 
     Returns:
         CutState: このカットの最終状態
     """
-    if previous_state is None:
-        print("エラー: 前のカットの状態が指定されていません")
-        return None
-
-    # カット完全分離: 前のカットの最終位置のみを取得
-    car_a_end = previous_state.car_a_loc
-    car_b_end = previous_state.car_b_loc
-    loc_scene7_end = previous_state.camera_loc
-    rot_scene7_end = previous_state.camera_rot
+    # 【カット完全分離】previous_state が指定された場合は従来通り使用、
+    # 未指定の場合は固定位置から読み込む
+    from animation_cut_positions import CAMERA_POSITIONS, get_car_positions
+    
+    if previous_state is not None:
+        car_a_end = previous_state.car_a_loc
+        car_b_end = previous_state.car_b_loc
+        loc_scene7_end = previous_state.camera_loc
+        rot_scene7_end = previous_state.camera_rot
+    else:
+        # 固定位置から読み込み
+        car_a_end, car_b_end = get_car_positions()
+        # カット3以降は車が中心位置にあるのでX座標を明示的に0.0に設定
+        car_a_end = (0.0, car_a_end[1], car_a_end[2])
+        car_b_end = (0.0, car_b_end[1], car_b_end[2])
+        # カメラの開始位置は Cut2終了時の固定位置を使用
+        cam_data = CAMERA_POSITIONS.get("cut2_end", {})
+        loc_scene7_end = cam_data.get("loc", (0.0, -7.0, 2.5))
+        target_cam = cam_data.get("target", (0.0, 0.0, 1.5))
+        direction = Vector(target_cam) - Vector(loc_scene7_end)
+        rot_quat = direction.to_track_quat('-Z', 'Y')
+        rot_scene7_end = rot_quat.to_euler()
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -129,8 +147,37 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
     car_b.keyframe_insert(data_path="location", frame=scene8_pause_end)
     print(f"[フレーム{scene8_pause_end}] 停止（2秒）")
 
-    # --- シーン 8 で全幅差表示をフェードアウト（シーン 6 の全長差フェードアウトと同じパターン）---
+    # --- カット3独立実行対応：全幅差表示を再作成してからフェードアウト ---
+    # カット2がスキップされた場合、WidthDiff_Container_Scene7 が存在しないため再作成する
     text_container_name = "WidthDiff_Container_Scene7"
+    if text_container_name not in bpy.data.objects:
+        print(f"[カット3独立実行] 全幅差表示を再作成します")
+        # 寸法情報を取得
+        width_diff_mm = _calculate_width_difference(car_a, car_b, car_dimensions)
+        if car_dimensions:
+            width_a_mm = car_dimensions.get("carA", {}).get("width", 0)
+            width_b_mm = car_dimensions.get("carB", {}).get("width", 0)
+        else:
+            def get_car_width(car_obj):
+                from mathutils import Vector
+                bounds = [Vector(b) for b in car_obj.bound_box]
+                x_coords = [b.x for b in bounds]
+                return max(x_coords) - min(x_coords)
+            width_a = get_car_width(car_a)
+            width_b = get_car_width(car_b)
+            width_a_mm = int(round(width_a * 1000))
+            width_b_mm = int(round(width_b * 1000))
+        
+        # カメラの開始位置をセット（全幅差表示作成時にカメラ位置が必要）
+        camera.location = start_loc
+        camera.rotation_euler = start_rot
+        
+        # 全幅差テキストを作成（アニメーションなし、初めから完全表示状態）
+        _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm,
+                               car_a, car_b, scene8_start, scene8_end, car_dimensions,
+                               setup_animation=False)
+        print(f"[カット3独立実行] 全幅差表示作成完了")
+    
     if text_container_name in bpy.data.objects:
         text_obj = bpy.data.objects[text_container_name]
 
@@ -220,9 +267,9 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state, car_dime
 
     print(f"[フレーム{scene9_start}] シーン 9 開始：最低地上高差表示")
 
-    # --- CarB の透明度を少し緩める（シーン 9 用：0.8 の不透明度で表示）---
-    _setup_car_b_transparency_for_scene9(car_b, scene9_start, scene9_end)
-    print(f"[フレーム{scene9_start}-{scene9_end}] CarB 透明度緩和：0.35→0.9")
+    # --- CarB の透明度を少し緩める（シーン 9 用：カット1と同じ方式）---
+    _setup_transparency_animation(car_b, scene9_start, scene9_end, 0.4, 0.9)
+    print(f"[フレーム{scene9_start}-{scene9_end}] CarB 透明度緩和：0.4→0.9")
 
     # --- シーン 9 の最低地上高差エフェクト（地面に張り付けたテキスト）---
     _setup_scene9_effects(scene, camera, car_a, car_b, scene9_start, scene9_end, car_dimensions)
@@ -271,14 +318,14 @@ def _setup_scene9_effects(scene, camera, car_a, car_b, scene9_start, scene9_end,
 
     print(f"[シーン 9] 最低地上高差：{clearance_diff_mm:+d}mm (CarB: {clearance_b_mm}mm, CarA: {clearance_a_mm}mm)")
 
-    text_obj = _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_b_mm, clearance_diff_mm, car_a, car_b, scene9_start, scene9_end)
+    text_obj = _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_b_mm, clearance_diff_mm, car_a, car_b, scene9_start, scene9_end, car_dimensions)
     if text_obj:
         print(f"[シーン 9] 数値テキスト '{text_obj.name}' を作成しました")
 
     print(f"[フレーム{scene9_end}] シーン 9 終了：最低地上高差表示完了")
 
 
-def _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_b_mm, clearance_diff_mm, car_a, car_b, start_frame, end_frame):
+def _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_b_mm, clearance_diff_mm, car_a, car_b, start_frame, end_frame, car_dimensions=None):
     """最低地上高の計算式を表示するテキストを作成（車の上に配置）"""
 
     # 両車の中心座標を取得
@@ -339,14 +386,24 @@ def _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_
     half_spacing = 0.12
     full_spacing = 0.20
 
-    # 色の定義：CarB=青、CarA=赤、結果=白
+    # 車の色を取得（car_dimensions から、なければデフォルト使用）
+    if car_dimensions:
+        car_a_color = car_dimensions.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+        car_b_color = car_dimensions.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)
+        car_b_color = (0.0, 0.7, 1.0)
+
+    print(f"[シーン9] carAの色: {car_a_color}, carBの色: {car_b_color}")
+
+    # 色の定義：CarB=車の色、CarA=車の色、結果=白
     colors = {
-        'blue': (0.0, 1.0, 1.0),
-        'red': (1.0, 0.0, 0.0),
-        'white': (1.0, 1.0, 1.0)
+        'carb': car_b_color,
+        'cara': car_a_color,
+        'yellow': (1.0, 1.0, 0.2)     # 黄色（結果）
     }
 
-    color_map = ['white'] * len(text_str)
+    color_map = ['yellow'] * len(text_str)
 
     # 数字のブロックを特定
     number_blocks = []
@@ -364,11 +421,11 @@ def _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_
 
     for idx, block in enumerate(number_blocks):
         if idx == 0:
-            color = 'blue'
+            color = 'carb'   # CarBの色
         elif idx == 1:
-            color = 'red'
+            color = 'cara'   # CarAの色
         else:
-            color = 'white'
+            color = 'yellow'
 
         for pos in block:
             if pos < len(color_map):
@@ -389,7 +446,7 @@ def _create_ground_clearance_diff_text(scene, camera, clearance_a_mm, clearance_
 
         char_obj.scale = (1.0, 1.0, 1.0)
 
-        color_name = color_map[i] if i < len(color_map) else 'white'
+        color_name = color_map[i] if i < len(color_map) else 'yellow'
         mat_name = f"emission_label_scene9_char_{color_name}"
         if mat_name not in bpy.data.materials:
             emission_mat = create_emission_material(colors[color_name], 5.0)

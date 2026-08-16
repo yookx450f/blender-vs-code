@@ -8,6 +8,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py 3            # カット3のみ（シーン8-9、フレーム1272-1632）
     python run.py 4            # カット4のみ（シーン10-12、フレーム1632-2256）
     python run.py 5            # カット5のみ（シーン13-14、フレーム2256-2880）
+    python run.py short        # ショート動画（縦長9:16、車重なりカット、フレーム0-144）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -27,6 +28,7 @@ CUTS = {
     "3": {"start": 1272, "end": 1632, "label": "カット3（シーン8-9）"},
     "4": {"start": 1632, "end": 2256, "label": "カット4（シーン10-12）"},
     "5": {"start": 2256, "end": 2880, "label": "カット5（シーン13-14）"},
+    "short": {"start": 0, "end": 144, "label": "ショート動画（縦長9:16、車重なりカット）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -216,7 +218,7 @@ print("アニメーションレンダリング完了！")
 def main():
     parser = argparse.ArgumentParser(description="Blenderを起動して3Dシーンを作成する")
     parser.add_argument("cut", nargs="?", default="all", type=str,
-                        help="実行するカット番号 (all=全カット独立実行, 1=カット1のみ, 2=カット2のみ, 3=カット3のみ, 4=カット4のみ, 5=カット5のみ)")
+                        help="実行するカット番号 (all=全カット独立実行, 1-5=各カット, short=縦長ショート動画)")
     parser.add_argument("--script", type=str, help="実行するPythonスクリプトのパス")
     parser.add_argument("--render", action="store_true",
                         help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
@@ -226,7 +228,7 @@ def main():
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2, 3, 4, 5")
+        print(f"使用可能な値: all, 1, 2, 3, 4, 5, short")
         sys.exit(1)
 
     success = run_blender(

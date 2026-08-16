@@ -71,16 +71,58 @@ def get_car_visual_center_offset(car_obj):
     return (offset_x, offset_y)
 
 
-def clear_object_animation(obj):
-    """オブジェクトのアニメーションデータをすべてクリア
+def clear_object_animation(obj, start_frame=0, end_frame=None):
+    """オブジェクトのアニメーションデータをクリア（フレーム範囲限定可能）
     Blender 5.x対応版
+    
+    Parameters:
+        obj: クリア対象のオブジェクト
+        start_frame: クリア開始フレーム（デフォルト0）
+        end_frame: クリア終了フレーム（None=全フレーム）
     """
     current_frame = bpy.context.scene.frame_current
     
-    # アニメーションデータをクリア
-    if obj.animation_data:
-        if obj.animation_data.action:
-            obj.animation_data.action = None
+    if not obj.animation_data or not obj.animation_data.action:
+        bpy.context.scene.frame_set(current_frame)
+        return
+    
+    action = obj.animation_data.action
+    
+    # end_frameが指定されている場合はフレーム範囲限定で削除
+    if end_frame is not None:
+        try:
+            # Blender 4.x以前のAPI
+            if hasattr(action, 'fcurves'):
+                for fc in list(action.fcurves):
+                    points_to_remove = []
+                    for kp in fc.keyframe_points:
+                        if start_frame <= kp.co.x <= end_frame:
+                            points_to_remove.append(kp.co.x)
+                    # 指定フレーム範囲のキーフレームを削除
+                    for frame_pos in points_to_remove:
+                        idx = next((i for i, kp in enumerate(fc.keyframe_points) if abs(kp.co.x - frame_pos) < 0.1), None)
+                        if idx is not None:
+                            fc.keyframe_points.remove(idx, update_tag=True)
+            # Blender 5.x: レイヤー化アクションシステム
+            elif hasattr(action, 'layers'):
+                for layer in action.layers:
+                    for strip in layer.strips:
+                        if strip.type == 'KEYFRAME':
+                            for cb in strip.channelbags:
+                                for fc in cb.fcurves:
+                                    points_to_remove = []
+                                    for kp in fc.keyframe_points:
+                                        if start_frame <= kp.co.x <= end_frame:
+                                            points_to_remove.append(kp.co.x)
+                                    for frame_pos in points_to_remove:
+                                        idx = next((i for i, kp in enumerate(fc.keyframe_points) if abs(kp.co.x - frame_pos) < 0.1), None)
+                                        if idx is not None:
+                                            fc.keyframe_points.remove(idx, update_tag=True)
+        except Exception as e:
+            print(f"  ⚠ キーフレーム範囲削除でエラー: {e}")
+    else:
+        # 全フレームクリア（元の動作）
+        obj.animation_data.action = None
         obj.animation_data_clear()
     
     bpy.context.scene.frame_set(current_frame)
@@ -382,12 +424,14 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
             print(f"Track To コンストレイント '{constraint.name}' を無効化しました")
 
     # ============================================================
-    # 既存のアニメーションデータをクリア（親子関係は上記で解除済み）
+    # 既存のアニメーションデータをクリア（フレーム範囲限定: 0-696）
+    # カット分離のため、Cut1のフレーム範囲内のみをクリアする
     # ============================================================
-    clear_object_animation(car_a)
-    clear_object_animation(car_b)
-    clear_object_animation(camera)
-    print("既存のアニメーションデータをクリアしました")
+    from animation_cut_positions import CUT1_START_FRAME, CUT1_END_FRAME
+    clear_object_animation(car_a, start_frame=CUT1_START_FRAME, end_frame=CUT1_END_FRAME)
+    clear_object_animation(car_b, start_frame=CUT1_START_FRAME, end_frame=CUT1_END_FRAME)
+    clear_object_animation(camera, start_frame=CUT1_START_FRAME, end_frame=CUT1_END_FRAME)
+    print(f"既存のアニメーションデータをクリアしました (フレーム {CUT1_START_FRAME}-{CUT1_END_FRAME})")
 
     # ============================================================
     # フレーム順にキーフレームを設定（カット 1）
@@ -557,6 +601,19 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
     bpy.context.scene.frame_set(0)
 
     print("\n=== カット 1 アニメーション完了 ===")
+
+    # 【カット分離】オフセットデータをJSONに保存（Cut2-Cut5が独立して読み込めるように）
+    from animation_cut_positions import save_offsets
+    offset_data = {
+        "offset_a": [round(car_a_start[0], 4), round(car_a_start[1], 4)],
+        "offset_b": [round(car_b_start[0], 4), round(car_b_start[1], 4)],
+        "grounded_z_a": round(grounded_z_a, 4),
+        "grounded_z_b": round(grounded_z_b, 4),
+        "rear_offset_y": round(rear_offset_y, 4),
+        "car_a_center": [round(car_a_end[0], 4), round(car_a_end[1], 4), round(car_a_end[2], 4)],
+        "car_b_center": [round(car_b_end[0], 4), round(car_b_end[1], 4), round(car_b_end[2], 4)]
+    }
+    save_offsets(offset_data)
 
     # 結果を返す（カット 2 で再利用）
     # 【修正: カット完全分離】CutState 形式で最終状態のみを返す

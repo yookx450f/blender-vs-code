@@ -19,32 +19,42 @@ import math
 from mathutils import Vector
 from animation_common import set_camera_look_at, _calculate_turning_radius_difference, create_emission_material
 
-def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dimensions=None):
+def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
     カット 4 のアニメーションを設定（フレーム 1584-1992）
 
-    【修正: カット完全分離】前のカットの最終状態のみを受け取り、
-    変数を共有しない。animation_data_clear() は使用しない。
+    【修正: カット完全分離】previous_state をオプション化し、
+    指定されていない場合は固定位置から読み込む。animation_data_clear() は使用しない。
 
     Parameters:
         scene: bpy.context.scene
         camera: カメラオブジェクト
         imported_cars: {key: car_object} の辞書 (carA, carB)
-        previous_state: CutState — 前のカットの最終状態（位置情報のみ）
+        previous_state: CutState — 前のカットの最終状態（オプション、未指定時は固定位置使用）
         car_dimensions: {key: {"turning_radius": mm}} 車の寸法情報
 
     Returns:
         CutState: このカットの最終状態
     """
-    if previous_state is None:
-        print("エラー: 前のカットの状態が指定されていません")
-        return None
-
-    # カット完全分離: 前のカットの最終位置のみを取得
-    car_a_end = previous_state.car_a_loc
-    car_b_end = previous_state.car_b_loc
-    loc_scene8_end = previous_state.camera_loc
-    rot_scene8_end = previous_state.camera_rot
+    # 【カット完全分離】previous_state が指定された場合は従来通り使用、
+    # 未指定の場合は固定位置から読み込む
+    from animation_cut_positions import CAMERA_POSITIONS, get_car_positions
+    
+    if previous_state is not None:
+        car_a_end = previous_state.car_a_loc
+        car_b_end = previous_state.car_b_loc
+        loc_scene8_end = previous_state.camera_loc
+        rot_scene8_end = previous_state.camera_rot
+    else:
+        # 固定位置から読み込み
+        car_a_end, car_b_end = get_car_positions()
+        # カメラの開始位置は Cut3終了時の固定位置を使用
+        cam_data = CAMERA_POSITIONS.get("cut3_end", {})
+        loc_scene8_end = cam_data.get("loc", (-6.0, -2.0, 0.8))
+        target_cam = cam_data.get("target", (0.0, 0.0, 1.5))
+        direction = Vector(target_cam) - Vector(loc_scene8_end)
+        rot_quat = direction.to_track_quat('-Z', 'Y')
+        rot_scene8_end = rot_quat.to_euler()
 
     car_a = imported_cars.get("carA")
     car_b = imported_cars.get("carB")
@@ -275,13 +285,13 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
 
     # 回転半径の可視化：円を描くガイドラインを作成
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_car_a_end, color=(1.0, 0.2, 0.2))
-    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_car_b_end, color=(0.2, 0.2, 1.0))
+    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_car_a_end, color=(0.5, 0.5, 0.5))
+    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_car_b_end, color=(0.0, 0.7, 1.0))
 
     # タイヤ跡軌跡を作成（発光曲線）
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=(1.0, 0.2, 0.2))
-    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=(0.2, 0.2, 1.0))
+    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=(0.5, 0.5, 0.5))
+    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=(0.0, 0.7, 1.0))
 
     # ============================================================
     # 【カット 4】シーン 12: フレーム 2040-2160（最小回転半径比較式表示、5秒）
@@ -310,7 +320,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state, car_dime
     # 最小回転半径比較式テキストを作成（2つの回転円の中央に配置）
     turning_radius_diff_mm = _calculate_turning_radius_difference(car_a, car_b, car_dimensions)
     _create_turning_radius_diff_text(scene, camera, int(turning_radius_a * 1000), int(turning_radius_b * 1000), turning_radius_diff_mm,
-                                     empty_a.location, empty_b.location, scene12_start, scene12_end)
+                                     empty_a.location, empty_b.location, scene12_start, scene12_end, car_dimensions)
     
     print(f"[フレーム{scene12_end}] シーン 12 終了：最小回転半径比較式表示完了")
 
@@ -737,7 +747,7 @@ def _fade_out_ground_clearance_text(start_frame, end_frame):
 
 
 def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, radius_diff_mm,
-                                     empty_a_loc, empty_b_loc, start_frame, end_frame):
+                                     empty_a_loc, empty_b_loc, start_frame, end_frame, car_dimensions=None):
     """最小回転半径の計算式を表示するテキストを作成（2つの回転円の中央に配置）"""
     
     # 2つの回転中心の中間点を計算
@@ -751,20 +761,9 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
     text_container = bpy.context.active_object
     text_container.name = "TurningRadiusDiff_Container_Scene12"
     
-    # 俯瞰カメラの場合、テキストは地面に平行に表示されるようにする
-    # カメラが上からなので、Y軸回転でカメラ方向に向ける
-    cam_pos = camera.location
-    container_pos = Vector(text_container_location)
-    direction = cam_pos - container_pos
-    
-    # 水平面（XY平面）の方向ベクトルを取得
-    horizontal_dir = Vector((direction.x, direction.y, 0.0)).normalized()
-    
-    # Y軸回転角を計算（カメラが上からなので、X-Z回転は不要）
-    import math as m
-    angle_y = m.atan2(horizontal_dir.x, horizontal_dir.y)
-    
-    text_container.rotation_euler = (0.0, 0.0, angle_y + math.pi)
+    # テキストをX軸と平行にする（Z回転=0）
+    # 俯瞰カメラから見たときに水平に表示されるようにする
+    text_container.rotation_euler = (0.0, 0.0, 0.0)
     
     scene.collection.objects.link(text_container)
     
@@ -776,11 +775,21 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
     text_line1 = "最小回転半径："
     text_line2 = f"{radius_b_mm}mm - {radius_a_mm}mm → {radius_diff_mm:+d}mm"
     
-    # 色の定義：CarB=青、CarA=赤、結果=白
+    # 車の色を取得（car_dimensions から、なければデフォルト使用）
+    if car_dimensions:
+        car_a_color = car_dimensions.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+        car_b_color = car_dimensions.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)
+        car_b_color = (0.0, 0.7, 1.0)
+
+    print(f"[シーン12] carAの色: {car_a_color}, carBの色: {car_b_color}")
+
+    # 色の定義：CarB=車の色、CarA=車の色、結果=白
     colors = {
-        'blue': (0.0, 1.0, 1.0),
-        'red': (1.0, 0.0, 0.0),
-        'white': (1.0, 1.0, 1.0)
+        'carb': car_b_color,
+        'cara': car_a_color,
+        'yellow': (1.0, 1.0, 0.2)     # 黄色（結果）
     }
     
     # 全角/半角を考慮した位置計算
@@ -799,7 +808,7 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
     line2_chars = []
     
     # --- 2行目（数値式）の色マップを作成 ---
-    color_map_line2 = ['white'] * len(text_line2)
+    color_map_line2 = ['yellow'] * len(text_line2)
     
     number_blocks = []
     current_block = []
@@ -816,11 +825,11 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
     
     for idx, block in enumerate(number_blocks):
         if idx == 0:
-            color = 'blue'   # CarB (最初の数字)
+            color = 'carb'   # CarB (最初の数字) - carBの色
         elif idx == 1:
-            color = 'red'    # CarA (2番目の数字)
+            color = 'cara'    # CarA (2番目の数字) - carAの色
         else:
-            color = 'white'  # 結果やその他
+            color = 'yellow'  # 結果やその他
         
         for pos in block:
             if pos < len(color_map_line2):
@@ -845,9 +854,9 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
         
         char_obj.scale = (1.0, 1.0, 1.0)
         
-        mat_name = f"emission_label_scene12_char_white"
+        mat_name = f"emission_label_scene12_char_yellow"
         if mat_name not in bpy.data.materials:
-            emission_mat = create_emission_material(colors['white'], 5.0)
+            emission_mat = create_emission_material(colors['yellow'], 5.0)
             emission_mat.name = mat_name
         else:
             emission_mat = bpy.data.materials[mat_name]
@@ -877,7 +886,7 @@ def _create_turning_radius_diff_text(scene, camera, radius_a_mm, radius_b_mm, ra
         
         char_obj.scale = (1.0, 1.0, 1.0)
         
-        color_name = color_map_line2[i] if i < len(color_map_line2) else 'white'
+        color_name = color_map_line2[i] if i < len(color_map_line2) else 'yellow'
         mat_name = f"emission_label_scene12_char_{color_name}"
         if mat_name not in bpy.data.materials:
             emission_mat = create_emission_material(colors[color_name], 5.0)
