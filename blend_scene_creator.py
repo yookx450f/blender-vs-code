@@ -13,7 +13,7 @@ import sys
 import struct
 import json
 import time
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 # ============================================================
 # グローバル変数（内部用 - 通常は変更不要）
@@ -444,7 +444,7 @@ def setup_car(key, car_data, imported_object):
             dims.get('width', 1825),
             dims.get('height', 1620)
         )
-    
+
     # 初期位置を設定（後で接地処理で調整される）
     initial_location = list(car_data['position'])  # tuple を list に変換
     imported_object.location = initial_location
@@ -459,7 +459,7 @@ def setup_car(key, car_data, imported_object):
     # 青い車の場合、より鮮明な青色に補正（JSONは変更しない）
     adjusted_color = car_data['color']
     if key == "carB" and car_data['color'][2] > car_data['color'][0]:  # 青成分が強い場合
-        adjusted_color = (0.1, 0.4, 1.0)  # より鮮明な青色
+        adjusted_color = (0.0, 0.7, 1.0)  # 鮮明な青色
     
     mat_name = f"clay_{key}_{car_data['name']}"
     clay_material = create_clay_material(mat_name, adjusted_color)
@@ -724,14 +724,14 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
     # テキストを車のY軸中央、車体のすぐ横に配置（ローカル座標系）
     # carAは左側（X=-）、carBは右側（X=+）なので、それぞれ外側に配置
     if car_key == "carA":
-        text_x_offset = -half_width_x - 0.15  # 車体の左側のすぐ横
+        text_x_offset = -half_width_x - 0.6  # 車体の左側のさらに外側に配置（重複回避）
     else:
         text_x_offset = -half_width_x - 0.15   # 車体の中央
 
     # テキストを車のリア端より後ろに配置（Y負方向）
-    # carBの文字を上に（Y正方向へ）移動してcarAに近づける
+    # carAの文字をX軸マイナス方向にずらしてcarBと重ならないようにする
     if car_key == "carA":
-        text_y_offset = min_y - 0.2   # リア端からさらに後ろに0.5m
+        text_y_offset = min_y + 0.4   # リア端からY正方向へ0.4mずらす（車と重ならない位置）
     else:
         text_y_offset = min_y + 0.3   # carBはもう少し上に（リア端から0.3m）
     text_obj.location = (text_x_offset, text_y_offset, 0.05)
@@ -757,7 +757,7 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
         # 青い車の場合、より鮮明な青色に補正
         adjusted_color = color_rgb
         if car_key == "carB" and color_rgb[2] > color_rgb[0]:  # 青成分が強い場合
-            adjusted_color = (0.1, 0.4, 1.0)  # より鮮明な青色
+            adjusted_color = (0.0, 0.7, 1.0)  # 鮮明な青色
         emission_node.inputs['Color'].default_value = (*adjusted_color, 1.0)
         # ネオン風発光の強度
         emission_node.inputs['Strength'].default_value = 5.0
@@ -828,6 +828,23 @@ def main():
             print("GLBファイルが破損しているか、形式が正しくありません。処理を停止します。")
             sys.exit(1)
         
+        # メッシュデータを直接回転（スケール/origin_setの影響を受けない）
+        rotation_z = car_data.get("rotation_z_degrees", 0)
+        if rotation_z != 0:
+            import bmesh
+            mesh = imported_object.data
+            bm = bmesh.new()
+            bm.from_mesh(mesh)
+            rot_angle = math.radians(rotation_z)
+            rot_matrix = Matrix.Rotation(rot_angle, 3, 'Z')
+            for vert in bm.verts:
+                vert.co.rotate(rot_matrix)
+            bm.to_mesh(mesh)
+            bm.free()
+            mesh.update(calc_edges=True)
+            bpy.context.view_layer.update()
+            print(f"  メッシュ回転: Z軸 {rotation_z}度 を適用")
+        
         setup_car(key, car_data, imported_object)
         imported_cars[key] = imported_object
         print(f"成功: '{imported_object.name}' をインポートしました")
@@ -894,9 +911,29 @@ def main():
     camera = setup_camera_and_lighting()
     
     # =============================================
-    # アニメーション設定（フレーム順・別モジュールから呼び出し）
+    # オフセットデータをJSONに保存（カット分離用）
     # =============================================
     import sys
+    if SCRIPT_DIR not in sys.path:
+        sys.path.insert(0, SCRIPT_DIR)
+    from animation_cut_positions import save_offsets
+
+    if car_a and car_b:
+        offset_data = {
+            "offset_a": [round(car_a.location.x, 4), round(car_a.location.y, 4)],
+            "offset_b": [round(car_b.location.x, 4), round(car_b.location.y, 4)],
+            "grounded_z_a": round(grounded_z_a, 4),
+            "grounded_z_b": round(grounded_z_b, 4),
+            "rear_offset_y": round(rear_offset_y, 4),
+            "car_a_center": [round(car_a.location.x, 4), round(car_a.location.y, 4), round(car_a.location.z, 4)],
+            "car_b_center": [round(car_b.location.x, 4), round(car_b.location.y, 4), round(car_b.location.z, 4)]
+        }
+        save_offsets(offset_data)
+        print(f"オフセットデータを保存しました: cut_offsets.json")
+
+    # =============================================
+    # アニメーション設定（フレーム順・別モジュールから呼び出し）
+    # =============================================
     if SCRIPT_DIR not in sys.path:
         sys.path.insert(0, SCRIPT_DIR)
     from animation_settings import setup_all_animations
@@ -916,6 +953,9 @@ def main():
         accel = car_data.get("acceleration_0_to_100_km_h")
         if accel:
             car_dimensions[key]["acceleration_0_to_100_km_h"] = accel
+        # 車の色を取得（比較テキストの数字の色に使用）
+        color = car_data.get("color", (1.0, 1.0, 1.0))
+        car_dimensions[key]["color"] = color
     
     scene = bpy.context.scene
     setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions)
