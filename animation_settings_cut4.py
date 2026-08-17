@@ -285,21 +285,30 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
 
     # 回転半径の可視化：円を描くガイドラインを作成
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_car_a_end, color=(0.5, 0.5, 0.5))
-    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_car_b_end, color=(0.0, 0.7, 1.0))
+    # 車の色を取得（car_dimensions から、なければデフォルト使用）
+    if car_dimensions:
+        car_a_color = tuple(car_dimensions.get("carA", {}).get("color", [0.5, 0.5, 0.5]))
+        car_b_color = tuple(car_dimensions.get("carB", {}).get("color", [0.0, 0.7, 1.0]))
+    else:
+        car_a_color = (0.5, 0.5, 0.5)
+        car_b_color = (0.0, 0.7, 1.0)
+
+    # CarAの軌跡はZ=0.05、CarBの軌跡はZ=0.07（CarBを少し高くして重なり時に優先表示）
+    _create_turning_radius_visualization(empty_a.location, turning_radius_a, "CarA_TurningCircle", scene11_start, scene11_car_a_end, color=car_a_color, z_offset=0.0)
+    _create_turning_radius_visualization(empty_b.location, turning_radius_b, "CarB_TurningCircle", car_b_track_start, scene11_car_b_end, color=car_b_color, z_offset=0.02)
 
     # タイヤ跡軌跡を作成（発光曲線）
     # CarAは通常通り、CarBは出发遅延に合わせて軌跡表示を遅らせる
-    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=(0.5, 0.5, 0.5))
-    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=(0.0, 0.7, 1.0))
+    _create_tire_track(car_a, empty_a, turning_radius_a, "CarA_TireTrack", scene11_start, scene11_car_a_end, color=car_a_color, z_offset=0.0)
+    _create_tire_track(car_b, empty_b, turning_radius_b, "CarB_TireTrack", car_b_track_start, scene11_car_b_end, color=car_b_color, z_offset=0.02)
 
     # ============================================================
-    # 【カット 4】シーン 12: フレーム 2040-2160（最小回転半径比較式表示、5秒）
+    # 【カット 4】シーン 12: フレーム 2088-2184（最小回転半径比較式表示、4秒）
     # ============================================================
     print("\n=== 【カット 4】シーン 12 設定開始 ===")
     
     scene12_start = scene11_end  # 2088
-    scene12_end = scene12_start + 120  # 5秒（24fps × 5 = 120フレーム）
+    scene12_end = scene12_start + 96  # 4秒（24fps × 4 = 96フレーム）
     
     print(f"[シーン12] CarA 最小回転半径: {turning_radius_a}m ({int(turning_radius_a * 1000)}mm), CarB 最小回転半径: {turning_radius_b}m ({int(turning_radius_b * 1000)}mm)")
     
@@ -325,9 +334,39 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene12_end}] シーン 12 終了：最小回転半径比較式表示完了")
 
     # ============================================================
-    # 【カット 4】最終停止: フレーム 2160-2208（2秒）
+    # 【カット 4】シーン 13: フレーム 2184-2232（軌跡・テキストのフェードアウト、2秒）
     # ============================================================
-    final_pause_end = scene12_end + 48  # 2秒（24fps × 2 = 48フレーム）
+    print("\n=== 【カット 4】シーン 13 設定開始 ===")
+    
+    scene13_start = scene12_end  # 2184
+    scene13_end = scene13_start + 48  # 2秒（24fps × 2 = 48フレーム）
+    
+    # カメラ位置を維持
+    camera.location = camera_scene11_end_loc
+    camera.rotation_euler = rot_scene11_end
+    camera.keyframe_insert(data_path="location", frame=scene13_start)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
+    camera.keyframe_insert(data_path="location", frame=scene13_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene13_end)
+    
+    # Empty回転もシーン13中維持
+    empty_a.rotation_euler.z = total_angle
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+    empty_b.rotation_euler.z = total_angle
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene13_end)
+    
+    # --- 軌跡（TurningCircle + TireTrack）をフェードアウト ---
+    _fade_out_trajectory(scene13_start, scene13_end)
+    
+    # --- 最小回転半径比較式テキストをフェードアウト ---
+    _fade_out_turning_radius_text(scene13_start, scene13_end)
+    
+    print(f"[フレーム{scene13_end}] シーン 13 終了：軌跡・テキストのフェードアウト完了")
+
+    # ============================================================
+    # 【カット 4】最終停止: フレーム 2232-2256（1秒）
+    # ============================================================
+    final_pause_end = scene13_end + 24  # 1秒（24fps × 1 = 24フレーム）
     
     camera.location = camera_scene11_end_loc
     camera.rotation_euler = rot_scene11_end
@@ -340,7 +379,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     empty_b.rotation_euler.z = total_angle
     empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=final_pause_end)
     
-    print(f"[フレーム{final_pause_end}] 最終停止（2秒）")
+    print(f"[フレーム{final_pause_end}] 最終停止（1秒）")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -358,7 +397,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     )
 
 
-def _create_turning_radius_visualization(center, radius, name_prefix, start_frame, end_frame, color=(1.0, 1.0, 1.0)):
+def _create_turning_radius_visualization(center, radius, name_prefix, start_frame, end_frame, color=(1.0, 1.0, 1.0), z_offset=0.0):
     """回転半径を可視化する円ガイドラインを作成（車が通過した後に軌跡として表示）
     
     円を複数のセグメントに分割し、フレームごとに順に表示することで
@@ -373,6 +412,7 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
         start_frame: 開始フレーム
         end_frame: 終了フレーム
         color: ガイドラインの色 (R, G, B) デフォルトは白
+        z_offset: Z軸方向のオフセット（重なり時の表示優先度制御用）
     """
     import bmesh
     
@@ -434,13 +474,13 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
             inner_r = radius - track_width / 2
             wx_inner = center[0] + (inner_r * cos_a)
             wy_inner = center[1] + (inner_r * sin_a)
-            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.05)))
+            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.05 + z_offset)))
             
             # 外側の点
             outer_r = radius + track_width / 2
             wx_outer = center[0] + (outer_r * cos_a)
             wy_outer = center[1] + (outer_r * sin_a)
-            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.05)))
+            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.05 + z_offset)))
         
         # ポリゴンを作成（4頂点の面）
         for p in range(arc_points):
@@ -481,7 +521,7 @@ def _create_turning_radius_visualization(center, radius, name_prefix, start_fram
 
 
 
-def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, start_frame, end_frame, color=(1.0, 0.2, 0.2)):
+def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, start_frame, end_frame, color=(1.0, 0.2, 0.2), z_offset=0.0):
     """車のタイヤ跡軌跡を発光円弧として作成（bmeshベース）
     
     円弧を複数のセグメントに分割し、フレームごとに順に表示することで
@@ -497,6 +537,7 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
         start_frame: 開始フレーム
         end_frame: 終了フレーム
         color: 軌跡の色 (R, G, B)
+        z_offset: Z軸方向のオフセット（重なり時の表示優先度制御用）
     """
     import bmesh
     
@@ -580,13 +621,13 @@ def _create_tire_track(car_object, empty_pivot, turning_radius, name_prefix, sta
             inner_r = turning_radius - track_width / 2
             wx_inner = empty_pivot.location.x + (inner_r * cos_a - rear_y * sin_a)
             wy_inner = empty_pivot.location.y + (inner_r * sin_a + rear_y * cos_a)
-            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.06)))
+            inner_verts.append(bm.verts.new((wx_inner, wy_inner, 0.06 + z_offset)))
             
             # 外側の点
             outer_r = turning_radius + track_width / 2
             wx_outer = empty_pivot.location.x + (outer_r * cos_a - rear_y * sin_a)
             wy_outer = empty_pivot.location.y + (outer_r * sin_a + rear_y * cos_a)
-            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.06)))
+            outer_verts.append(bm.verts.new((wx_outer, wy_outer, 0.06 + z_offset)))
         
         # ポリゴンを作成（4頂点の面）
         for p in range(arc_points):
@@ -966,3 +1007,123 @@ def _setup_char_by_char_animation_scene12(char_objects, start_frame, end_frame):
         char_obj.keyframe_insert(data_path="scale", frame=end_frame)
     
     print(f"[シーン 12] {len(char_objects)} 文字に単一フェードインアニメーションを設定")
+
+
+def _fade_out_trajectory(start_frame, end_frame):
+    """回転半径ガイドラインとタイヤ跡軌跡をフェードアウトさせる
+    
+    各セグメントの表示/非表示をスケールアニメーションで制御し、
+    軌跡が描画された順に逆から消えていく演出を実現する。
+    
+    共有マテリアルを触らないため、シーン11の色に影響しない。
+    
+    Parameters:
+        start_frame: フェードアウト開始フレーム
+        end_frame: フェードアウト終了フレーム
+    """
+    trajectory_prefixes = [
+        "CarA_TurningCircle",
+        "CarB_TurningCircle",
+        "CarA_TireTrack",
+        "CarB_TireTrack",
+    ]
+    
+    faded_count = 0
+    for prefix in trajectory_prefixes:
+        # このプレフィックスのセグメントをすべて収集
+        segments = []
+        for obj in bpy.data.objects:
+            if obj.name.startswith(prefix) and "_Seg" in obj.name:
+                segments.append(obj)
+        
+        if not segments:
+            continue
+        
+        # セグメント番号でソート（Seg0, Seg1, ... の順）
+        def extract_seg_number(seg_obj):
+            # "CarA_TurningCircle_Seg42_Obj" → 42
+            import re
+            match = re.search(r'_Seg(\d+)_', seg_obj.name)
+            return int(match.group(1)) if match else 0
+        
+        segments.sort(key=extract_seg_number)
+        
+        # 逆順でフェードアウト（最後に描画されたセグメントから消す）
+        for idx, obj in enumerate(reversed(segments)):
+            fade_frame = start_frame + int((idx / len(segments)) * (end_frame - start_frame))
+            
+            # スケールをアニメーション（1.0 → 0.0）
+            obj.scale = (1.0, 1.0, 1.0)
+            obj.keyframe_insert(data_path="scale", frame=start_frame)
+            
+            obj.scale = (0.0, 0.0, 0.0)
+            obj.keyframe_insert(data_path="scale", frame=fade_frame)
+            
+            # 消えた後、非表示に切り替え（レンダリング負荷軽減）
+            obj.hide_viewport = False
+            obj.hide_render = False
+            obj.keyframe_insert(data_path="hide_viewport", frame=fade_frame)
+            obj.hide_viewport = True
+            obj.hide_render = True
+            hide_frame = fade_frame + 1
+            if hide_frame <= end_frame:
+                obj.keyframe_insert(data_path="hide_viewport", frame=hide_frame)
+                obj.keyframe_insert(data_path="hide_render", frame=hide_frame)
+            
+            faded_count += 1
+    
+    print(f"[シーン 13] 軌跡セグメント {faded_count} 個をフェードアウト ({start_frame}→{end_frame})")
+
+
+def _fade_out_turning_radius_text(start_frame, end_frame):
+    """最小回転半径比較式テキストをフェードアウトさせる
+    
+    テキストコンテナのスケールを (1,1,1) → (0,0,0) にアニメーションさせる。
+    
+    Parameters:
+        start_frame: フェードアウト開始フレーム
+        end_frame: フェードアウト終了フレーム
+    """
+    text_container_name = "TurningRadiusDiff_Container_Scene12"
+    if text_container_name not in bpy.data.objects:
+        print(f"[警告] '{text_container_name}' が見つかりません。フェードアウトをスキップします。")
+        return
+    
+    text_obj = bpy.data.objects[text_container_name]
+    
+    print(f"[フレーム{start_frame}] 最小回転半径比較式テキストフェードアウト開始（{start_frame}→{end_frame}）")
+    
+    # コンテナ自体のスケールをアニメーションで制御
+    text_obj.scale = (1.0, 1.0, 1.0)
+    text_obj.keyframe_insert(data_path="scale", frame=start_frame)
+    
+    # 終了フレーム: スケールを 0 に（完全に消える）
+    text_obj.scale = (0.0, 0.0, 0.0)
+    text_obj.keyframe_insert(data_path="scale", frame=end_frame)
+    
+    # 各文字オブジェクトにもキーフレームを設定（二重確保）
+    for char_obj in text_obj.children:
+        if char_obj.type == 'TEXT':
+            current_scale = char_obj.scale.copy()
+            
+            # 開始フレーム: 現在のスケールを維持
+            char_obj.scale = current_scale
+            char_obj.keyframe_insert(data_path="scale", frame=start_frame)
+            
+            # 終了フレーム: スケールを 0 に
+            char_obj.scale = (0.0, 0.0, 0.0)
+            char_obj.keyframe_insert(data_path="scale", frame=end_frame)
+            
+            # 発光強度も徐々に 0 に
+            if len(char_obj.data.materials) > 0:
+                mat = char_obj.data.materials[0]
+                if mat.use_nodes:
+                    for node in mat.node_tree.nodes:
+                        if node.type == 'BSDF_EMISSION':
+                            current_strength = node.inputs['Strength'].default_value
+                            node.inputs['Strength'].default_value = current_strength
+                            node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=start_frame)
+                            node.inputs['Strength'].default_value = 0.0
+                            node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=end_frame)
+    
+    print(f"[フレーム{end_frame}] 最小回転半径比較式テキストのフェードアウト完了")
