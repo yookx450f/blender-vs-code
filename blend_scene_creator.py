@@ -7,6 +7,7 @@ Blenderスタンドアロンスクリプト - コマンドラインから直接�
 """
 
 import bpy
+import csv
 import os
 import math
 import sys
@@ -56,8 +57,50 @@ else:
 # このスクリプトは起動時に自動的に読み込みます。
 # ============================================================
 
+def load_cars_csv():
+    """cars.csv から車種マスターデータを辞書として読み込む"""
+    csv_path = os.path.join(SCRIPT_DIR, "cars.csv")
+    
+    if not os.path.exists(csv_path):
+        print(f"エラー: 車種データファイルが見つかりません - {csv_path}")
+        print("cars.csv を作成してください。")
+        sys.exit(1)
+    
+    cars_db = {}
+    try:
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # 空行はスキップ
+                car_id = row.get("id", "").strip()
+                if not car_id:
+                    continue
+                cars_db[car_id] = {
+                    "name": row["name"],
+                    "glb_filename": row["glb_filename"],
+                    "length": int(row["length"]),
+                    "width": int(row["width"]),
+                    "height": int(row["height"]),
+                    "ground_clearance": int(row["ground_clearance"]),
+                    "turning_radius": int(row["turning_radius"]),
+                    "acceleration_0_to_100": float(row["acceleration_0_to_100"]),
+                    "rotation_direction": int(row["rotation_direction"])
+                }
+        print(f"車種マスターCSVを読み込みました: {csv_path} ({len(cars_db)} 車種)")
+    except Exception as e:
+        print(f"エラー: cars.csv の読み込みに失敗しました - {e}")
+        sys.exit(1)
+    
+    return cars_db
+
+
 def load_cars_config():
-    """cars_config.json から車の設定を読み込む"""
+    """cars_config.json + cars.csv を結合して車の設定辞書を返す
+    
+    JSONでは carA/carB に id, color, position のみを指定し、
+    寸法データは CSVからidで自動的に取得・結合する。
+    戻り値の構造は従来と同じ（後方互換性維持）。
+    """
     config_path = os.path.join(SCRIPT_DIR, "cars_config.json")
     
     if not os.path.exists(config_path):
@@ -69,21 +112,51 @@ def load_cars_config():
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         
-        # JSONのリスト形式をタプルに変換（position, color）
-        for key in config:
-            if "position" in config[key]:
-                config[key]["position"] = tuple(config[key]["position"])
-            if "color" in config[key]:
-                config[key]["color"] = tuple(config[key]["color"])
+        # CSVから車種マスターデータを取得
+        cars_db = load_cars_csv()
+        
+        # GLBディレクトリの取得（JSONのグローバル設定）
+        glb_dir = config.get("glb_dir", "")
+        
+        # carA/carB ごとにCSVデータを結合
+        merged = {}
+        for key in ["carA", "carB"]:
+            if key not in config:
+                continue
+            
+            car_cfg = config[key]
+            car_id = car_cfg.get("id", "")
+            
+            if car_id not in cars_db:
+                print(f"エラー: CSVに車種ID '{car_id}' が見つかりません")
+                print(f"  利用可能なID: {', '.join(cars_db.keys())}")
+                sys.exit(1)
+            
+            csv_data = cars_db[car_id]
+            merged[key] = {
+                "name": csv_data["name"],
+                "glb_path": os.path.join(glb_dir, csv_data["glb_filename"]),
+                "position": tuple(car_cfg.get("position", [0.0, 0.0, 0])),
+                "color": tuple(car_cfg.get("color", [0.5, 0.5, 0.5])),
+                "dimensions_mm": {
+                    "length": csv_data["length"],
+                    "width": csv_data["width"],
+                    "height": csv_data["height"],
+                    "ground_clearance": csv_data["ground_clearance"],
+                    "turning_radius": csv_data["turning_radius"]
+                },
+                "acceleration_0_to_100_km_h": csv_data["acceleration_0_to_100"],
+                "rotation_z_degrees": csv_data["rotation_direction"]
+            }
         
         print(f"設定ファイルを読み込みました: {config_path}")
-        for key, car_data in config.items():
+        for key, car_data in merged.items():
             dims = car_data.get("dimensions_mm", {})
-            print(f"  - {key}: {car_data['name']}")
+            print(f"  - {key}: {car_data['name']} (ID: {config[key].get('id', '?')})")
             print(f"    GLBパス: {car_data['glb_path']}")
             print(f"    寸法: 全長{dims.get('length', '?')}mm × 全幅{dims.get('width', '?')}mm × 全高{dims.get('height', '?')}mm")
         
-        return config
+        return merged
     
     except json.JSONDecodeError as e:
         print(f"エラー: cars_config.json の形式が正しくありません - {e}")

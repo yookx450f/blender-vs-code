@@ -1,0 +1,3 @@
+id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceleration_0_to_100,rotation_direction
+MURANO2027,日産ムラーノ2027,murano2027.glb,4900,1980,1725,210,5600,10.0,0
+LANDCRUISER250,ランドクルーザー 250 2025,landCluser250-8.5-20000.glb,4925,1940,1925,230,5800,14.0,0
