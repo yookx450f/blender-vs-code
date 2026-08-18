@@ -13,6 +13,7 @@ from animation_settings_cut1 import setup_cut1_animations
 from animation_settings_cut2 import setup_cut2_animations
 from animation_settings_cut3 import setup_cut3_animations
 from animation_settings_cut4 import setup_cut4_animations
+from animation_settings_cut4b import setup_cut4b_animations
 from animation_settings_cut5 import setup_cut5_animations
 
 
@@ -49,7 +50,7 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
     print(f"[アニメーション設定] 実行対象カット: {target_cut}")
     
     scene.frame_start = 0
-    scene.frame_end = 2880
+    scene.frame_end = 3648
     scene.render.fps = 24
     print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end} (fps={scene.render.fps})")
 
@@ -93,7 +94,7 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
 
     # カット 4 を実行（独立実行: previous_state不要）
     if target_cut in ("all", "4"):
-        setup_cut4_animations(
+        cut4_result = setup_cut4_animations(
             scene=scene,
             camera=camera,
             imported_cars=imported_cars,
@@ -101,6 +102,17 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
         )
     else:
         print(f"[アニメーション設定] カット 4 をスキップ（対象カット: {target_cut}）")
+
+    # カット 4b を実行（独立実行: previous_state不要）
+    if target_cut in ("all", "4b"):
+        setup_cut4b_animations(
+            scene=scene,
+            camera=camera,
+            imported_cars=imported_cars,
+            car_dimensions=car_dimensions
+        )
+    else:
+        print(f"[アニメーション設定] カット 4b をスキップ（対象カット: {target_cut}）")
 
     # カット 5 を実行（独立実行: previous_state不要）
     if target_cut in ("all", "5"):

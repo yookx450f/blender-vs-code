@@ -242,12 +242,14 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     # ============================================================
     # 【カット 3】シーン 9: フレーム 1416-1536（最低地上高差表示、5秒）
     #                    停止: フレーム 1536-1584（2秒）
+    #                    フェードアウト: フレーム 1584-1632（2秒）
     # ============================================================
     print("\n=== 【カット 3】シーン 9 設定開始 ===")
 
     scene9_start = 1464
     scene9_end = 1584  # 5秒間（24fps × 5 = 120フレーム）
     scene9_pause_end = 1584  # 停止2秒（24fps × 2 = 48フレーム）
+    scene9_fadeout_end = 1632  # フェードアウト2秒（24fps × 2 = 48フレーム）
 
     # カメラ: シーン8の終了位置を維持
     camera.location = end_loc
@@ -284,6 +286,78 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     car_b.location = car_b_end
     car_b.keyframe_insert(data_path="location", frame=scene9_pause_end)
     print(f"[フレーム{scene9_pause_end}] 停止（2秒）")
+
+    # --- 最低地上高表示のフェードアウト（2秒）: フレーム 1584-1632 ---
+    gc_container_name = "GroundClearanceDiff_Container_Scene9"
+    if gc_container_name in bpy.data.objects:
+        gc_text_obj = bpy.data.objects[gc_container_name]
+        
+        print(f"[フレーム{scene9_pause_end}] 最低地上高表示フェードアウト開始（1584→{scene9_fadeout_end}）")
+
+        # コンテナ自体のスケールをアニメーションで制御
+        # フレーム 1584: スケール維持（1.0, 1.0, 1.0）
+        gc_text_obj.scale = (1.0, 1.0, 1.0)
+        gc_text_obj.keyframe_insert(data_path="scale", frame=scene9_pause_end)
+        
+        # フレーム 1632: スケールを 0 に（完全に消える）
+        gc_text_obj.scale = (0.0, 0.0, 0.0)
+        gc_text_obj.keyframe_insert(data_path="scale", frame=scene9_fadeout_end)
+
+        # 各文字オブジェクトにもキーフレームを設定（二重確保）
+        for char_obj in gc_text_obj.children:
+            if char_obj.type == 'MESH':
+                # まず現在のスケールを取得して保存
+                current_scale = char_obj.scale.copy() if hasattr(char_obj, 'scale') else (1.0, 1.0, 1.0)
+
+                # フレーム 1584: 現在のスケールを維持（キーフレーム）
+                char_obj.scale = current_scale
+                char_obj.keyframe_insert(data_path="scale", frame=scene9_pause_end)
+
+                # フレーム 1632: スケールを 0 に
+                char_obj.scale = (0.0, 0.0, 0.0)
+                char_obj.keyframe_insert(data_path="scale", frame=scene9_fadeout_end)
+
+                # 発光強度も徐々に 0 に（確実に消えるように）
+                if len(char_obj.data.materials) > 0:
+                    mat = char_obj.data.materials[0]
+                    if mat.use_nodes:
+                        for node in mat.node_tree.nodes:
+                            if node.type == 'BSDF_EMISSION':
+                                current_strength = node.inputs['Strength'].default_value
+
+                                # フレーム 1584: 現在の強度を維持（キーフレーム）
+                                node.inputs['Strength'].default_value = current_strength
+                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene9_pause_end)
+
+                                # フレーム 1632: 強度を 0 に
+                                node.inputs['Strength'].default_value = 0.0
+                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene9_fadeout_end)
+                        
+                        # Mix Shader の Fac でも透明度を制御（二重確保）
+                        for n in mat.node_tree.nodes:
+                            if n.type == 'MIX_SHADER':
+                                # フレーム 1584 で完全不透明（Fac=1.0 → Emission を完全に使用）
+                                n.inputs['Fac'].default_value = 1.0
+                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene9_pause_end)
+                                # フレーム 1632 で完全透明（Fac=0.0 → Transparent を完全に使用）
+                                n.inputs['Fac'].default_value = 0.0
+                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene9_fadeout_end)
+                                
+                        # EEVEE の透過設定を確実に有効化
+                        mat.blend_method = 'BLEND'
+                        mat.shadow_method = 'BUFFER'
+
+        print(f"[フレーム{scene9_fadeout_end}] 最低地上高表示のフェードアウト完了（スケール→0）")
+
+    # カメラと車のキーフレームをフェードアウト終了まで延長
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
+    camera.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene9_fadeout_end)
+    car_a.location = car_a_end
+    car_a.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
+    car_b.location = car_b_end
+    car_b.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)

@@ -24,8 +24,11 @@ CUT3_END_FRAME = 1632
 CUT4_START_FRAME = 1632
 CUT4_END_FRAME = 2256
 
-CUT5_START_FRAME = 2256
-CUT5_END_FRAME = 2880
+CUT4B_START_FRAME = 2256
+CUT4B_END_FRAME = 3024
+
+CUT5_START_FRAME = 3024
+CUT5_END_FRAME = 3288
 
 # ショート動画用（縦長9:16、フレーム0-144、約6秒）
 SHORT_START_FRAME = 0
@@ -37,6 +40,7 @@ CUT_FRAMES = {
     2: (CUT2_START_FRAME, CUT2_END_FRAME),
     3: (CUT3_START_FRAME, CUT3_END_FRAME),
     4: (CUT4_START_FRAME, CUT4_END_FRAME),
+    "4b": (CUT4B_START_FRAME, CUT4B_END_FRAME),
     5: (CUT5_START_FRAME, CUT5_END_FRAME),
 }
 
@@ -50,7 +54,8 @@ CAMERA_POSITIONS = {
     "cut2_end":   {"loc": (0.0, -7.0, 2.5), "target": (0.0, 0.0, 1.5)},
     "cut3_end":   {"loc": (-6.0, -2.0, 0.8), "target": (0.0, 0.0, 1.5)},
     "cut4_end":   {"loc": None, "target": None},  # Cut4は回転中心に依存
-    "cut5_end":   {"loc": None, "target": None},  # Cut5はCut4のカメラ位置を継承
+    "cut4b_end":  {"loc": None, "target": None},  # Cut4bはCut4のカメラ位置を継承（俯瞰に戻す）
+    "cut5_end":   {"loc": None, "target": None},  # Cut5はCut4bのカメラ位置を継承
 }
 
 # ============================================================

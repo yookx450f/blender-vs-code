@@ -271,8 +271,8 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     camera.keyframe_insert(data_path="location", frame=scene11_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene11_start)
     
-    # カメラ終了位置（回転円の中心上空から斜め上）
-    camera_scene11_end_loc = (mid_turn_center_x, mid_turn_center_y - 3.0, 25.0)
+    # カメラ終了位置（回転円の中心真上から俯瞰）
+    camera_scene11_end_loc = (mid_turn_center_x, mid_turn_center_y, 25.0)
     look_at_target = Vector((mid_turn_center_x, mid_turn_center_y, 0.0))
     camera.location = camera_scene11_end_loc
     set_camera_look_at(camera, camera_scene11_end_loc, look_at_target)
@@ -334,12 +334,12 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene12_end}] シーン 12 終了：最小回転半径比較式表示完了")
 
     # ============================================================
-    # 【カット 4】シーン 13: フレーム 2184-2232（軌跡・テキストのフェードアウト、2秒）
+    # 【カット 4】シーン 13: フレーム 2184-2208（軌跡・テキストのフェードアウト、1秒）
     # ============================================================
     print("\n=== 【カット 4】シーン 13 設定開始 ===")
     
     scene13_start = scene12_end  # 2184
-    scene13_end = scene13_start + 48  # 2秒（24fps × 2 = 48フレーム）
+    scene13_end = scene13_start + 24  # 1秒（24fps × 1 = 24フレーム）
     
     # カメラ位置を維持
     camera.location = camera_scene11_end_loc
@@ -364,22 +364,73 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene13_end}] シーン 13 終了：軌跡・テキストのフェードアウト完了")
 
     # ============================================================
-    # 【カット 4】最終停止: フレーム 2232-2256（1秒）
+    # 【カット 4】シーン 14: フレーム 2208-2256（車が左右にスライド、約2秒）
+    # スライド後の位置はカット4bの開始位置と同じ
     # ============================================================
-    final_pause_end = scene13_end + 24  # 1秒（24fps × 1 = 24フレーム）
+    print("\n=== 【カット 4】シーン 14 設定開始 ===")
     
+    scene14_start = scene13_end  # 2208
+    scene14_end = 2256  # カット4の終了フレーム
+    
+    # スライド距離：carAを左（X負方向）、carBを右（X正方向）に分離
+    slide_distance = 1.5  # 各車1.5mずつ離す（合計3mの間隔）
+    
+    # Emptyの開始位置（現在の位置、車が重なっている状態）
+    empty_a_start_loc = empty_a.location.copy()
+    empty_b_start_loc = empty_b.location.copy()
+    
+    # Emptyの終了位置（スライド距離分ずらす）
+    empty_a_end_loc = (empty_a_start_loc.x - slide_distance, empty_a_start_loc.y, empty_a_start_loc.z)
+    empty_b_end_loc = (empty_b_start_loc.x + slide_distance, empty_b_start_loc.y, empty_b_start_loc.z)
+    
+    print(f"[シーン14] Empty_A 開始: {empty_a_start_loc}, 終了: {empty_a_end_loc}")
+    print(f"[シーン14] Empty_B 開始: {empty_b_start_loc}, 終了: {empty_b_end_loc}")
+    
+    # Emptyの位置キーフレームを設定（ease-in-outで滑らかにスライド）
+    empty_a.location = empty_a_start_loc
+    empty_a.keyframe_insert(data_path="location", frame=scene14_start)
+    empty_b.location = empty_b_start_loc
+    empty_b.keyframe_insert(data_path="location", frame=scene14_start)
+    
+    # ease-in-outカーブで中間キーフレームを追加
+    num_slide_frames = 15
+    for i in range(1, num_slide_frames):
+        t = i / num_slide_frames
+        eased_t = t * t * (3.0 - 2.0 * t)  # ease-in-out
+        frame = scene14_start + int((scene14_end - scene14_start) * t)
+        
+        new_x_a = empty_a_start_loc[0] + (empty_a_end_loc[0] - empty_a_start_loc[0]) * eased_t
+        empty_a.location = (new_x_a, empty_a_start_loc[1], empty_a_start_loc[2])
+        empty_a.keyframe_insert(data_path="location", frame=frame)
+        
+        new_x_b = empty_b_start_loc[0] + (empty_b_end_loc[0] - empty_b_start_loc[0]) * eased_t
+        empty_b.location = (new_x_b, empty_b_start_loc[1], empty_b_start_loc[2])
+        empty_b.keyframe_insert(data_path="location", frame=frame)
+    
+    # 終了位置
+    empty_a.location = empty_a_end_loc
+    empty_a.keyframe_insert(data_path="location", frame=scene14_end)
+    empty_b.location = empty_b_end_loc
+    empty_b.keyframe_insert(data_path="location", frame=scene14_end)
+    
+    # Emptyの回転も維持（-2πのまま）
+    empty_a.rotation_euler.z = total_angle
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene14_start)
+    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=scene14_end)
+    empty_b.rotation_euler.z = total_angle
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene14_start)
+    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=scene14_end)
+    
+    # カメラ位置も維持（俯瞰視点）
     camera.location = camera_scene11_end_loc
     camera.rotation_euler = rot_scene11_end
-    camera.keyframe_insert(data_path="location", frame=final_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=final_pause_end)
+    camera.keyframe_insert(data_path="location", frame=scene14_start)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene14_start)
+    camera.keyframe_insert(data_path="location", frame=scene14_end)
+    camera.keyframe_insert(data_path="rotation_euler", frame=scene14_end)
     
-    # Empty回転も最終停止フレームまで固定
-    empty_a.rotation_euler.z = total_angle
-    empty_a.keyframe_insert(data_path="rotation_euler", index=2, frame=final_pause_end)
-    empty_b.rotation_euler.z = total_angle
-    empty_b.keyframe_insert(data_path="rotation_euler", index=2, frame=final_pause_end)
-    
-    print(f"[フレーム{final_pause_end}] 最終停止（1秒）")
+    print(f"[フレーム{scene14_start}] シーン 14 開始：車が重なった位置からスライド開始")
+    print(f"[フレーム{scene14_end}] シーン 14 終了：車が左右に分離（カット4bの開始位置と同じ）")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -388,10 +439,14 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
 
     # 結果を返す
     # 【修正: カット完全分離】CutState 形式で最終状態のみを返す
+    # スライド後の車のグローバル位置を計算
+    car_a_final_loc = (empty_a_end_loc[0] + turning_radius_a, empty_a_end_loc[1], empty_a_end_loc[2])
+    car_b_final_loc = (empty_b_end_loc[0] + turning_radius_b, empty_b_end_loc[1], empty_b_end_loc[2])
+    
     from animation_common import CutState
     return CutState(
-        car_a_loc=(0.0, car_a_end[1], car_a_end[2]),  # 1週するのでX=0に戻る
-        car_b_loc=(0.0, car_b_end[1], car_b_end[2]),
+        car_a_loc=car_a_final_loc,
+        car_b_loc=car_b_final_loc,
         camera_loc=camera_scene11_end_loc,
         camera_rot=(rot_scene11_end.x, rot_scene11_end.y, rot_scene11_end.z),
     )

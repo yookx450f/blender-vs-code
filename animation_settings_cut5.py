@@ -81,8 +81,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
     # ============================================================
     print("\n=== 【カット 5】シーン 13 設定開始 ===")
 
-    scene13_start = 2256
-    scene13_end = 2400  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
+    scene13_start = 3024
+    scene13_end = 3168  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
 
     # カメラ: 6秒かけてゆっくり90度回転
     # 開始位置: シーン12終了時のカメラ位置・回転
@@ -124,10 +124,10 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
 
     bpy.context.view_layer.update()
 
-    # 開始位置: カット4終了時の車の位置（X=0, Y, Z）
-    # car_a_end/car_b_end はカット4の戻り値から取得（X=0に設定されているはず）
-    start_loc_a = (0.0, car_a_end[1], car_a_end[2])
-    start_loc_b = (0.0, car_b_end[1], car_b_end[2])
+    # 開始位置: カット4b終了時の車の実際の位置をそのまま使用
+    # （カット4bでは車が回転しており、X=0とは限らないため）
+    start_loc_a = car_a_end
+    start_loc_b = car_b_end
 
     print(f"[シーン13] 車の開始位置 carA: {start_loc_a}")
     print(f"[シーン13] 車の開始位置 carB: {start_loc_b}")
@@ -167,8 +167,8 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
     # ============================================================
     print("\n=== 【カット 5】シーン 14 設定開始 ===")
 
-    scene14_start = scene13_end  # 2400
-    scene14_end = 2880  # 15秒間（24fps × 15 = 480フレーム）
+    scene14_start = scene13_end  # 2808
+    scene14_end = 3648  # 15秒間（24fps × 15 = 480フレーム）
 
     # Empty親オブジェクトを削除
     bpy.ops.object.select_all(action='DESELECT')
