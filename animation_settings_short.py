@@ -1,6 +1,6 @@
 """
 アニメーション設定モジュール - ショート動画（縦長9:16）
-フレーム 0-216（約9秒、24fps）を処理する。
+フレーム 0-240（約10秒、24fps）を処理する。
 
 カット1の「車が重なっていく部分」だけを抽出した独立動画。
 YouTube Shorts用の縦長フォーマット。
@@ -208,7 +208,7 @@ def _ensure_linear_interpolation_for_object(obj, frame):
 
 def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions):
     """
-    ショート動画のアニメーションを設定（フレーム 0-216、約9秒）
+    ショート動画のアニメーションを設定（フレーム 0-240、約10秒）
     
     カット1の「車が重なっていく部分」だけを抽出。
     縦長9:16フォーマット用。
@@ -287,8 +287,8 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     # スタート角度（X-Y平面上的な極座標の角度）
     start_angle = math.atan2(cam_start[0], cam_start[1])
     # 向かって左から右へ移動（角度を負の方向に減少）
-    # 6秒(144フレーム)で-0.85ラジアン → 9秒(216フレーム)に比例延長
-    total_rotation = -0.85 * (216 / 144)  # ラジアン（約74度）
+    # 6秒(144フレーム)で-0.85ラジアン → 10秒(240フレーム)に比例延長
+    total_rotation = -0.85 * (240 / 144)  # ラジアン（約83度）
 
     # レンズ焦距（数値を大きくしてズームイン）
     original_lens = camera.data.lens
@@ -305,8 +305,8 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     # フレーム順にキーフレームを設定（円弧パンニング）
     # ============================================================
     
-    # キーフレーム間隔（24フレーム=1秒ごと、144→216に延長）
-    arc_keyframes = [0, 24, 48, 72, 96, 120, 144, 168, 192, 216]
+    # キーフレーム間隔（24フレーム=1秒ごと、144→240に延長）
+    arc_keyframes = [0, 24, 48, 72, 96, 120, 144, 168, 192, 216, 240]
     num_segments = len(arc_keyframes) - 1
     
     for i, frame in enumerate(arc_keyframes):
@@ -333,13 +333,15 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     _set_location_keyframe(car_a, 144, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 144, car_b_end[0], car_b_end[1], car_b_end[2])
     
-    # --- フレーム 168, 192, 216: 車の位置維持（延長分）---
+    # --- フレーム 168, 192, 216, 240: 車の位置維持（延長分）---
     _set_location_keyframe(car_a, 168, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 168, car_b_end[0], car_b_end[1], car_b_end[2])
     _set_location_keyframe(car_a, 192, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 192, car_b_end[0], car_b_end[1], car_b_end[2])
     _set_location_keyframe(car_a, 216, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 216, car_b_end[0], car_b_end[1], car_b_end[2])
+    _set_location_keyframe(car_a, 240, car_a_end[0], car_a_end[1], car_a_end[2])
+    _set_location_keyframe(car_b, 240, car_b_end[0], car_b_end[1], car_b_end[2])
     
     # 最終カメラ回転を保存（CutState用）
     final_angle = start_angle + total_rotation
@@ -347,7 +349,7 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     set_camera_look_at(camera, final_cam, target)
     rot_f192 = camera.rotation_euler.copy()
     
-    print(f"  [フレーム 216] カメラパンニング完了（右方向に{math.degrees(total_rotation):.1f}°回転）")
+    print(f"  [フレーム 240] カメラパンニング完了（右方向に{math.degrees(total_rotation):.1f}°回転）")
     
     # ============================================================
     # CarBの半透明化を最後に設定（他のキーフレームと干渉しないように）
@@ -363,10 +365,11 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
             (127, 0.5),  # 半透明寄りに
             (144, 0.35), # 半透明完了
             (192, 0.35), # 透明度維持
-            (216, 0.35), # 最終: 透明度維持
+            (216, 0.35), # 透明度維持
+            (240, 0.35), # 最終: 透明度維持
         ]
         _setup_gradual_transparency(car_b, frames_alphas)
-        print(f"  Alpha(CarB): フレーム0-216で徐々に半透明化 (2.3秒待機後 1.0→0.98→0.9→0.75→0.5→0.35→維持)")
+        print(f"  Alpha(CarB): フレーム0-240で徐々に半透明化 (2.3秒待機後 1.0→0.98→0.9→0.75→0.5→0.35→維持)")
     
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
