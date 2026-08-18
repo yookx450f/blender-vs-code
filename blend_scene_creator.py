@@ -75,11 +75,13 @@ def load_cars_csv():
                 car_id = row.get("id", "").strip()
                 if not car_id:
                     continue
+                # Widthはミラー未包含のため、20cm(200mm)を加算する
+                width_raw = int(row["width"])
                 cars_db[car_id] = {
                     "name": row["name"],
                     "glb_filename": row["glb_filename"],
                     "length": int(row["length"]),
-                    "width": int(row["width"]),
+                    "width": width_raw + 200,
                     "height": int(row["height"]),
                     "ground_clearance": int(row["ground_clearance"]),
                     "turning_radius": int(row["turning_radius"]),
