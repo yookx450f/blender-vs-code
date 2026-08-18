@@ -1103,7 +1103,7 @@ def main():
     # カット番号に応じてファイル名を設定
     if CUT_NUMBER == "short":
         output_filename = "short_overlap.mp4"
-    elif CUT_NUMBER in ("1", "2", "3", "4", "5"):
+    elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
         output_filename = "mp4.mp4"
@@ -1160,7 +1160,7 @@ def main():
     # カット番号に応じてファイル名を切り替え（各カット独立保存用）
     if CUT_NUMBER == "short":
         blend_output_path = os.path.join(SCRIPT_DIR, "short_scene.blend")
-    elif CUT_NUMBER in ("1", "2", "3", "4", "5"):
+    elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:
         blend_output_path = os.path.join(SCRIPT_DIR, "car_comparison_scene.blend")
