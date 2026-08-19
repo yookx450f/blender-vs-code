@@ -75,13 +75,15 @@ def load_cars_csv():
                 car_id = row.get("id", "").strip()
                 if not car_id:
                     continue
-                # Widthはミラー未包含のため、20cm(200mm)を加算する
+                # Widthはミラー未包含のため、20cm(200mm)を加算して3Dスケールに使用する
+                # ただしテキスト表示にはCSVの生値を使用するため、width_rawを別途保持する
                 width_raw = int(row["width"])
                 cars_db[car_id] = {
                     "name": row["name"],
                     "glb_filename": row["glb_filename"],
                     "length": int(row["length"]),
                     "width": width_raw + 200,
+                    "width_raw": width_raw,
                     "height": int(row["height"]),
                     "ground_clearance": int(row["ground_clearance"]),
                     "turning_radius": int(row["turning_radius"]),
@@ -143,6 +145,7 @@ def load_cars_config():
                 "dimensions_mm": {
                     "length": csv_data["length"],
                     "width": csv_data["width"],
+                    "width_raw": csv_data.get("width_raw", csv_data["width"]),
                     "height": csv_data["height"],
                     "ground_clearance": csv_data["ground_clearance"],
                     "turning_radius": csv_data["turning_radius"]
@@ -1045,6 +1048,7 @@ def main():
             car_dimensions[key] = {
                 "length": dims.get("length", 0),
                 "width": dims.get("width", 0),
+                "width_raw": dims.get("width_raw", dims.get("width", 0)),
                 "height": dims.get("height", 0),
                 "ground_clearance": dims.get("ground_clearance", 0),
                 "turning_radius": dims.get("turning_radius", 0),

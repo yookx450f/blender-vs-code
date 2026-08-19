@@ -666,8 +666,9 @@ def _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end,
     width_diff_mm = _calculate_width_difference(car_a, car_b, car_dimensions)
 
     if car_dimensions:
-        width_a_mm = car_dimensions.get("carA", {}).get("width", 0)
-        width_b_mm = car_dimensions.get("carB", {}).get("width", 0)
+        # テキスト表示にはCSVの生値を使用（+20cm加算前の値）
+        width_a_mm = car_dimensions.get("carA", {}).get("width_raw", car_dimensions.get("carA", {}).get("width", 0))
+        width_b_mm = car_dimensions.get("carB", {}).get("width_raw", car_dimensions.get("carB", {}).get("width", 0))
     else:
         def get_car_width(car_obj):
             bounds = [Vector(b) for b in car_obj.bound_box]
@@ -738,7 +739,14 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
     scene.collection.objects.link(text_container)
 
-    text_str = f"全幅：{width_b_mm}mm - {width_a_mm}mm → {width_diff_mm:+d}mm"
+    # 差の計算は+20cm加算後の値で行うが、表示数字はCSV生値を使用
+    if car_dimensions:
+        width_a_for_calc = car_dimensions.get("carA", {}).get("width", 0)
+        width_b_for_calc = car_dimensions.get("carB", {}).get("width", 0)
+        diff_mm = width_b_for_calc - width_a_for_calc
+    else:
+        diff_mm = width_diff_mm
+    text_str = f"全幅：{width_b_mm}mm - {width_a_mm}mm → {diff_mm:+d}mm"
 
     char_objects = []
     half_spacing = 0.12  # 半角文字の基本間隔

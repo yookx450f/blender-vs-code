@@ -155,8 +155,9 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
         # 寸法情報を取得
         width_diff_mm = _calculate_width_difference(car_a, car_b, car_dimensions)
         if car_dimensions:
-            width_a_mm = car_dimensions.get("carA", {}).get("width", 0)
-            width_b_mm = car_dimensions.get("carB", {}).get("width", 0)
+            # テキスト表示にはCSVの生値を使用（+20cm加算前の値）
+            width_a_mm = car_dimensions.get("carA", {}).get("width_raw", car_dimensions.get("carA", {}).get("width", 0))
+            width_b_mm = car_dimensions.get("carB", {}).get("width_raw", car_dimensions.get("carB", {}).get("width", 0))
         else:
             def get_car_width(car_obj):
                 from mathutils import Vector

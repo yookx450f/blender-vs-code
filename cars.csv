@@ -10,7 +10,7 @@ id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceler
 9,日産 サクラ,sakura.glb,3395,1475,1655,145,4800,9.5,0
 10,ハイランダー,highlander.glb,4950,1930,1730,210,5700,8.4,0
 11,アルファード 2023,alphard.glb,4995,1850,1935,150,5900,8.8,0
-12,エルグランド 2026,elgland.glb,4995,1895,1975,165,5800,8.8,0
+12,エルグランド 2026,elgland.glb,4995,1895,1975,165,5800,7.0,0
 13,ランドクルーザー300,landCluiser300.glb,4985,1980,1925,225,5900,6.7,0
 14,TESLA MODEL Y,modely.glb,4760,1920,1625,157,6100,5.0,90
 15,TESLA MODEL Y L,modelyl.glb,4970,1920,1670,225,5900,5.0,90
@@ -20,3 +20,7 @@ id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceler
 19,スープラA90,soupla90.glb,4380,1865,1295,118,5200,4.1,0
 20,タコマ SR5 ダブルキャブ,tacoma.glb,5621,1951,1892,272,6430,6.4,90
 21,ラングラー4ドア,wrangler.glb,4785,1894,1828,246,5940,6.5,0
+22,セレナ 2023,selena.glb,4690,1695,1870,135,5700,8.5,0
+23,エルグランド 2010,elgland2010.glb,4965,1850,1815,150,5400,8.0,0
+24,レクサス LM,lm.glb,4965,1850,1815,150,5400,8.0,0
+
