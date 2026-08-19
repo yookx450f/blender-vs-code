@@ -44,24 +44,40 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
         loc_scene12_end = previous_state.camera_loc
         rot_scene12_end = previous_state.camera_rot
     else:
-        # 固定位置から読み込み（Cut4終了時のカメラ位置を計算）
-        car_a_end, car_b_end = get_car_positions()
+        # 固定位置から読み込み（Cut4b終了時の車の位置を計算）
+        # Cut4bと同じ Emptyピボット + スライド の計算ロジックを使用
+        car_a_base, car_b_base = get_car_positions()
         
-        # Cut4の終了カメラ位置は俯瞰視点であり、回転中心の中間点上空にある
-        # 回転半径デフォルト値: carA=5.2m, carB=6.0m
-        default_turning_radius_a = 5.2
-        default_turning_radius_b = 6.0
+        # 回転半径を取得（JSONから、なければデフォルト値使用）
+        if car_dimensions:
+            turning_radius_a = car_dimensions.get("carA", {}).get("turning_radius", 5200) / 1000.0
+            turning_radius_b = car_dimensions.get("carB", {}).get("turning_radius", 6000) / 1000.0
+        else:
+            turning_radius_a = 5.2
+            turning_radius_b = 6.0
         
-        # Emptyピボット位置（回転中心）を計算
-        empty_a_loc = (-default_turning_radius_a, car_a_end[1], car_a_end[2])
-        empty_b_loc = (-default_turning_radius_b, car_b_end[1], car_b_end[2])
+        slide_distance = 1.5  # Cut4/Cut4bと同じスライド距離
         
-        # 回転中心の中間点
-        mid_turn_center_x = (empty_a_loc[0] + empty_b_loc[0]) / 2.0
-        mid_turn_center_y = (empty_a_loc[1] + empty_b_loc[1]) / 2.0
+        # Empty開始位置（回転中心はX=0からturning_radiusだけ左側）
+        empty_a_start_loc = (-turning_radius_a, car_a_base[1], car_a_base[2])
+        empty_b_start_loc = (-turning_radius_b, car_b_base[1], car_b_base[2])
         
-        # カメラ位置: Cut4終了時の俯瞰視点（Z=25m, Y=-3m手前）
-        loc_scene12_end = (mid_turn_center_x, mid_turn_center_y - 3.0, 25.0)
+        # Cut4のシーン14でのスライド後のEmpty位置
+        empty_a_end_loc = (empty_a_start_loc[0] - slide_distance, empty_a_start_loc[1], empty_a_start_loc[2])
+        empty_b_end_loc = (empty_b_start_loc[0] + slide_distance, empty_b_start_loc[1], empty_b_start_loc[2])
+        
+        # Cut4b終了時の車のグローバル位置を計算
+        # empty_end_loc + (turning_radius, 0, 0) = 車のグローバル位置
+        car_a_global_x = empty_a_end_loc[0] + turning_radius_a
+        car_b_global_x = empty_b_end_loc[0] + turning_radius_b
+        
+        car_a_end = (car_a_global_x, empty_a_end_loc[1], empty_a_end_loc[2])
+        car_b_end = (car_b_global_x, empty_b_end_loc[1], empty_b_end_loc[2])
+        
+        # カメラ位置: Cut4b終了時の俯瞰視点（Z=25.0、車の中央真上）
+        mid_turn_center_x = (empty_a_end_loc[0] + empty_b_end_loc[0]) / 2.0
+        mid_turn_center_y = (empty_a_end_loc[1] + empty_b_end_loc[1]) / 2.0
+        loc_scene12_end = (mid_turn_center_x, mid_turn_center_y, 25.0)
         
         # 注視点は回転中心の中間点
         target_cam = (mid_turn_center_x, mid_turn_center_y, 0.0)
