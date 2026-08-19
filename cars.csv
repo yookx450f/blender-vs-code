@@ -18,3 +18,5 @@ id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceler
 17,シエンタ,sienta.glb,4260,1695,1695,140,5000,10.0,0
 18,LFA,lfa.glb,4505,1895,1220,115,6100,3.7,0
 19,スープラA90,soupla90.glb,4380,1865,1295,118,5200,4.1,0
+20,タコマ SR5 ダブルキャブ,tacoma.glb,5621,1951,1892,272,6430,6.4,90
+21,ラングラー4ドア,wrangler.glb,4785,1894,1828,246,5940,6.5,0
