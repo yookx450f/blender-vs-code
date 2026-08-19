@@ -22,5 +22,5 @@ id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceler
 21,ラングラー4ドア,wrangler.glb,4785,1894,1828,246,5940,6.5,0
 22,セレナ 2023,selena.glb,4690,1695,1870,135,5700,8.5,0
 23,エルグランド 2010,elgland2010.glb,4965,1850,1815,150,5400,8.0,0
-24,レクサス LM,lm.glb,4965,1850,1815,150,5400,8.0,0
+24,レクサス LM,lm.glb,5125,1890,1955,140,5900,6.9,0
 
