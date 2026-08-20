@@ -32,4 +32,9 @@ id,name,glb_filename,length,width,height,ground_clearance,turning_radius,acceler
 31,ステップワゴン 2017,stepwagon2017.glb,4800,1750,1840,145,5400,99,0
 32,ヴェルファイア 2023,vellfire2023.glb,4995,1850,1945,155,5900,8.8,0
 33,オデッセイ,odyssey.glb,4860,1820,1695,145,5400,99,0
+34,ミライース,miraeth.glb,3395,1475,1500,155,4400,99,0
+35,コースター,costa_bigvan.glb,6255,2080,2630,999,9999,99,0
+36,タンドラ,tandra.glb,5930,2030,1980,999,9999,99,0
+37,スマート フォーフォー,smart44.glb,3550,1665,1545,999,9999,99,0
+
 
