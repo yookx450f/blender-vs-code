@@ -1,13 +1,16 @@
 """
-アニメーション設定モジュール - ショート動画（縦長9:16）
+アニメーション設定モジュール - ショート動画v2（縦長9:16）
 フレーム 0-240（約10秒、24fps）を処理する。
 
 カット1の「車が重なっていく部分」だけを抽出した独立動画。
 YouTube Shorts用の縦長フォーマット。
 
+short2 の違い:
+    半透明化をドライバー式ではなくキーフレーム直接設定方式を使用。
+
 使い方:
-    from animation_settings_short import setup_short_animations
-    setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+    from animation_settings_short2 import setup_short2_animations
+    setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
 """
 
 import bpy
@@ -122,12 +125,15 @@ def _ensure_linear_interpolation_for_object(obj, frame):
                                     kf.interpolation = 'LINEAR'
 
 
-def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions):
+def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions):
     """
-    ショート動画のアニメーションを設定（フレーム 0-240、約10秒）
+    ショート動画v2のアニメーションを設定（フレーム 0-240、約10秒）
     
     カット1の「車が重なっていく部分」だけを抽出。
     縦長9:16フォーマット用。
+    
+    short との違い:
+        半透明化をキーフレーム直接設定方式を使用。
     
     Parameters:
         scene: bpy.context.scene
@@ -139,7 +145,7 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     Returns:
         dict: 最終状態情報
     """
-    print("\n=== ショート動画 アニメーション設定を開始 ===")
+    print("\n=== ショート動画v2 アニメーション設定を開始 ===")
     
     # ============================================================
     # 前提計算：車の位置・接地 Z を準備
@@ -268,19 +274,18 @@ def setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded
     print(f"  [フレーム 240] カメラパンニング完了（右方向に{math.degrees(total_rotation):.1f}°回転）")
     
     # ============================================================
-    # CarBの半透明化を設定（カット1と同じ手法を使用）
-    # _setup_transparency_animation でアニメーションデータをクリア後、
+    # CarBの半透明化を設定（ドライバー式 - Cut1と同じ方式）
+    # _setup_transparency_animation で Principled BSDF の Alpha に数式ドライバーを追加
     # フレーム30-120でスムーズに半透明化 (1.0→0.35)
     # ============================================================
     if car_b:
-        from animation_common import _setup_transparency_animation
-        _setup_transparency_animation(car_b, 30, 120, 1.0, 0.35)
-        print(f"  Alpha(CarB): フレーム30-120で徐々に半透明化 (1.0→0.35)")
+        _setup_transparency_animation(car_b, 30, 120, 0.40, 0.35)
+        print(f"  Alpha(CarB): フレーム30-120で徐々に半透明化 (0.40→0.35) [ドライバー式]")
     
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
     
-    print("\n=== ショート動画 アニメーション完了 ===")
+    print("\n=== ショート動画v2 アニメーション完了 ===")
     
     from animation_common import CutState
     return CutState(

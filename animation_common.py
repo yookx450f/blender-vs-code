@@ -94,55 +94,236 @@ def _collect_all_mesh_objects_recursive(obj):
     return meshes
 
 
+def clear_material_animation(node_tree):
+    """マテリアルノードツリーのアニメーションデータを完全にクリアする
+    Blender 5.xのレイヤー化アクションシステムに対応
+    
+    Parameters:
+        node_tree: bpy.types.NodeTree (マテリアルのノードツリー)
+    """
+    if not hasattr(node_tree, 'animation_data'):
+        return
+    
+    if node_tree.animation_data is None:
+        return
+    
+    action = node_tree.animation_data.action
+    if not action:
+        return
+    
+    # Blender 4.x以前: fcurves直接アクセス
+    if hasattr(action, 'fcurves'):
+        while len(action.fcurves) > 0:
+            action.fcurves.remove(0)
+    # Blender 5.x: レイヤー化アクションシステム
+    elif hasattr(action, 'layers'):
+        for layer in action.layers:
+            for strip in layer.strips:
+                if strip.type == 'KEYFRAME':
+                    for cb in strip.channelbags:
+                        for fc in cb.fcurves:
+                            while len(fc.keyframe_points) > 0:
+                                fc.keyframe_points.remove(0)
+
+
 def _setup_transparency_animation(car_object, start_frame, end_frame, start_alpha, end_alpha):
     """車のマテリアル不透明度をアニメーションさせる（内部用）
     
-    GLBインポートでは親オブジェクトがEMPTYで子メッシュにマテリアルがあるため、
-    再帰的にすべての子メッシュを処理する。
+    Blender 5.xのNodeTreeアニメーションの問題を回避するため、
+    ドライバーベースのアプローチを使用。
+    
+    ドライバー式に直接計算式を書き、フレーム番号からAlpha値を計算する方式。
+    clamp(frame, start_frame, end_frame) を使用して範囲外をクリップ。
     """
     if car_object is None:
         return
 
-    # 親オブジェクトとすべての子メッシュを取得
     all_meshes = _collect_all_mesh_objects_recursive(car_object)
     
-    # 親がMESHで子がない場合は親のみを処理
     if not all_meshes:
         if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
             all_meshes = [car_object]
         else:
             return
 
+    # ドライバー式: フレーム番号からAlpha値を計算
+    # alpha = start_alpha - (start_alpha - end_alpha) * clamp((frame - start_frame) / (end_frame - start_frame), 0, 1)
+    # Blenderのドライバーでは clamp(a, min, max) 関数を使用可能
+    sf = float(start_frame)
+    ef = float(end_frame)
+    sa = float(start_alpha)
+    ea = float(end_alpha)
+    
+    # 式: frame < start_frame なら常に完全不透明(1.0)を返し、それ以外は通常計算
+    # これにより、アニメーション開始前はstart_alphaの影響を受けず、常に不透明になる
+    expr = f"1.0 if frame < {sf} else {sa} + ({ea} - {sa}) * clamp((frame - {sf}) / ({ef} - {sf}), 0.0, 1.0)"
+
     for mesh_obj in all_meshes:
         if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
             continue
         for material in mesh_obj.data.materials:
-            if material is None:
+            if material is None or not material.use_nodes:
                 continue
-            if not material.use_nodes:
-                continue
-
-            # EEVEE 透過対応
             try:
                 material.blend_method = 'BLEND'
             except AttributeError:
                 pass
-
             nodes = material.node_tree.nodes
             principled_node = None
             for node in nodes:
                 if node.type == 'BSDF_PRINCIPLED':
                     principled_node = node
                     break
-
             if principled_node is None or 'Alpha' not in principled_node.inputs:
                 continue
-
             alpha_input = principled_node.inputs['Alpha']
-            alpha_input.default_value = start_alpha
-            alpha_input.keyframe_insert(data_path="default_value", frame=start_frame)
-            alpha_input.default_value = end_alpha
-            alpha_input.keyframe_insert(data_path="default_value", frame=end_frame)
+            alpha_input.driver_remove("default_value")
+            driver = alpha_input.driver_add("default_value").driver
+            driver.type = 'SCRIPTED'
+            driver.expression = expr
+            print(f"    ドライバー式: {expr}")
+
+    print(f"  Alphaアニメーション(ドライバー式): {car_object.name} フレーム{start_frame}-{end_frame} ({start_alpha}→{end_alpha})")
+
+def _get_material_color(material):
+    """マテリアルからベースカラーを取得"""
+    if not material or not material.use_nodes:
+        return (0.5, 0.5, 0.5)
+    
+    nodes = material.node_tree.nodes
+    for node in nodes:
+        if node.type == 'BSDF_PRINCIPLED':
+            if 'Base Color' in node.inputs:
+                return tuple(node.inputs['Base Color'].default_value[:3])
+            elif 'Color' in node.inputs:
+                return tuple(node.inputs['Color'].default_value[:3])
+    return (0.5, 0.5, 0.5)
+
+
+def _setup_transparency_keyframe_animation(car_object, start_frame, end_frame, start_alpha, end_alpha, step_frames=8):
+    """車のマテリアル不透明度をキーフレームでアニメーションさせる（Mix Shader Fac 方式）
+    
+    Blender 5.x の NodeTree アニメーションの問題を回避するため、
+    Mix Shader + Transparent BSDF + Principled BSDF の構成を使用し、
+    Mix Shader の Fac（混合比率）にキーフレームを設定する。
+    
+    Fac = 1.0 で完全不透明、Fac = 0.0 で完全透明
+    
+    Parameters:
+        car_object: 半透明化対象の車オブジェクト
+        start_frame: 半透明化開始フレーム
+        end_frame: 半透明化終了フレーム
+        start_alpha: 開始時のAlpha値 (1.0=完全不透明)
+        end_alpha: 終了時のAlpha値 (0.0=完全透明)
+        step_frames: キーフレーム間隔（フレーム数、デフォルト8=約0.33秒）
+    """
+    if car_object is None:
+        return
+
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+    
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
+
+    # キーフレームを設定するフレームリストを生成
+    frames = list(range(start_frame, end_frame + 1, step_frames))
+    if frames[-1] != end_frame:
+        frames.append(end_frame)
+
+    processed_materials = set()  # 同じマテリアルを複数回処理しないようにする
+
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None or not material.use_nodes:
+                continue
+            # 同じマテリアルは1回だけ処理
+            if id(material) in processed_materials:
+                continue
+            processed_materials.add(id(material))
+            
+            try:
+                material.blend_method = 'BLEND'
+            except AttributeError:
+                pass
+            
+            # 元のマテリアルの色を取得
+            original_color = _get_material_color(material)
+            
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+            
+            # 既存のノードをクリアして Mix Shader 構成を作成
+            nodes.clear()
+            
+            # Output ノード
+            output_node = nodes.new(type='ShaderNodeOutputMaterial')
+            output_node.location = (600, 0)
+            
+            # Mix Shader ノード（Fac をキーフレームで制御）
+            mix_shader = nodes.new(type='ShaderNodeMixShader')
+            mix_shader.location = (400, 0)
+            mix_shader.inputs['Fac'].default_value = start_alpha
+            
+            # Transparent BSDF（完全透明）
+            transparent_bsdf = nodes.new(type='ShaderNodeBsdfTransparent')
+            transparent_bsdf.location = (200, -150)
+            
+            # Principled BSDF（元のマテリアルの色を使用）
+            principled_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+            principled_bsdf.location = (200, 150)
+            principled_bsdf.inputs['Base Color'].default_value = (*original_color, 1.0)
+            principled_bsdf.inputs['Roughness'].default_value = 0.8
+            principled_bsdf.inputs['Metallic'].default_value = 0.0
+            
+            # ノード接続
+            # Mix Shader: Fac=0.0 → Shader A、Fac=1.0 → Shader B
+            # Fac = 1.0 で完全不透明にするため、Principled BSDFをinput[2]に接続
+            links.new(transparent_bsdf.outputs['BSDF'], mix_shader.inputs[1])   # Shader A (透明)
+            links.new(principled_bsdf.outputs['BSDF'], mix_shader.inputs[2])    # Shader B (車)
+            links.new(mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+            
+            # Fac にキーフレームを設定
+            fac_input = mix_shader.inputs['Fac']
+            
+            # フレーム0で完全不透明のキーフレームを追加（開始前も完全に不透明）
+            bpy.context.scene.frame_set(0)
+            fac_input.default_value = start_alpha
+            fac_input.keyframe_insert(data_path="default_value", frame=0)
+            
+            for frame in frames:
+                progress = (frame - start_frame) / max(1, (end_frame - start_frame))
+                fac_value = start_alpha + (end_alpha - start_alpha) * progress
+                
+                bpy.context.scene.frame_set(frame)
+                fac_input.default_value = fac_value
+                fac_input.keyframe_insert(data_path="default_value", frame=frame)
+            
+            # 終了フレームで最終値を確実に設定
+            bpy.context.scene.frame_set(end_frame)
+            fac_input.default_value = end_alpha
+            fac_input.keyframe_insert(data_path="default_value", frame=end_frame)
+            
+            # インターポレーションをLINEARに設定
+            try:
+                if hasattr(material.node_tree, 'animation_data') and material.node_tree.animation_data:
+                    action = material.node_tree.animation_data.action
+                    if action and hasattr(action, 'fcurves'):
+                        for fc in action.fcurves:
+                            if 'Fac' in fc.data_path:
+                                for kf in fc.keyframe_points:
+                                    kf.interpolation = 'LINEAR'
+            except Exception as e:
+                print(f"    ⚠ インターポレーション設定エラー: {e}")
+
+    # シーンをフレーム0に戻す
+    bpy.context.scene.frame_set(0)
+    
+    print(f"  Alphaアニメーション(Mix Shader Fac): {car_object.name} フレーム{start_frame}-{end_frame} ({start_alpha}→{end_alpha})")
 
 
 def _apply_transparency_to_materials(obj, start_frame, end_frame):

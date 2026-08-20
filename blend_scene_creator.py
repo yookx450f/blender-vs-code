@@ -1038,6 +1038,9 @@ def main():
     if CUT_NUMBER == "short":
         from animation_settings_short import setup_short_animations
         setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+    elif CUT_NUMBER == "short2":
+        from animation_settings_short2 import setup_short2_animations
+        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     else:
         from animation_settings import setup_all_animations
         
@@ -1109,6 +1112,8 @@ def main():
     # カット番号に応じてファイル名を設定
     if CUT_NUMBER == "short":
         output_filename = "short_overlap.mp4"
+    elif CUT_NUMBER == "short2":
+        output_filename = "short2_overlap.mp4"
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
@@ -1132,7 +1137,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16）
-    if CUT_NUMBER == "short":
+    if CUT_NUMBER in ("short", "short2"):
         scene.render.resolution_x = 1080
         scene.render.resolution_y = 1920
         scene.render.resolution_percentage = 100
@@ -1166,6 +1171,8 @@ def main():
     # カット番号に応じてファイル名を切り替え（各カット独立保存用）
     if CUT_NUMBER == "short":
         blend_output_path = os.path.join(SCRIPT_DIR, "short_scene.blend")
+    elif CUT_NUMBER == "short2":
+        blend_output_path = os.path.join(SCRIPT_DIR, "short2_scene.blend")
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:
