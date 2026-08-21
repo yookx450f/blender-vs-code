@@ -14,6 +14,7 @@ import sys
 import struct
 import json
 import time
+import sqlite3
 from mathutils import Vector, Matrix
 
 # ============================================================
@@ -57,52 +58,54 @@ else:
 # このスクリプトは起動時に自動的に読み込みます。
 # ============================================================
 
-def load_cars_csv():
-    """cars.csv から車種マスターデータを辞書として読み込む"""
-    csv_path = os.path.join(SCRIPT_DIR, "cars.csv")
+def load_cars_db():
+    """SQLiteデータベース (cars.db) から車種マスターデータを辞書として読み込む"""
+    db_path = os.path.join(SCRIPT_DIR, "cars.db")
     
-    if not os.path.exists(csv_path):
-        print(f"エラー: 車種データファイルが見つかりません - {csv_path}")
-        print("cars.csv を作成してください。")
+    if not os.path.exists(db_path):
+        print(f"エラー: 車種データベースが見つかりません - {db_path}")
+        print("python manage_cars.py import-csv cars.csv でインポートしてください。")
         sys.exit(1)
     
     cars_db = {}
     try:
-        with open(csv_path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # 空行はスキップ
-                car_id = row.get("id", "").strip()
-                if not car_id:
-                    continue
-                # Widthはミラー未包含のため、20cm(200mm)を加算して3Dスケールに使用する
-                # ただしテキスト表示にはCSVの生値を使用するため、width_rawを別途保持する
-                width_raw = int(row["width"])
-                cars_db[car_id] = {
-                    "name": row["name"],
-                    "glb_filename": row["glb_filename"],
-                    "length": int(row["length"]),
-                    "width": width_raw + 200,
-                    "width_raw": width_raw,
-                    "height": int(row["height"]),
-                    "ground_clearance": int(row["ground_clearance"]),
-                    "turning_radius": int(row["turning_radius"]),
-                    "acceleration_0_to_100": float(row["acceleration_0_to_100"]),
-                    "rotation_direction": int(row["rotation_direction"])
-                }
-        print(f"車種マスターCSVを読み込みました: {csv_path} ({len(cars_db)} 車種)")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cars")
+        
+        for row in cursor.fetchall():
+            car_id = str(row["id"])
+            # Widthはミラー未包含のため、20cm(200mm)を加算して3Dスケールに使用する
+            # ただしテキスト表示には生値を使用するため、width_rawを別途保持する
+            width_raw = row["width"]
+            cars_db[car_id] = {
+                "name": row["name"],
+                "glb_filename": row["glb_filename"],
+                "length": row["length"],
+                "width": width_raw + 200,
+                "width_raw": width_raw,
+                "height": row["height"],
+                "ground_clearance": row["ground_clearance"],
+                "turning_radius": row["turning_radius"],
+                "acceleration_0_to_100": row["acceleration_0_to_100"],
+                "rotation_direction": row["rotation_direction"]
+            }
+        
+        conn.close()
+        print(f"車種マスターDBを読み込みました: {db_path} ({len(cars_db)} 車種)")
     except Exception as e:
-        print(f"エラー: cars.csv の読み込みに失敗しました - {e}")
+        print(f"エラー: cars.db の読み込みに失敗しました - {e}")
         sys.exit(1)
     
     return cars_db
 
 
 def load_cars_config():
-    """cars_config.json + cars.csv を結合して車の設定辞書を返す
+    """cars_config.json + cars.db を結合して車の設定辞書を返す
     
     JSONでは carA/carB に id, color, position のみを指定し、
-    寸法データは CSVからidで自動的に取得・結合する。
+    寸法データは DBからidで自動的に取得・結合する。
     戻り値の構造は従来と同じ（後方互換性維持）。
     """
     config_path = os.path.join(SCRIPT_DIR, "cars_config.json")
@@ -116,8 +119,8 @@ def load_cars_config():
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         
-        # CSVから車種マスターデータを取得
-        cars_db = load_cars_csv()
+        # DBから車種マスターデータを取得
+        cars_db = load_cars_db()
         
         # GLBディレクトリの取得（JSONのグローバル設定）
         glb_dir = config.get("glb_dir", "")
@@ -132,7 +135,7 @@ def load_cars_config():
             car_id = car_cfg.get("id", "")
             
             if car_id not in cars_db:
-                print(f"エラー: CSVに車種ID '{car_id}' が見つかりません")
+                print(f"エラー: DBに車種ID '{car_id}' が見つかりません")
                 print(f"  利用可能なID: {', '.join(cars_db.keys())}")
                 sys.exit(1)
             

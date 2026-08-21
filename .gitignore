@@ -43,3 +43,8 @@ output/
 # デバッグスクリプト・出力
 debug_*.py
 output.txt
+
+# SQLite データベース
+*.db
+*.sqlite
+*.sqlite3
