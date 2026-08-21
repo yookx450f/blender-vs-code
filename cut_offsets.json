@@ -1,23 +1,23 @@
 {
     "offset_a": [
         -1.25,
-        0.0543
+        0.0476
     ],
     "offset_b": [
         1.25,
         0.0
     ],
-    "grounded_z_a": 0.5949,
-    "grounded_z_b": 0.6213,
-    "rear_offset_y": 0.0543,
+    "grounded_z_a": 0.5989,
+    "grounded_z_b": 0.5949,
+    "rear_offset_y": 0.0476,
     "car_a_center": [
         -1.25,
-        0.0543,
-        0.5949
+        0.0476,
+        0.5989
     ],
     "car_b_center": [
         1.25,
         0.0,
-        0.6213
+        0.5949
     ]
 }
