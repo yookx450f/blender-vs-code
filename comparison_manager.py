@@ -13,9 +13,17 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cars.db")
 
 
 def get_connection():
-    """データベース接続を取得"""
+    """データベース接続を取得（sqlite3.Row 対応）"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def get_connection_raw():
+    """データベース接続を取得（pandas 用 - row_factory なし）"""
+    conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -55,16 +63,22 @@ def init_comparisons_table():
 def get_all_cars():
     """全車種データをDataFrameとして取得"""
     conn = get_connection()
-    df = pd.read_sql_query("SELECT * FROM cars ORDER BY id", conn)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM cars ORDER BY id")
+    rows = cursor.fetchall()
     conn.close()
-    return df
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
 
 
 def get_all_comparisons():
     """全比較ペアを取得（車名付き）"""
     conn = get_connection()
+    cursor = conn.cursor()
     query = """
-        SELECT 
+        SELECT
             c.id,
             c.car_a_id,
             c.car_b_id,
@@ -83,9 +97,13 @@ def get_all_comparisons():
         LEFT JOIN cars cb ON c.car_b_id = cb.id
         ORDER BY c.car_a_id, c.car_b_id
     """
-    df = pd.read_sql_query(query, conn)
+    cursor.execute(query)
+    rows = cursor.fetchall()
     conn.close()
-    return df
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
 
 
 def get_comparison_by_ids(car_a_id, car_b_id):
@@ -106,8 +124,9 @@ def get_comparison_by_ids(car_a_id, car_b_id):
 def get_comparisons_for_car(car_id):
     """指定車が関わる全ペアを取得"""
     conn = get_connection()
+    cursor = conn.cursor()
     query = """
-        SELECT 
+        SELECT
             c.id,
             c.car_a_id,
             c.car_b_id,
@@ -125,9 +144,13 @@ def get_comparisons_for_car(car_id):
         WHERE c.car_a_id = ? OR c.car_b_id = ?
         ORDER BY c.car_a_id, c.car_b_id
     """
-    df = pd.read_sql_query(query, (car_id, car_id), conn)
+    cursor.execute(query, (car_id, car_id))
+    rows = cursor.fetchall()
     conn.close()
-    return df
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
 
 
 def create_comparison_if_not_exists(car_a_id, car_b_id):
@@ -312,8 +335,9 @@ def get_dashboard_stats():
 def get_long_video_candidates(limit=10):
     """長尺制作候補を視聴回数順で取得（ショート公開済み + 長尺未着手）"""
     conn = get_connection()
+    cursor = conn.cursor()
     query = """
-        SELECT 
+        SELECT
             c.id,
             c.car_a_id,
             c.car_b_id,
@@ -329,9 +353,17 @@ def get_long_video_candidates(limit=10):
         ORDER BY c.short_views DESC
         LIMIT ?
     """
-    df = pd.read_sql_query(query, (limit,), conn)
+    cursor.execute(query, (limit,))
+    rows = cursor.fetchall()
     conn.close()
-    return df
+    
+    if not rows:
+        return pd.DataFrame(columns=["id", "car_a_id", "car_b_id", "car_a_name", "car_b_name",
+                                      "short_status", "long_status", "short_views"])
+    
+    # sqlite3.Row を辞書リストに変換
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
 
 
 def get_car_comparison_counts():
@@ -347,8 +379,8 @@ def get_car_comparison_counts():
     
     # 統合
     all_counts = pd.concat([
-        counts_a[["car_a_id", "car_name"]].rename(columns={"car_a_id": "car_id", "count_a": "comparison_count"}),
-        counts_b[["car_b_id", "car_name"]].rename(columns={"car_b_id": "car_id", "count_b": "comparison_count"})
+        counts_a.rename(columns={"car_a_id": "car_id", "car_a_name": "car_name", "count_a": "comparison_count"})[["car_id", "car_name", "comparison_count"]],
+        counts_b.rename(columns={"car_b_id": "car_id", "car_b_name": "car_name", "count_b": "comparison_count"})[["car_id", "car_name", "comparison_count"]]
     ])
     
     total_counts = all_counts.groupby(["car_id", "car_name"])["comparison_count"].sum().reset_index()
@@ -406,19 +438,20 @@ def get_combined_status(short_status, long_status):
     ショート+長尺のステータスを組み合わせた総合ステータスを返す
     
     戻り値: (ラベル, 色コード)
+    
+    ステータス優先順位:
+    - 両方完了 > ショート完了 > 長尺制作中 > 制作中 > 未着手
     """
-    if short_status == 0 and long_status == 0:
-        return "未着手", "#e0e0e0"  # 白/グレー
-    elif short_status == 1 and long_status == 0:
-        return "ショート制作中", "#64b5f6"  # 青
-    elif short_status == 2 and long_status == 0:
-        return "ショート完了", "#ffeb3b"  # 黄色
+    if short_status == 2 and long_status == 2:
+        return "両方完了", "#4caf50"  # 緑
     elif short_status == 2 and long_status == 1:
         return "長尺制作中", "#ff9800"  # オレンジ
-    elif short_status == 2 and long_status == 2:
-        return "両方完了", "#4caf50"  # 緑
+    elif short_status == 2 and long_status == 0:
+        return "ショート完了", "#ffeb3b"  # 黄色
+    elif short_status >= 1 or long_status >= 1:
+        return "制作中", "#64b5f6"  # 青（片方でも制作中）
     else:
-        return "未着手", "#e0e0e0"
+        return "未着手", "#e0e0e0"  # グレー
 
 
 def is_invalid_pair(car_a_id, car_b_id):
