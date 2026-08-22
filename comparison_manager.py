@@ -285,6 +285,21 @@ def update_comparison_full(comp_id, short_status, long_status, short_views, long
         return False
 
 
+def delete_comparison(comp_id):
+    """比較ペアを削除"""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            DELETE FROM comparisons WHERE id = ?
+        """, (comp_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
 def get_matrix_data():
     """
     マトリクス表示用のデータを生成
