@@ -34,6 +34,7 @@ def init_comparisons_table():
             short_video_url TEXT DEFAULT '',
             long_video_url TEXT DEFAULT '',
             short_views INTEGER DEFAULT 0,
+            long_views INTEGER DEFAULT 0,
             notes TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -42,6 +43,11 @@ def init_comparisons_table():
             UNIQUE(car_a_id, car_b_id)
         )
     """)
+    # 既存テーブルに long_views カラムがない場合は追加
+    try:
+        conn.execute("ALTER TABLE comparisons ADD COLUMN long_views INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # カラムが既に存在する場合は無視
     conn.commit()
     conn.close()
 
@@ -91,7 +97,10 @@ def get_comparison_by_ids(car_a_id, car_b_id):
     """, (car_a_id, car_b_id))
     row = cursor.fetchone()
     conn.close()
-    return row
+    # sqlite3.Row を辞書に変換して返す
+    if row:
+        return dict(row)
+    return None
 
 
 def get_comparisons_for_car(car_id):

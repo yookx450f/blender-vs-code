@@ -75,7 +75,10 @@ def get_car_by_id(car_id):
     cursor.execute("SELECT * FROM cars WHERE id = ?", (car_id,))
     row = cursor.fetchone()
     conn.close()
-    return row
+    # sqlite3.Row を辞書に変換して返す
+    if row:
+        return dict(row)
+    return None
 
 
 def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
@@ -156,6 +159,19 @@ def main():
         layout="wide"
     )
 
+    # プライマリーカラーを青系に設定（CSSで上書き）
+    st.markdown("""
+    <style>
+    .stButton > button {
+        background-color: #1E88E5 !important;
+        color: white !important;
+    }
+    .stButton > button:hover {
+        background-color: #1565C0 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     init_db()
 
     st.title("🚗 車種データベース管理")
@@ -231,11 +247,6 @@ def main():
                     inp_acc = st.number_input("0-100km/h加速 (秒)", value=edit_car["acceleration_0_to_100"] if edit_car else 0.0, step=0.1)
                 col_dims_d = st.columns(1)[0]
                 with col_dims_d:
-                    inp_rot = st.number_input("Z軸回転角度 (度)", value=edit_car["rotation_direction"] if edit_car else 0, step=1)
-                with c3:
-                    inp_tr = st.number_input("最小回転半径 (mm)", value=edit_car["turning_radius"] if edit_car else 0, step=1)
-                    inp_acc = st.number_input("0-100km/h加速 (秒)", value=edit_car["acceleration_0_to_100"] if edit_car else 0.0, step=0.1)
-                with c4:
                     inp_rot = st.number_input("Z軸回転角度 (度)", value=edit_car["rotation_direction"] if edit_car else 0, step=1)
             else:
                 st.caption("➕ 新規追加モード")
