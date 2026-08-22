@@ -12,6 +12,7 @@ from comparison_manager import (
     get_comparison_by_ids,
     create_comparison_if_not_exists,
     update_comparison_full,
+    delete_comparison,
     set_comparison_pair_to_config,
     get_combined_status,
     is_invalid_pair
@@ -166,11 +167,12 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
     
     # ステータスカラー（ダークテーマ向けに調整）
     status_colors_dark = {
-        "未着手": "#3d3d3d",      # 濃いグレー
-        "制作中": "#1565c0",      # 濃い青
-        "ショート完了": "#f9a825", # ダークイエロー
-        "長尺制作中": "#e65100",   # ダークオレンジ
-        "両方完了": "#2e7d32",     # ダークグリーン
+        "未着手": "#3d3d3d",         # 濃いグレー（登録なし）
+        "登録済・未着手": "#1a237e", # 紺色（DBに登録済みだが未着手）
+        "制作中": "#1565c0",         # 濃い青
+        "ショート完了": "#f9a825",   # ダークイエロー
+        "長尺制作中": "#e65100",     # ダークオレンジ
+        "両方完了": "#2e7d32",       # ダークグリーン
     }
     
     html = f'''<div style="overflow: auto; max-height: 80vh;"><table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
@@ -198,6 +200,7 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             
             # ステータスを取得
             comp = get_comparison_by_ids(car_a["id"], car_b["id"])
+            has_registration = comp is not None
             if comp:
                 short_status = comp["short_status"]
                 long_status = comp["long_status"]
@@ -210,13 +213,14 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 long_views = 0
             
             label, _ = get_combined_status(short_status, long_status)
-            cell_bg = status_colors_dark.get(label, "#3d3d3d")
             
-            # テキストカラーを背景色に応じて調整
-            if label == "未着手":
-                text_fg = "#999999"
+            # DBに登録済みで未着手の場合は紺色で区別
+            if has_registration and label == "未着手":
+                cell_bg = status_colors_dark.get("登録済・未着手", "#1a237e")
+                text_fg = "#9fa8da"
             else:
-                text_fg = "#ffffff"
+                cell_bg = status_colors_dark.get(label, "#3d3d3d")
+                text_fg = "#999999" if label == "未着手" else "#ffffff"
             
             # ステータスフィルタの適用
             show_cell = True
@@ -276,7 +280,8 @@ window.addEventListener('load', function() {
 # ============================================================
 st.markdown("---")
 legend_items = [
-    ("⬜", "未着手", "#3d3d3d"),
+    ("⬜", "未着手（登録なし）", "#3d3d3d"),
+    ("🔲", "登録済・未着手", "#1a237e"),
     ("🔵", "制作中", "#1565c0"),
     ("🟡", "ショート完了", "#f9a825"),
     ("🟠", "長尺制作中", "#e65100"),
@@ -338,62 +343,111 @@ car_b_id = selected_car_b["id"]
 if car_a_id == car_b_id:
     st.sidebar.error("同じ車種を選択できません。")
 else:
-    # ペアが存在しない場合は自動作成
-    comp_id = create_comparison_if_not_exists(car_a_id, car_b_id)
+    # DBから既存レコードを取得（自動作成はしない）
+    comp = get_comparison_by_ids(car_a_id, car_b_id)
+    comp_id = comp["id"] if comp else None
+    
+    st.sidebar.markdown(f"### {selected_car_a['name']} vs {selected_car_b['name']}")
     
     if comp_id:
-        comp = get_comparison_by_ids(car_a_id, car_b_id)
+        # レコードが存在する場合 → 編集フォーム表示
+        st.sidebar.caption("制作状況・視聴回数を編集できます")
         
-        st.sidebar.markdown(f"### {selected_car_a['name']} vs {selected_car_b['name']}")
-        
-        # 重複ペアの場合はステータス編集フォームを表示しない
-        if not is_invalid_pair(car_a_id, car_b_id):
-            st.sidebar.caption("制作状況・視聴回数を編集できます")
-        else:
-            st.sidebar.warning(f"このペアは既に\n(車B vs 車A) として登録されています。\nステータス編集はできません。")
-        
-        # ステータス編集フォーム（有効ペアのみ）
-        if not is_invalid_pair(car_a_id, car_b_id):
-            with st.form("comparison_edit_form", clear_on_submit=False):
-                short_status = st.selectbox(
-                    "ショート動画ステータス",
-                    [0, 1, 2],
-                    format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
-                    index=comp["short_status"] if comp else 0
-                )
-                short_views = st.number_input(
-                    "ショート動画視聴回数",
-                    min_value=0,
-                    value=comp["short_views"] if comp else 0,
-                    step=1
-                )
-                
-                long_status = st.selectbox(
-                    "長尺動画ステータス",
-                    [0, 1, 2],
-                    format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
-                    index=comp["long_status"] if comp else 0
-                )
-                long_views = st.number_input(
-                    "長尺動画視聴回数",
-                    min_value=0,
-                    value=comp["long_views"] if comp else 0,
-                    step=1
-                )
-                notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
-                
-                submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
+        with st.form("comparison_edit_form", clear_on_submit=False):
+            short_status = st.radio(
+                "📱 ショート動画ステータス",
+                options=[0, 1, 2],
+                format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
+                index=comp["short_status"] if comp else 0,
+                horizontal=True
+            )
+            short_views = st.number_input(
+                "ショート動画視聴回数",
+                min_value=0,
+                value=comp["short_views"] if comp else 0,
+                step=1
+            )
             
-            if submitted:
-                success = update_comparison_full(
-                    comp_id, short_status, long_status,
-                    short_views, long_views, notes
-                )
+            long_status = st.radio(
+                "🎬 長尺動画ステータス",
+                options=[0, 1, 2],
+                format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
+                index=comp["long_status"] if comp else 0,
+                horizontal=True
+            )
+            long_views = st.number_input(
+                "長尺動画視聴回数",
+                min_value=0,
+                value=comp["long_views"] if comp else 0,
+                step=1
+            )
+            notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
+            
+            submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
+        
+        if submitted:
+            success = update_comparison_full(
+                comp_id, short_status, long_status,
+                short_views, long_views, notes
+            )
+            if success:
+                st.sidebar.success("✓ 更新しました")
+                st.rerun()
+            else:
+                st.sidebar.error("✗ 更新に失敗しました")
+        
+        # 削除セクション
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🗑️ レコード削除")
+        st.sidebar.caption("この比較ペアをデータベースから削除します")
+        
+        # 削除ボタンは幅を狭くして誤クリックを防ぐ
+        st.sidebar.markdown("""
+        <style>
+        .delete-btn-container {
+            display: inline-block;
+            max-width: 180px;
+        }
+        .delete-btn-container button {
+            background-color: #c62828 !important;
+            border-color: #c62828 !important;
+        }
+        .delete-btn-container button:hover {
+            background-color: #b71c1c !important;
+            border-color: #b71c1c !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        delete_cols = st.sidebar.columns([1, 2])
+        with delete_cols[0]:
+            if st.button("🗑️ このペアを削除", type="primary", key="delete_comparison_btn"):
+                success = delete_comparison(comp_id)
                 if success:
-                    st.sidebar.success("✓ 更新しました")
+                    st.sidebar.success("✓ 削除しました")
+                    import time
+                    time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.sidebar.error("✗ 更新に失敗しました")
+                    st.sidebar.error("✗ 削除に失敗しました")
+    else:
+        # レコードが存在しない場合 → 未登録メッセージ + 新規追加ボタン
+        # 逆順ペアがある場合は警告も表示
+        reverse_comp = get_comparison_by_ids(car_b_id, car_a_id)
+        if reverse_comp:
+            st.sidebar.warning(f"このペアは既に\n(車B vs 車A) として登録されています。")
+        
+        st.sidebar.info("このペアはまだ登録されていません。")
+        
+        if st.button("➕ 新規追加", type="primary", use_container_width=True, key="add_comparison_btn"):
+            new_id = create_comparison_if_not_exists(car_a_id, car_b_id)
+            if new_id:
+                st.sidebar.success("✓ 登録しました")
+                import time
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.sidebar.error("✗ 登録に失敗しました")
     
     # 🎬 cars_configに設定ボタン（常に表示）
     st.sidebar.markdown("---")
