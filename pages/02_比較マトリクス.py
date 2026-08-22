@@ -22,6 +22,26 @@ init_comparisons_table()
 
 st.set_page_config(page_title="📊 比較マトリクス", page_icon="📊", layout="wide")
 
+# ボタンカラーを青系に設定（Streamlitの内部スタイルを上書き）
+st.markdown("""
+<style>
+/* Streamlit v1.28+ 対応 */
+[data-testid="stFormSubmitButton"],
+.stButton > button,
+button[kind="primary"] {
+    background-color: #1E88E5 !important;
+    color: white !important;
+    border: 1px solid #1E88E5 !important;
+}
+[data-testid="stFormSubmitButton"]:hover,
+.stButton > button:hover,
+button[kind="primary"]:hover {
+    background-color: #1565C0 !important;
+    border-color: #1565C0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📊 動画比較マトリクス")
 st.caption("セルをクリックして制作状況を確認・編集できます")
 
@@ -30,6 +50,10 @@ st.caption("セルをクリックして制作状況を確認・編集できま�
 # ============================================================
 if "selected_cell" not in st.session_state:
     st.session_state.selected_cell = None
+if "config_success_msg" not in st.session_state:
+    st.session_state.config_success_msg = None
+if "config_error_msg" not in st.session_state:
+    st.session_state.config_error_msg = None
 
 
 # ============================================================
@@ -49,22 +73,41 @@ car_list = cars_df[["id", "name"]].to_dict("records")
 # ============================================================
 col_search, col_status = st.columns([3, 2])
 
+# URLパラメータからフィルタ状態を復元（絞り込み条件を保持）
+default_search = st.query_params.get("search", "")
+default_status = st.query_params.get("status", "全件表示")
+default_type_a = st.query_params.get("type_a", "全タイプ")
+default_type_b = st.query_params.get("type_b", "全タイプ")
+
 with col_search:
-    search_query = st.text_input("🔍 車名で絞り込み", key="matrix_search")
+    search_query = st.text_input("🔍 車名で絞り込み", value=default_search, key="matrix_search")
 
 with col_status:
+    status_options = ["全件表示", "未着手のみ", "ショート完了のみ", "両方完了のみ"]
+    default_status_idx = status_options.index(default_status) if default_status in status_options else 0
     status_filter = st.selectbox(
         "制作状況でフィルタ",
-        ["全件表示", "未着手のみ", "ショート完了のみ", "両方完了のみ"]
+        status_options,
+        index=default_status_idx
     )
 
 # 車種タイプフィルタ
 all_types = sorted(set(row.get("car_type", "") for _, row in cars_df.iterrows() if row.get("car_type")))
 col_type_a, col_type_b = st.columns([1, 1])
 with col_type_a:
-    type_filter_a = st.selectbox("🚗 車A - タイプ", ["全タイプ"] + all_types)
+    type_options_a = ["全タイプ"] + all_types
+    default_type_a_idx = type_options_a.index(default_type_a) if default_type_a in type_options_a else 0
+    type_filter_a = st.selectbox("🚗 車A - タイプ", type_options_a, index=default_type_a_idx)
 with col_type_b:
-    type_filter_b = st.selectbox("🚙 車B - タイプ", ["全タイプ"] + all_types)
+    type_options_b = ["全タイプ"] + all_types
+    default_type_b_idx = type_options_b.index(default_type_b) if default_type_b in type_options_b else 0
+    type_filter_b = st.selectbox("🚙 車B - タイプ", type_options_b, index=default_type_b_idx)
+
+# フィルタ状態をURLパラメータに保存
+st.query_params["search"] = search_query
+st.query_params["status"] = status_filter
+st.query_params["type_a"] = type_filter_a
+st.query_params["type_b"] = type_filter_b
 
 # 車リストのフィルタリング（車A用と車B用に分離）
 filtered_cars_a = car_list.copy()
@@ -111,7 +154,7 @@ for car_a in filtered_cars_a:
             invalid_pairs.add((car_a["id"], car_b["id"]))
 
 # HTMLテーブルを生成（ダークテーマ対応）
-def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs):
+def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b):
     # ダークテーマ用カラーパレット
     bg_header = "#2d2d2d"
     bg_row_header = "#333333"
@@ -130,19 +173,19 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
         "両方完了": "#2e7d32",     # ダークグリーン
     }
     
-    html = f'''<table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
+    html = f'''<div style="overflow: auto; max-height: 80vh;"><table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
     
     # ヘッダー行 - 車B（列）をヘッダーに表示
-    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 140px; text-align: left; color: {text_header};"></th>'
+    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20;"></th>'
     for car_b in filtered_cars_b:
         full_name = car_b["name"]
-        html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line;">{full_name}</th>'
+        html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>'
     html += '</tr>'
     
     # データ行 - 車A（行）を左側に表示
     for car_a in filtered_cars_a:
         full_name_a = car_a["name"]
-        html += f'<tr><td style="padding: 10px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 13px; word-wrap: break-word; white-space: pre-line;">{full_name_a}</td>'
+        html += f'<tr><td style="padding: 10px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>'
         
         for car_b in filtered_cars_b:
             pair_key = (car_a["id"], car_b["id"])
@@ -158,9 +201,13 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             if comp:
                 short_status = comp["short_status"]
                 long_status = comp["long_status"]
+                short_views = comp.get("short_views", 0)
+                long_views = comp.get("long_views", 0)
             else:
                 short_status = 0
                 long_status = 0
+                short_views = 0
+                long_views = 0
             
             label, _ = get_combined_status(short_status, long_status)
             cell_bg = status_colors_dark.get(label, "#3d3d3d")
@@ -184,22 +231,27 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: #2a2a2a; text-align: center; opacity: 0.3;">-</td>'
                 continue
             
-            # クリック可能なセル - <a>タグでURLパラメータを伝達（Streamlitではonclickがブロックされるため）
+            # クリック可能なセル - 上段: 長尺視聴回数 / 下段: ショート視聴回数（2段表示）
             cell_id = f"cell_{car_a['id']}_{car_b['id']}"
-            link_url = f"?car_a={car_a['id']}&car_b={car_b['id']}#edit-panel"
+            link_url = f"?car_a={car_a['id']}&car_b={car_b['id']}&search={search_query}&status={status_filter}&type_a={type_filter_a}&type_b={type_filter_b}#edit-panel"
+            long_views_display = f"{long_views:,}" if long_views > 0 else "-"
+            short_views_display = f"{short_views:,}" if short_views > 0 else "-"
             html += f'''<td style="padding: 10px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
                     onmouseover="this.style.border='2px solid #ffffff'"
                     onmouseout="this.style.border='1px solid {border_color}'">
-                <a href="{link_url}" style="text-decoration: none; color: inherit;">{label}</a>
+                <a href="{link_url}" style="text-decoration: none; color: inherit;">
+                    <div style="font-size: 13px; line-height: 1.4; font-weight: bold;">{long_views_display}</div>
+                    <div style="font-size: 13px; line-height: 1.4; font-weight: bold;">{short_views_display}</div>
+                </a>
             </td>'''
         
         html += '</tr>'
     
-    html += '</table>'
+    html += '</table></div>'
     return html
 
 
-matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs)
+matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b)
 st.markdown(matrix_html, unsafe_allow_html=True)
 
 # スクロール用JavaScriptを注入
@@ -285,8 +337,6 @@ car_b_id = selected_car_b["id"]
 # 無効ペアのチェック
 if car_a_id == car_b_id:
     st.sidebar.error("同じ車種を選択できません。")
-elif is_invalid_pair(car_a_id, car_b_id):
-    st.sidebar.warning(f"このペアは既に\n(車B vs 車A) として登録されています。")
 else:
     # ペアが存在しない場合は自動作成
     comp_id = create_comparison_if_not_exists(car_a_id, car_b_id)
@@ -296,58 +346,76 @@ else:
         
         st.sidebar.markdown(f"### {selected_car_a['name']} vs {selected_car_b['name']}")
         
-        # ステータス編集フォーム
-        with st.form("comparison_edit_form", clear_on_submit=False):
-            short_status = st.selectbox(
-                "ショート動画ステータス",
-                [0, 1, 2],
-                format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
-                index=comp["short_status"] if comp else 0
-            )
-            short_views = st.number_input(
-                "ショート動画視聴回数",
-                min_value=0,
-                value=comp["short_views"] if comp else 0,
-                step=1
-            )
-            
-            long_status = st.selectbox(
-                "長尺動画ステータス",
-                [0, 1, 2],
-                format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
-                index=comp["long_status"] if comp else 0
-            )
-            long_views = st.number_input(
-                "長尺動画視聴回数",
-                min_value=0,
-                value=comp["long_views"] if comp else 0,
-                step=1
-            )
-            notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
-            
-            submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
-            set_config = st.form_submit_button("🎬 cars_configに設定", use_container_width=True)
+        # 重複ペアの場合はステータス編集フォームを表示しない
+        if not is_invalid_pair(car_a_id, car_b_id):
+            st.sidebar.caption("制作状況・視聴回数を編集できます")
+        else:
+            st.sidebar.warning(f"このペアは既に\n(車B vs 車A) として登録されています。\nステータス編集はできません。")
         
-        if submitted:
-            success = update_comparison_full(
-                comp_id, short_status, long_status,
-                short_views, long_views, notes
-            )
-            if success:
-                st.sidebar.success("✓ 更新しました")
-                st.rerun()
-            else:
-                st.sidebar.error("✗ 更新に失敗しました")
-        
-        if set_config:
-            success, msg = set_comparison_pair_to_config(car_a_id, car_b_id)
-            if success:
-                st.sidebar.success(f"✓ {msg}")
-                st.sidebar.info("cars_config.json が更新されました。")
-            else:
-                st.sidebar.error(f"✗ {msg}")
-    else:
-        st.sidebar.error("ペアの作成に失敗しました。")
+        # ステータス編集フォーム（有効ペアのみ）
+        if not is_invalid_pair(car_a_id, car_b_id):
+            with st.form("comparison_edit_form", clear_on_submit=False):
+                short_status = st.selectbox(
+                    "ショート動画ステータス",
+                    [0, 1, 2],
+                    format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
+                    index=comp["short_status"] if comp else 0
+                )
+                short_views = st.number_input(
+                    "ショート動画視聴回数",
+                    min_value=0,
+                    value=comp["short_views"] if comp else 0,
+                    step=1
+                )
+                
+                long_status = st.selectbox(
+                    "長尺動画ステータス",
+                    [0, 1, 2],
+                    format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
+                    index=comp["long_status"] if comp else 0
+                )
+                long_views = st.number_input(
+                    "長尺動画視聴回数",
+                    min_value=0,
+                    value=comp["long_views"] if comp else 0,
+                    step=1
+                )
+                notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
+                
+                submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
+            
+            if submitted:
+                success = update_comparison_full(
+                    comp_id, short_status, long_status,
+                    short_views, long_views, notes
+                )
+                if success:
+                    st.sidebar.success("✓ 更新しました")
+                    st.rerun()
+                else:
+                    st.sidebar.error("✗ 更新に失敗しました")
+    
+    # 🎬 cars_configに設定ボタン（常に表示）
+    st.sidebar.markdown("---")
+    with st.form("set_config_form", clear_on_submit=False):
+        set_config_btn = st.form_submit_button("🎬 cars_configに設定", type="primary", use_container_width=True)
+    
+    if set_config_btn:
+        success, msg = set_comparison_pair_to_config(car_a_id, car_b_id)
+        if success:
+            st.session_state.config_success_msg = f"✓ {msg}"
+            st.rerun()
+        else:
+            st.session_state.config_error_msg = f"✗ {msg}"
+
+# 設定結果メッセージ表示
+if st.session_state.config_success_msg:
+    st.sidebar.success(st.session_state.config_success_msg)
+    st.sidebar.info("cars_config.json が更新されました。")
+    st.session_state.config_success_msg = None
+if st.session_state.config_error_msg:
+    st.sidebar.error(st.session_state.config_error_msg)
+    st.session_state.config_error_msg = None
 
 # ============================================================
 # 統計情報
