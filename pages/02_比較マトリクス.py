@@ -418,6 +418,63 @@ if st.session_state.config_error_msg:
     st.session_state.config_error_msg = None
 
 # ============================================================
+# 選択車種の諸元比較表示
+# ============================================================
+car_a_row = cars_df[cars_df["id"] == car_a_id].iloc[0] if not cars_df.empty else None
+car_b_row = cars_df[cars_df["id"] == car_b_id].iloc[0] if not cars_df.empty else None
+
+if car_a_row is not None and car_b_row is not None:
+    st.markdown("---")
+    st.subheader("📐 選択車種の諸元比較")
+    
+    # HTMLテーブルで車A一行・車B一行（項目を列に転置）
+    specs_html = f'''
+    <table style="width:100%; border-collapse:collapse; font-family:'Meiryo UI',sans-serif; font-size:13px;">
+        <thead>
+            <tr style="border-bottom: 2px solid #555;">
+                <th style="padding:8px; text-align:left; color:#aaa; width:90px;"></th>
+                <th style="padding:8px; text-align:center; color:#aaa;">GLBファイル</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">全長 (mm)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">全幅 (mm)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">全高 (mm)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">地上高 (mm)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">回転半径 (m)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">加速 (秒)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">Z回転 (度)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">タイプ</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="background:#1a2a3e; border-left: 3px solid #64b5f6;">
+                <td style="padding:8px; font-weight:bold; color:#64b5f6;">🚗 {car_a_row['name']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['glb_filename']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_a_row['length']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_a_row['width']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_a_row['height']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['ground_clearance']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['turning_radius']/1000:.1f}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['acceleration_0_to_100']:.1f}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['rotation_direction']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row.get('car_type', '')}</td>
+            </tr>
+            <tr style="background:#3e2a1a; border-left: 3px solid #ffb74d;">
+                <td style="padding:8px; font-weight:bold; color:#ffb74d;">🚙 {car_b_row['name']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['glb_filename']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_b_row['length']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_b_row['width']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{car_b_row['height']:,}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['ground_clearance']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['turning_radius']/1000:.1f}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['acceleration_0_to_100']:.1f}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['rotation_direction']}</td>
+                <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row.get('car_type', '')}</td>
+            </tr>
+        </tbody>
+    </table>
+    '''
+    st.markdown(specs_html, unsafe_allow_html=True)
+
+# ============================================================
 # 統計情報
 # ============================================================
 st.markdown("---")
