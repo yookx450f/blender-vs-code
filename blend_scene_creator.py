@@ -782,6 +782,79 @@ def setup_viewport_shading(shading_type='MATERIAL'):
 # ============================================================
 # 3Dテキストラベル作成関数（ステップ4）
 # ============================================================
+def create_glowing_text_label_short2(car_key, car_object, text_content, color_rgb):
+    """short2用: 車の上方前方に配置され、フロント方向を向く発光3Dテキストラベル
+    
+    CarA は上側（X負方向寄り）、CarB は下側（X正方向寄り）に配置。
+    テキストは車のフロント方向（+Y）を向く。
+    """
+    if car_object is None:
+        print(f"エラー: {car_key} の車オブジェクトがNoneです")
+        return
+    
+    bpy.ops.object.text_add(location=(0, 0, 0))
+    text_obj = bpy.context.active_object
+    text_obj.name = f"label_{car_key}"
+    
+    text_obj.data.body = text_content
+    text_obj.data.size = 0.35
+    text_obj.scale = (1.0, 1.0, 1.0)
+    
+    car_object.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        print(f"警告: {car_object.name} のバウンディングボックスが取得できません")
+        return
+    
+    local_corners = [Vector(corner) for corner in local_bounds]
+    local_center_x = (min(c.x for c in local_corners) + max(c.x for c in local_corners)) / 2.0
+    local_max_z = max(c.z for c in local_corners)
+    local_max_y = max(c.y for c in local_corners)
+    
+    text_y = local_max_y + 0.3
+    
+    # Z位置: CarAは少し低く、CarBは上面より高く
+    if car_key == "carA":
+        text_z = local_max_z + 0.25   # CarAはもう少し下げる
+    else:
+        text_z = local_max_z + 0.5
+    
+    # X座標は車の中心と揃える
+    text_x = local_center_x
+    
+    text_obj.location = (text_x, text_y, text_z)
+    # テキストを上方向（+Z）に向けることで、カメラから水平に読めるようにする
+    text_obj.rotation_euler = (math.pi / 2, 0, 0)
+    
+    mat_name = f"emission_label_{car_key}"
+    if mat_name in bpy.data.materials:
+        emission_mat = bpy.data.materials[mat_name]
+    else:
+        emission_mat = bpy.data.materials.new(name=mat_name)
+        emission_mat.use_nodes = True
+        nodes = emission_mat.node_tree.nodes
+        links = emission_mat.node_tree.links
+        nodes.clear()
+        output_node = nodes.new(type='ShaderNodeOutputMaterial')
+        output_node.location = (400, 0)
+        emission_node = nodes.new(type='ShaderNodeEmission')
+        emission_node.location = (100, 0)
+        adjusted_color = color_rgb
+        if car_key == "carB" and color_rgb[2] > color_rgb[0]:
+            adjusted_color = (0.0, 0.7, 1.0)
+        emission_node.inputs['Color'].default_value = (*adjusted_color, 1.0)
+        emission_node.inputs['Strength'].default_value = 5.0
+        links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
+    
+    text_obj.data.materials.clear()
+    text_obj.data.materials.append(emission_mat)
+    text_obj.parent = car_object
+    
+    print(f"3Dテキストラベル作成完了 (short2): {text_obj.name} -> '{text_content}' (上方配置, ペアレント: {car_object.name})")
+
+
 def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
     """車の足元に発光する3Dテキストラベルを作成し、車にペアレント設定"""
     if car_object is None:
@@ -1095,7 +1168,10 @@ def main():
         color_rgb = car_data["color"]
         
         # 発光テキストを作成（ペアレント設定含む）
-        create_glowing_text_label(key, car_obj, text_content, color_rgb)
+        if CUT_NUMBER == "short2":
+            create_glowing_text_label_short2(key, car_obj, text_content, color_rgb)
+        else:
+            create_glowing_text_label(key, car_obj, text_content, color_rgb)
     
     print("3Dテキストラベル設定完了")
     
