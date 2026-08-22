@@ -47,7 +47,7 @@ car_list = cars_df[["id", "name"]].to_dict("records")
 # ============================================================
 # フィルタセクション
 # ============================================================
-col_search, col_status, col_brand = st.columns([3, 2, 2])
+col_search, col_status = st.columns([3, 2])
 
 with col_search:
     search_query = st.text_input("🔍 車名で絞り込み", key="matrix_search")
@@ -58,21 +58,31 @@ with col_status:
         ["全件表示", "未着手のみ", "ショート完了のみ", "両方完了のみ"]
     )
 
-with col_brand:
-    # ブランドフィルタ（車名の先頭文字で簡易分類）
-    all_brands = sorted(set(row["name"].split()[0] for _, row in cars_df.iterrows()))
-    brand_filter = st.selectbox("ブランドでフィルタ", ["全車種"] + all_brands)
+# 車種タイプフィルタ
+all_types = sorted(set(row.get("car_type", "") for _, row in cars_df.iterrows() if row.get("car_type")))
+col_type_a, col_type_b = st.columns([1, 1])
+with col_type_a:
+    type_filter_a = st.selectbox("🚗 車A - タイプ", ["全タイプ"] + all_types)
+with col_type_b:
+    type_filter_b = st.selectbox("🚙 車B - タイプ", ["全タイプ"] + all_types)
 
-# 車リストのフィルタリング
-filtered_cars = car_list.copy()
-
+# 車リストのフィルタリング（車A用と車B用に分離）
+filtered_cars_a = car_list.copy()
 if search_query:
-    filtered_cars = [c for c in filtered_cars if search_query.lower() in c["name"].lower()]
+    filtered_cars_a = [c for c in filtered_cars_a if search_query.lower() in c["name"].lower()]
+if type_filter_a != "全タイプ":
+    # cars_dfからcar_typeを取得してフィルタ
+    matching_ids_a = set(row["id"] for _, row in cars_df.iterrows() if row.get("car_type") == type_filter_a)
+    filtered_cars_a = [c for c in filtered_cars_a if c["id"] in matching_ids_a]
 
-if brand_filter != "全車種":
-    filtered_cars = [c for c in filtered_cars if c["name"].startswith(brand_filter)]
+filtered_cars_b = car_list.copy()
+if search_query:
+    filtered_cars_b = [c for c in filtered_cars_b if search_query.lower() in c["name"].lower()]
+if type_filter_b != "全タイプ":
+    matching_ids_b = set(row["id"] for _, row in cars_df.iterrows() if row.get("car_type") == type_filter_b)
+    filtered_cars_b = [c for c in filtered_cars_b if c["id"] in matching_ids_b]
 
-if not filtered_cars:
+if not filtered_cars_a or not filtered_cars_b:
     st.info("条件に一致する車種が見つかりませんでした。")
     st.stop()
 
@@ -83,7 +93,9 @@ st.subheader("📋 比較マトリクス")
 
 # 無効ペアのセットを事前に計算（同じ車種 + 逆順ペア）
 invalid_pairs = set()
-for car in filtered_cars:
+for car in filtered_cars_a:
+    invalid_pairs.add((car["id"], car["id"]))
+for car in filtered_cars_b:
     invalid_pairs.add((car["id"], car["id"]))
 
 # DBに登録済みのペアIDセット
@@ -93,13 +105,13 @@ if not comparisons_df.empty:
         registered_pairs.add((row["car_a_id"], row["car_b_id"]))
 
 # 無効ペアに逆順も追加
-for car_a in filtered_cars:
-    for car_b in filtered_cars:
+for car_a in filtered_cars_a:
+    for car_b in filtered_cars_b:
         if (car_b["id"], car_a["id"]) in registered_pairs and car_a["id"] != car_b["id"]:
             invalid_pairs.add((car_a["id"], car_b["id"]))
 
 # HTMLテーブルを生成（ダークテーマ対応）
-def generate_matrix_html(filtered_cars, status_filter):
+def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs):
     # ダークテーマ用カラーパレット
     bg_header = "#2d2d2d"
     bg_row_header = "#333333"
@@ -120,19 +132,19 @@ def generate_matrix_html(filtered_cars, status_filter):
     
     html = f'''<table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
     
-    # ヘッダー行 - 車種名を全表示（改行許可）
+    # ヘッダー行 - 車B（列）をヘッダーに表示
     html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 140px; text-align: left; color: {text_header};"></th>'
-    for car_b in filtered_cars:
+    for car_b in filtered_cars_b:
         full_name = car_b["name"]
         html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line;">{full_name}</th>'
     html += '</tr>'
     
-    # データ行 - 車種名を全表示（改行許可）
-    for car_a in filtered_cars:
+    # データ行 - 車A（行）を左側に表示
+    for car_a in filtered_cars_a:
         full_name_a = car_a["name"]
         html += f'<tr><td style="padding: 10px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 13px; word-wrap: break-word; white-space: pre-line;">{full_name_a}</td>'
         
-        for car_b in filtered_cars:
+        for car_b in filtered_cars_b:
             pair_key = (car_a["id"], car_b["id"])
             
             # 無効ペアのチェック
@@ -187,7 +199,7 @@ def generate_matrix_html(filtered_cars, status_filter):
     return html
 
 
-matrix_html = generate_matrix_html(filtered_cars, status_filter)
+matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs)
 st.markdown(matrix_html, unsafe_allow_html=True)
 
 # スクロール用JavaScriptを注入
@@ -238,30 +250,30 @@ car_b_param = st.query_params.get("car_b", "")
 
 # 初期インデックスを決定
 initial_idx_a = 0
-initial_idx_b = 1 if len(filtered_cars) > 1 else 0
+initial_idx_b = 1 if len(filtered_cars_b) > 1 else 0
 
 if car_a_param:
-    for idx, car in enumerate(filtered_cars):
+    for idx, car in enumerate(filtered_cars_a):
         if str(car["id"]) == str(car_a_param):
             initial_idx_a = idx
             break
 
 if car_b_param:
-    for idx, car in enumerate(filtered_cars):
+    for idx, car in enumerate(filtered_cars_b):
         if str(car["id"]) == str(car_b_param):
             initial_idx_b = idx
             break
 
 selected_car_a = st.sidebar.selectbox(
     "車Aを選択",
-    options=filtered_cars,
+    options=filtered_cars_a,
     format_func=lambda x: x["name"],
     index=initial_idx_a,
     key="edit_car_a"
 )
 selected_car_b = st.sidebar.selectbox(
     "車Bを選択",
-    options=filtered_cars,
+    options=filtered_cars_b,
     format_func=lambda x: x["name"],
     index=initial_idx_b,
     key="edit_car_b"
@@ -292,12 +304,8 @@ else:
                 format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
                 index=comp["short_status"] if comp else 0
             )
-            short_url = st.text_input(
-                "ショート動画URL",
-                value=comp["short_video_url"] if comp else ""
-            )
             short_views = st.number_input(
-                "視聴回数",
+                "ショート動画視聴回数",
                 min_value=0,
                 value=comp["short_views"] if comp else 0,
                 step=1
@@ -309,9 +317,11 @@ else:
                 format_func=lambda x: ["未着手", "制作中", "公開済み"][x],
                 index=comp["long_status"] if comp else 0
             )
-            long_url = st.text_input(
-                "長尺動画URL",
-                value=comp["long_video_url"] if comp else ""
+            long_views = st.number_input(
+                "長尺動画視聴回数",
+                min_value=0,
+                value=comp["long_views"] if comp else 0,
+                step=1
             )
             notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
             
@@ -321,7 +331,7 @@ else:
         if submitted:
             success = update_comparison_full(
                 comp_id, short_status, long_status,
-                short_url, long_url, short_views, notes
+                short_views, long_views, notes
             )
             if success:
                 st.sidebar.success("✓ 更新しました")
@@ -345,16 +355,17 @@ else:
 st.markdown("---")
 st.subheader("📊 統計情報")
 
-total_valid = len(filtered_cars) * (len(filtered_cars) - 1)
+total_valid = len(filtered_cars_a) * len(filtered_cars_b)
 comps_in_view = 0
 short_done = 0
 both_done = 0
 
 if not comparisons_df.empty:
-    filtered_ids = set(c["id"] for c in filtered_cars)
+    filtered_ids_a = set(c["id"] for c in filtered_cars_a)
+    filtered_ids_b = set(c["id"] for c in filtered_cars_b)
     view_comps = comparisons_df[
-        comparisons_df["car_a_id"].isin(filtered_ids) & 
-        comparisons_df["car_b_id"].isin(filtered_ids)
+        comparisons_df["car_a_id"].isin(filtered_ids_a) &
+        comparisons_df["car_b_id"].isin(filtered_ids_b)
     ]
     total_valid_comps = len(view_comps)
     short_done = len(view_comps[view_comps["short_status"] == 2])

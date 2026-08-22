@@ -40,7 +40,8 @@ def init_db():
             ground_clearance INTEGER DEFAULT 0,
             turning_radius INTEGER DEFAULT 0,
             acceleration_0_to_100 REAL DEFAULT 0.0,
-            rotation_direction INTEGER DEFAULT 0
+            rotation_direction INTEGER DEFAULT 0,
+            car_type TEXT DEFAULT ''
         )
     """)
     conn.commit()
@@ -77,17 +78,17 @@ def get_car_by_id(car_id):
     return row
 
 
-def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation):
+def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """新規車種追加"""
     conn = get_connection()
     try:
         conn.execute("""
             INSERT INTO cars (name, glb_filename, length, width, height,
                              ground_clearance, turning_radius,
-                             acceleration_0_to_100, rotation_direction)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             acceleration_0_to_100, rotation_direction, car_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (name, glb_filename, length, width, height,
-              ground_clearance, turning_radius, acceleration, rotation))
+              ground_clearance, turning_radius, acceleration, rotation, car_type))
         conn.commit()
         new_id = conn.cursor().lastrowid
         conn.close()
@@ -100,7 +101,7 @@ def add_car(name, glb_filename, length, width, height, ground_clearance, turning
         return False, str(e)
 
 
-def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation):
+def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """車種情報更新"""
     conn = get_connection()
     try:
@@ -108,10 +109,10 @@ def update_car(car_id, name, glb_filename, length, width, height, ground_clearan
             UPDATE cars SET
                 name = ?, glb_filename = ?, length = ?, width = ?, height = ?,
                 ground_clearance = ?, turning_radius = ?,
-                acceleration_0_to_100 = ?, rotation_direction = ?
+                acceleration_0_to_100 = ?, rotation_direction = ?, car_type = ?
             WHERE id = ?
         """, (name, glb_filename, length, width, height,
-              ground_clearance, turning_radius, acceleration, rotation, car_id))
+              ground_clearance, turning_radius, acceleration, rotation, car_type, car_id))
         conn.commit()
         conn.close()
         return True, "更新しました"
@@ -191,7 +192,7 @@ def main():
     if not df.empty:
         display_df = df.copy()
         display_df.columns = ["ID", "車名", "GLBファイル", "全長(mm)", "全幅(mm)", "全高(mm)",
-                              "最低地上高(mm)", "最小回転半径(mm)", "0-100km/h加速(秒)", "Z軸回転(度)"]
+                              "最低地上高(mm)", "最小回転半径(mm)", "0-100km/h加速(秒)", "Z軸回転(度)", "車種タイプ"]
         st.dataframe(display_df, use_container_width=True, height=400)
     else:
         st.info("データベースに車種データがありません。")
@@ -213,6 +214,11 @@ def main():
 
                 inp_name = st.text_input("車名", value=edit_car["name"] if edit_car else "")
                 inp_glb = st.text_input("GLBファイル名", value=edit_car["glb_filename"] if edit_car else "")
+                inp_type = st.selectbox(
+                    "車種タイプ",
+                    ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
+                    index=["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"].index(edit_car["car_type"]) if edit_car.get("car_type") and edit_car["car_type"] in ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"] else 0
+                )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
                     inp_length = st.number_input("全長 (mm)", value=edit_car["length"] if edit_car else 0, step=1)
@@ -236,6 +242,11 @@ def main():
 
                 inp_name = st.text_input("車名", placeholder="例: 新型シビック")
                 inp_glb = st.text_input("GLBファイル名", placeholder="例: civic2027.glb")
+                inp_type = st.selectbox(
+                    "車種タイプ",
+                    ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
+                    key="new_car_type"
+                )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
                     inp_length = st.number_input("全長 (mm)", min_value=100, max_value=10000, step=1, key="new_length")
@@ -272,7 +283,8 @@ def main():
                         success, msg = update_car(
                             st.session_state.edit_id, inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
-                            int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot)
+                            int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
+                            inp_type
                         )
                         if success:
                             st.success(f"✓ 車種 ID {st.session_state.edit_id} を更新しました")
@@ -285,7 +297,8 @@ def main():
                         success, result = add_car(
                             inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
-                            int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot)
+                            int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
+                            inp_type
                         )
                         if success:
                             st.success(f"✓ 車種を追加しました (ID: {result})")
@@ -317,7 +330,8 @@ def main():
                 "最低地上高(mm)": car_detail["ground_clearance"],
                 "最小回転半径(mm)": car_detail["turning_radius"],
                 "0-100km/h加速(秒)": car_detail["acceleration_0_to_100"],
-                "Z軸回転(度)": car_detail["rotation_direction"]
+                "Z軸回転(度)": car_detail["rotation_direction"],
+                "車種タイプ": car_detail.get("car_type", "")
             }])
             st.dataframe(detail_df.set_index("ID"), use_container_width=True)
 

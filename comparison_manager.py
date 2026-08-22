@@ -234,18 +234,17 @@ def update_notes(comp_id, notes):
         return False
 
 
-def update_comparison_full(comp_id, short_status, long_status, short_url, long_url, short_views, notes):
+def update_comparison_full(comp_id, short_status, long_status, short_views, long_views, notes):
     """比較ペアの全情報を一括更新"""
     conn = get_connection()
     try:
         conn.execute("""
-            UPDATE comparisons 
-            SET short_status = ?, long_status = ?, 
-                short_video_url = ?, long_video_url = ?,
-                short_views = ?, notes = ?,
+            UPDATE comparisons
+            SET short_status = ?, long_status = ?,
+                short_views = ?, long_views = ?, notes = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (short_status, long_status, short_url, long_url, short_views, notes, comp_id))
+        """, (short_status, long_status, short_views, long_views, notes, comp_id))
         conn.commit()
         conn.close()
         return True
