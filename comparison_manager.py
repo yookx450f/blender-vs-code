@@ -7,7 +7,10 @@
 import sqlite3
 import pandas as pd
 import os
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cars.db")
 
@@ -51,11 +54,20 @@ def init_comparisons_table():
             UNIQUE(car_a_id, car_b_id)
         )
     """)
-    # 既存テーブルに long_views カラムがない場合は追加
-    try:
-        conn.execute("ALTER TABLE comparisons ADD COLUMN long_views INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # カラムが既に存在する場合は無視
+    # 既存テーブルに新カラムがない場合は追加（マイグレーション対応）
+    new_columns = [
+        ("long_views", "INTEGER DEFAULT 0"),
+        ("short_likes", "INTEGER DEFAULT 0"),
+        ("short_comments", "INTEGER DEFAULT 0"),
+        ("long_likes", "INTEGER DEFAULT 0"),
+        ("long_comments", "INTEGER DEFAULT 0"),
+        ("stats_updated_at", "TIMESTAMP"),
+    ]
+    for col_name, col_type in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE comparisons ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # カラムが既に存在する場合は無視
     conn.commit()
     conn.close()
 
@@ -74,7 +86,7 @@ def get_all_cars():
 
 
 def get_all_comparisons():
-    """全比較ペアを取得（車名付き）"""
+    """全比較ペアを取得（車名付き・統計データ付き）"""
     conn = get_connection()
     cursor = conn.cursor()
     query = """
@@ -89,6 +101,12 @@ def get_all_comparisons():
             c.short_video_url,
             c.long_video_url,
             c.short_views,
+            c.long_views,
+            c.short_likes,
+            c.short_comments,
+            c.long_likes,
+            c.long_comments,
+            c.stats_updated_at,
             c.notes,
             c.created_at,
             c.updated_at
@@ -266,17 +284,30 @@ def update_notes(comp_id, notes):
         return False
 
 
-def update_comparison_full(comp_id, short_status, long_status, short_views, long_views, notes):
+def update_comparison_full(comp_id, short_status, long_status, short_views, long_views, notes,
+                           short_likes=None, short_comments=None, long_likes=None, long_comments=None):
     """比較ペアの全情報を一括更新"""
     conn = get_connection()
     try:
-        conn.execute("""
-            UPDATE comparisons
-            SET short_status = ?, long_status = ?,
-                short_views = ?, long_views = ?, notes = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (short_status, long_status, short_views, long_views, notes, comp_id))
+        if all(v is not None for v in [short_likes, short_comments, long_likes, long_comments]):
+            conn.execute("""
+                UPDATE comparisons
+                SET short_status = ?, long_status = ?,
+                    short_views = ?, long_views = ?, notes = ?,
+                    short_likes = ?, short_comments = ?,
+                    long_likes = ?, long_comments = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (short_status, long_status, short_views, long_views, notes,
+                  short_likes, short_comments, long_likes, long_comments, comp_id))
+        else:
+            conn.execute("""
+                UPDATE comparisons
+                SET short_status = ?, long_status = ?,
+                    short_views = ?, long_views = ?, notes = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (short_status, long_status, short_views, long_views, notes, comp_id))
         conn.commit()
         conn.close()
         return True
@@ -478,3 +509,108 @@ def is_invalid_pair(car_a_id, car_b_id):
     if existing:
         return True
     return False
+
+
+def update_comparison_stats(comp_id, short_stats, long_stats) -> bool:
+    """
+    比較ペアのYouTube統計データを更新する。
+
+    Args:
+        comp_id: 比較ペアのID
+        short_stats: ショート動画の統計 {"viewCount", "likeCount", "commentCount"}（Noneでスキップ）
+        long_stats: 長尺動画の統計 {"viewCount", "likeCount", "commentCount"}（Noneでスキップ）
+
+    Returns:
+        True if success, False otherwise
+    """
+    conn = get_connection()
+    try:
+        updates = []
+        params = []
+
+        if short_stats:
+            updates.append("short_views = ?")
+            params.append(short_stats.get("viewCount", 0))
+            updates.append("short_likes = ?")
+            params.append(short_stats.get("likeCount", 0))
+            updates.append("short_comments = ?")
+            params.append(short_stats.get("commentCount", 0))
+
+        if long_stats:
+            updates.append("long_views = ?")
+            params.append(long_stats.get("viewCount", 0))
+            updates.append("long_likes = ?")
+            params.append(long_stats.get("likeCount", 0))
+            updates.append("long_comments = ?")
+            params.append(long_stats.get("commentCount", 0))
+
+        if not updates:
+            logger.info(f"  [DB SKIP] comp_id={comp_id}: 更新すべきデータなし (short={short_stats is not None}, long={long_stats is not None})")
+            conn.close()
+            return True  # 更新すべきデータなし
+
+        updates.append("stats_updated_at = CURRENT_TIMESTAMP")
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(comp_id)
+
+        sql = f"UPDATE comparisons SET {', '.join(updates)} WHERE id = ?"
+        logger.info(f"  [DB UPDATE] comp_id={comp_id}: SQL={sql}")
+        logger.info(f"    パラメータ: {params}")
+        conn.execute(sql, params)
+        conn.commit()
+        
+        # 更新後の値を確認
+        cursor = conn.cursor()
+        cursor.execute("SELECT short_views, short_likes, short_comments, long_views, long_likes, long_comments FROM comparisons WHERE id = ?", (comp_id,))
+        row = cursor.fetchone()
+        if row:
+            logger.info(f"    更新後値: sv={row[0]}, sl={row[1]}, sc={row[2]}, lv={row[3]}, ll={row[4]}, lc={row[5]}")
+        
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"  [DB ERROR] comp_id={comp_id}: {e}")
+        conn.close()
+        return False
+
+
+def bulk_update_all_stats(comparisons_data, api_stats):
+    """
+    全比較ペアのYouTube統計を一括更新する。
+
+    Args:
+        comparisons_data: 比較ペアのリスト（辞書）
+        api_stats: fetch_stats_for_comparisons の戻り値の "stats" フィールド
+
+    Returns:
+        {"success": int, "failed": int, "errors": List[str]}
+    """
+    success = 0
+    failed = 0
+    errors = []
+
+    logger.info(f"[BULK UPDATE] 比較ペア数: {len(comparisons_data)}, API統計数: {len(api_stats)}")
+    logger.info(f"  api_statsのキー型: {type(list(api_stats.keys())[0]) if api_stats else 'N/A'}")
+
+    for comp in comparisons_data:
+        comp_id = comp["id"]
+        stats = api_stats.get(comp_id)
+        if not stats:
+            # キーが文字列/整数で不一致している可能性をログ
+            str_key = str(comp_id)
+            if str_key in api_stats:
+                logger.warning(f"  [KEY MISMATCH] comp_id={comp_id} (int) を見つけず、'{str_key}' (str) は存在")
+            continue
+
+        short_stats = stats.get("short")
+        long_stats = stats.get("long")
+        logger.info(f"[BULK UPDATE] comp_id={comp_id}: short={short_stats}, long={long_stats}")
+
+        if update_comparison_stats(comp_id, short_stats, long_stats):
+            success += 1
+        else:
+            failed += 1
+            errors.append(f"comp_id={comp_id} の更新に失敗")
+
+    logger.info(f"[BULK UPDATE] 完了: success={success}, failed={failed}")
+    return {"success": success, "failed": failed, "errors": errors}

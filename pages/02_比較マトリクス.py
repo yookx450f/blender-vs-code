@@ -15,7 +15,12 @@ from comparison_manager import (
     delete_comparison,
     set_comparison_pair_to_config,
     get_combined_status,
-    is_invalid_pair
+    is_invalid_pair,
+    bulk_update_all_stats,
+)
+from youtube_stats_fetcher import (
+    get_youtube_api_key,
+    fetch_stats_for_comparisons,
 )
 
 # DB初期化
@@ -55,6 +60,8 @@ if "config_success_msg" not in st.session_state:
     st.session_state.config_success_msg = None
 if "config_error_msg" not in st.session_state:
     st.session_state.config_error_msg = None
+if "youtube_update_result" not in st.session_state:
+    st.session_state.youtube_update_result = None
 
 
 # ============================================================
@@ -84,7 +91,7 @@ with col_search:
     search_query = st.text_input("🔍 車名で絞り込み", value=default_search, key="matrix_search")
 
 with col_status:
-    status_options = ["全件表示", "未着手のみ", "ショート完了のみ", "両方完了のみ"]
+    status_options = ["全件表示", "未着手のみ", "登録済・未着手のみ", "制作中のみ", "ショート完了のみ", "長尺制作中のみ", "両方完了のみ"]
     default_status_idx = status_options.index(default_status) if default_status in status_options else 0
     status_filter = st.selectbox(
         "制作状況でフィルタ",
@@ -155,8 +162,56 @@ for car_a in filtered_cars_a:
         if (car_b["id"], car_a["id"]) in registered_pairs and car_a["id"] != car_b["id"]:
             invalid_pairs.add((car_a["id"], car_b["id"]))
 
+# フィルタ条件に合致する行・列のID集合を事前に計算
+def compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs):
+    """フィルタ条件に合致する車A/車BのID集合を返す。全件表示の場合はNoneを返す。"""
+    if status_filter == "全件表示":
+        return None, None
+    
+    active_a_ids = set()
+    active_b_ids = set()
+    
+    for car_a in filtered_cars_a:
+        for car_b in filtered_cars_b:
+            pair_key = (car_a["id"], car_b["id"])
+            if pair_key in invalid_pairs:
+                continue
+            
+            comp = get_comparison_by_ids(car_a["id"], car_b["id"])
+            has_registration = comp is not None
+            if comp:
+                short_status = comp["short_status"]
+                long_status = comp["long_status"]
+            else:
+                short_status = 0
+                long_status = 0
+            
+            label, _ = get_combined_status(short_status, long_status)
+            
+            # フィルタ条件に合致するか判定
+            matches = False
+            if status_filter == "未着手のみ" and label == "未着手":
+                matches = True
+            elif status_filter == "登録済・未着手のみ" and has_registration and label == "未着手":
+                matches = True
+            elif status_filter == "制作中のみ" and label == "制作中":
+                matches = True
+            elif status_filter == "ショート完了のみ" and label == "ショート完了":
+                matches = True
+            elif status_filter == "長尺制作中のみ" and label == "長尺制作中":
+                matches = True
+            elif status_filter == "両方完了のみ" and label == "両方完了":
+                matches = True
+            
+            if matches:
+                active_a_ids.add(car_a["id"])
+                active_b_ids.add(car_b["id"])
+    
+    return active_a_ids, active_b_ids
+
+
 # HTMLテーブルを生成（ダークテーマ対応）
-def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b):
+def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_car_a_ids=None, active_car_b_ids=None):
     # ダークテーマ用カラーパレット
     bg_header = "#2d2d2d"
     bg_row_header = "#333333"
@@ -178,25 +233,37 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
     
     html = f'''<div style="overflow: auto; max-height: 80vh;"><table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
     
-    # ヘッダー行 - 車B（列）をヘッダーに表示
+    # ヘッダー行 - 車B（列）をヘッダーに表示（フィルタ中は有効な列のみ）
     html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20;"></th>'
     for car_b in filtered_cars_b:
+        if active_car_b_ids is not None and car_b["id"] not in active_car_b_ids:
+            continue
         full_name = car_b["name"]
         html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>'
     html += '</tr>'
     
     # データ行 - 車A（行）を左側に表示
     for car_a in filtered_cars_a:
+        # フィルタ中は有効な行のみ表示
+        if active_car_a_ids is not None and car_a["id"] not in active_car_a_ids:
+            continue
+        
         full_name_a = car_a["name"]
         html += f'<tr><td style="padding: 10px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>'
         
         for car_b in filtered_cars_b:
+            # フィルタ中は有効な列のみ表示
+            if active_car_b_ids is not None and car_b["id"] not in active_car_b_ids:
+                continue
             pair_key = (car_a["id"], car_b["id"])
             
-            # 無効ペアのチェック
+            # 無効ペアのチェック（フィルタ中は空白に）
             if pair_key in invalid_pairs:
-                reason = "同じ車種" if car_a["id"] == car_b["id"] else "重複ペア"
-                html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>'
+                if status_filter == "全件表示":
+                    reason = "同じ車種" if car_a["id"] == car_b["id"] else "重複ペア"
+                    html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>'
+                else:
+                    html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: transparent;"></td>'
                 continue
             
             # ステータスを取得
@@ -223,25 +290,44 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 cell_bg = status_colors_dark.get(label, "#3d3d3d")
                 text_fg = "#999999" if label == "未着手" else "#ffffff"
             
-            # ステータスフィルタの適用
+            # ステータスフィルタの適用（get_combined_statusのラベルで判定）
             show_cell = True
-            if status_filter == "未着手のみ" and short_status != 0:
+            if status_filter == "未着手のみ" and label != "未着手":
                 show_cell = False
-            elif status_filter == "ショート完了のみ" and not (short_status == 2 and long_status == 0):
+            elif status_filter == "登録済・未着手のみ" and not (has_registration and label == "未着手"):
                 show_cell = False
-            elif status_filter == "両方完了のみ" and not (short_status == 2 and long_status == 2):
+            elif status_filter == "制作中のみ" and label != "制作中":
+                show_cell = False
+            elif status_filter == "ショート完了のみ" and label != "ショート完了":
+                show_cell = False
+            elif status_filter == "長尺制作中のみ" and label != "長尺制作中":
+                show_cell = False
+            elif status_filter == "両方完了のみ" and label != "両方完了":
                 show_cell = False
             
             if not show_cell:
-                html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: #2a2a2a; text-align: center; opacity: 0.3;">-</td>'
+                html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: transparent;"></td>'
                 continue
             
             # クリック可能なセル - 上段: 長尺視聴回数 / 下段: ショート視聴回数（2段表示）
+            # ツールチップで高評価・コメント数を表示
             cell_id = f"cell_{car_a['id']}_{car_b['id']}"
             link_url = f"?car_a={car_a['id']}&car_b={car_b['id']}&search={search_query}&status={status_filter}&type_a={type_filter_a}&type_b={type_filter_b}#edit-panel"
             long_views_display = f"{long_views:,}" if long_views > 0 else "-"
             short_views_display = f"{short_views:,}" if short_views > 0 else "-"
+            
+            # ツールチップ用データ（高評価・コメント数）
+            short_likes_val = comp.get("short_likes", 0) or 0 if comp else 0
+            short_comments_val = comp.get("short_comments", 0) or 0 if comp else 0
+            long_likes_val = comp.get("long_likes", 0) or 0 if comp else 0
+            long_comments_val = comp.get("long_comments", 0) or 0 if comp else 0
+            
+            tooltip_title = ""
+            if has_registration:
+                tooltip_title = f"🎬 長尺: 👁{long_views:,} 👍{long_likes_val:,} 💬{long_comments_val:,}<br>📱 ショート: 👁{short_views:,} 👍{short_likes_val:,} 💬{short_comments_val:,}"
+            
             html += f'''<td style="padding: 10px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
+                    title="{tooltip_title}"
                     onmouseover="this.style.border='2px solid #ffffff'"
                     onmouseout="this.style.border='1px solid {border_color}'">
                 <a href="{link_url}" style="text-decoration: none; color: inherit;">
@@ -256,7 +342,10 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
     return html
 
 
-matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b)
+# 有効な行・列のID集合を計算
+active_a_ids, active_b_ids = compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs)
+
+matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_a_ids, active_b_ids)
 st.markdown(matrix_html, unsafe_allow_html=True)
 
 # スクロール用JavaScriptを注入
@@ -295,6 +384,156 @@ for icon, label, color in legend_items:
     legend_html += f'<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 16px; height: 16px; background: {color}; border: 1px solid #666;"></span> <span style="color: #e0e0e0;">{label}</span></span>'
 legend_html += '</div>'
 st.markdown(legend_html, unsafe_allow_html=True)
+
+# ============================================================
+# YouTube API キー設定セクション（サイドバー上部）
+# ============================================================
+st.sidebar.header("🔑 YouTube API 設定")
+
+api_key = get_youtube_api_key()
+if api_key:
+    masked_key = api_key[:5] + "..." + api_key[-4:]
+    st.sidebar.success(f"APIキー設定済み: {masked_key}")
+else:
+    new_key = st.sidebar.text_input(
+        "YouTube Data API v3 キー",
+        type="password",
+        help="Google Cloud Console で取得したAPIキーを入力してください。"
+    )
+    if new_key:
+        # .env ファイルに保存
+        import os
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+        env_path = os.path.normpath(env_path)
+        try:
+            # 既存の.envを読み込み、APIキーを更新または追加
+            existing_lines = []
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    existing_lines = f.readlines()
+            
+            # YOUTUBE_API_KEY行がある場合は置き換え
+            found = False
+            new_lines = []
+            for line in existing_lines:
+                if line.startswith("YOUTUBE_API_KEY="):
+                    new_lines.append(f"YOUTUBE_API_KEY={new_key}\n")
+                    found = True
+                else:
+                    new_lines.append(line)
+            
+            if not found:
+                new_lines.append(f"\n# YouTube Data API v3 キー\nYOUTUBE_API_KEY={new_key}\n")
+            
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+            
+            st.sidebar.success("✓ APIキーを保存しました")
+        except Exception as e:
+            st.sidebar.error(f"✗ 保存失敗: {e}")
+
+st.sidebar.markdown("---")
+
+# ============================================================
+# YouTube 統計一括更新ボタン
+# ============================================================
+st.sidebar.header("📊 YouTube 統計更新")
+st.sidebar.caption("登録済みの動画URLから統計データを自動取得します")
+
+if st.button("🔄 全ペアの統計を一括更新", type="primary", use_container_width=True, key="youtube_bulk_update"):
+    if not api_key:
+        st.sidebar.error("✗ YouTube APIキーが設定されていません。")
+    else:
+        try:
+            # DBから全比較ペアを取得（動画URLがあるもののみ）
+            from comparison_manager import get_all_comparisons
+            all_comps_df = get_all_comparisons()
+            
+            # 動画URLが登録されているペアのみをフィルタ
+            valid_comps = []
+            for _, row in all_comps_df.iterrows():
+                has_url = (row.get("short_video_url", "") or "").strip() or \
+                          (row.get("long_video_url", "") or "").strip()
+                if has_url:
+                    valid_comps.append(dict(row))
+            
+            if not valid_comps:
+                st.sidebar.warning("動画URLが登録されたペアがありません。")
+            else:
+                # 処理中のログをsession_stateに保存（再描画中表示維持用）
+                st.session_state.youtube_update_result = {
+                    "success": 0,
+                    "failed": 0,
+                    "errors": [],
+                    "log": ["⏳ YouTubeから統計データを取得中..."],
+                }
+                
+                # YouTube API で統計を取得
+                result = fetch_stats_for_comparisons(valid_comps)
+                
+                # DBに保存
+                save_result = bulk_update_all_stats(valid_comps, result["stats"])
+                
+                st.session_state.youtube_update_result = {
+                    "success": save_result["success"],
+                    "failed": save_result["failed"],
+                    "errors": result.get("errors", []) + save_result.get("errors", []),
+                    "log": result.get("log", []),
+                }
+                
+                import time
+                time.sleep(1)
+                st.rerun()
+        
+        except RuntimeError as e:
+            err_msg = str(e)
+            if "quota" in err_msg.lower():
+                st.sidebar.error("✗ APIクォータを超過しました。明日再試行してください。")
+            else:
+                st.session_state.youtube_update_result = {
+                    "success": 0,
+                    "failed": 0,
+                    "errors": [err_msg],
+                    "log": [f"❌ 更新失敗: {err_msg}"],
+                }
+                import time
+                time.sleep(2)
+                st.rerun()
+        except Exception as e:
+            st.session_state.youtube_update_result = {
+                "success": 0,
+                "failed": 0,
+                "errors": [str(e)],
+                "log": [f"❌ 予期しないエラー: {e}"],
+            }
+            import time
+            time.sleep(2)
+            st.rerun()
+
+# 更新結果表示（ログ付き）
+if st.session_state.youtube_update_result:
+    res = st.session_state.youtube_update_result
+    
+    # 成功/失敗サマリー
+    succ = res.get("success", 0)
+    fail = res.get("failed", 0)
+    if succ > 0 or fail > 0:
+        st.sidebar.success(f"✓ 更新完了: {succ}件成功, {fail}件失敗")
+    
+    err_list = res.get("errors", [])
+    if err_list:
+        st.sidebar.warning(f"⚠️ エラー {len(err_list)}件発生")
+    
+    # ログ表示（エクスパンダー）
+    log_entries = res.get("log", [])
+    if log_entries:
+        with st.sidebar.expander(f"📋 処理ログ ({len(log_entries)}行)", expanded=True):
+            for entry in log_entries:
+                st.text(entry)
+    
+    st.session_state.youtube_update_result = None
+
+st.sidebar.markdown("---")
 
 # ============================================================
 # セル編集パネル（サイドバー）
@@ -355,6 +594,7 @@ else:
         st.sidebar.caption("制作状況・視聴回数を編集できます")
         
         with st.form("comparison_edit_form", clear_on_submit=False):
+            # --- ショート動画 ---
             short_status = st.radio(
                 "📱 ショート動画ステータス",
                 options=[0, 1, 2],
@@ -362,13 +602,43 @@ else:
                 index=comp["short_status"] if comp else 0,
                 horizontal=True
             )
-            short_views = st.number_input(
-                "ショート動画視聴回数",
-                min_value=0,
-                value=comp["short_views"] if comp else 0,
-                step=1
+            
+            # ショート動画URL入力
+            short_url = st.text_input(
+                "ショート動画URL",
+                value=comp.get("short_video_url", "") or "",
+                help="YouTube動画のURLを入力（統計自動取得用）"
             )
             
+            # ショート動画統計データ
+            st.caption("📊 ショート動画統計")
+            col_sv, col_sl, col_sc = st.columns(3)
+            with col_sv:
+                short_views = st.number_input(
+                    "視聴",
+                    min_value=0,
+                    value=comp.get("short_views", 0) or 0,
+                    step=1,
+                    key="short_views_input"
+                )
+            with col_sl:
+                short_likes = st.number_input(
+                    "高評価",
+                    min_value=0,
+                    value=comp.get("short_likes", 0) or 0,
+                    step=1,
+                    key="short_likes_input"
+                )
+            with col_sc:
+                short_comments = st.number_input(
+                    "コメント",
+                    min_value=0,
+                    value=comp.get("short_comments", 0) or 0,
+                    step=1,
+                    key="short_comments_input"
+                )
+            
+            # --- 長尺動画 ---
             long_status = st.radio(
                 "🎬 長尺動画ステータス",
                 options=[0, 1, 2],
@@ -376,20 +646,63 @@ else:
                 index=comp["long_status"] if comp else 0,
                 horizontal=True
             )
-            long_views = st.number_input(
-                "長尺動画視聴回数",
-                min_value=0,
-                value=comp["long_views"] if comp else 0,
-                step=1
+            
+            # 長尺動画URL入力
+            long_url = st.text_input(
+                "長尺動画URL",
+                value=comp.get("long_video_url", "") or "",
+                help="YouTube動画のURLを入力（統計自動取得用）"
             )
+            
+            # 長尺動画統計データ
+            st.caption("📊 長尺動画統計")
+            col_lv, col_ll, col_lc = st.columns(3)
+            with col_lv:
+                long_views = st.number_input(
+                    "視聴",
+                    min_value=0,
+                    value=comp.get("long_views", 0) or 0,
+                    step=1,
+                    key="long_views_input"
+                )
+            with col_ll:
+                long_likes = st.number_input(
+                    "高評価",
+                    min_value=0,
+                    value=comp.get("long_likes", 0) or 0,
+                    step=1,
+                    key="long_likes_input"
+                )
+            with col_lc:
+                long_comments = st.number_input(
+                    "コメント",
+                    min_value=0,
+                    value=comp.get("long_comments", 0) or 0,
+                    step=1,
+                    key="long_comments_input"
+                )
+            
+            # 最終更新日時表示
+            stats_updated = comp.get("stats_updated_at")
+            if stats_updated:
+                st.caption(f"🕐 統計最終更新: {stats_updated}")
+            
             notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
             
             submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
         
         if submitted:
+            # URLも同時に更新
+            from comparison_manager import update_comparison_url
+            if short_url:
+                update_comparison_url(comp_id, "short", short_url)
+            if long_url:
+                update_comparison_url(comp_id, "long", long_url)
+            
             success = update_comparison_full(
                 comp_id, short_status, long_status,
-                short_views, long_views, notes
+                short_views, long_views, notes,
+                short_likes, short_comments, long_likes, long_comments
             )
             if success:
                 st.sidebar.success("✓ 更新しました")

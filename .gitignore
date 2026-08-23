@@ -50,3 +50,6 @@ output.txt
 *.sqlite3
 *.db-shm
 *.db-wal
+
+# 環境変数ファイル（APIキーなど機密情報）
+.env
