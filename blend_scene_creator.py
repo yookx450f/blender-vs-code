@@ -178,20 +178,17 @@ def load_cars_config():
 # シーン初期化・インポート関数群
 # ============================================================
 def clear_scene():
-    """シーン内のすべてのメッシュオブジェクトを削除（初期化関数）"""
-    # デフォルトの立方体を削除
-    if "Cube" in bpy.data.objects:
-        bpy.data.objects.remove(bpy.data.objects["Cube"], do_unlink=True)
-    
-    # ライトを削除
+    """シーン内のすべてのオブジェクトを削除（初期化関数）"""
+    # 全オブジェクトを一括削除（KeyLightとComparisonCamera以外）
+    objects_to_keep = {"KeyLight", "ComparisonCamera"}
     for obj in list(bpy.data.objects):
-        if obj.type == 'LIGHT' and obj.name != "KeyLight":
+        if obj.name not in objects_to_keep:
             bpy.data.objects.remove(obj, do_unlink=True)
     
-    # カメラを削除（デフォルト以外）
-    for obj in list(bpy.data.objects):
-        if obj.type == 'CAMERA' and obj.name != "ComparisonCamera":
-            bpy.data.objects.remove(obj, do_unlink=True)
+    # 不要なマテリアルもクリーンアップ
+    for mat in list(bpy.data.materials):
+        if "clay_" in mat.name or "emission_label" in mat.name or "NeonGrid" in mat.name:
+            bpy.data.materials.remove(mat)
     
     print("シーンクリア完了")
 
@@ -873,7 +870,7 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
     text_obj.data.size = 0.35         # フォントサイズ（70%に縮小）
     text_obj.scale = (1.0, 1.0, 1.0)  # スケール
     
-    # バウンディングボックスから車のフロント端を計算
+    # バウンディングボックスから車の寸法を計算（ワールド座標系）
     car_object.update_tag()
     bpy.context.view_layer.update()
     
@@ -882,30 +879,32 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
         print(f"警告: {car_object.name} のバウンディングボックスが取得できません")
         return
     
+    # ワールド座標でバウンディングボックスの隅を取得
     corners_world = [car_object.matrix_world @ Vector(corner) for corner in local_bounds]
     
-    # バウンディングボックスから車の中心と幅を計算（Y軸中央配置）
-    min_x = min(c.x for c in corners_world)
-    max_x = max(c.x for c in corners_world)
-    min_y = min(c.y for c in corners_world)  # リア端（後部）のY座標
+    world_min_x = min(c.x for c in corners_world)
+    world_max_x = max(c.x for c in corners_world)
+    world_min_y = min(c.y for c in corners_world)  # リア端（後部）のY座標
+    world_max_y = max(c.y for c in corners_world)  # フロント端（前部）のY座標
 
-    # X軸の半幅を計算（ローカル座標系）
-    half_width_x = (max_x - min_x) / 2.0
+    world_car_width_x = world_max_x - world_min_x   # ワールド座標でのX幅
+    world_car_length_y = world_max_y - world_min_y  # ワールド座標でのY長さ
 
-    # テキストを車のY軸中央、車体のすぐ横に配置（ローカル座標系）
-    # carAは左側（X=-）、carBは右側（X=+）なので、それぞれ外側に配置
-    if car_key == "carA":
-        text_x_offset = -half_width_x - 0.6  # 車体の左側のさらに外側に配置（重複回避）
-    else:
-        text_x_offset = -half_width_x - 0.15   # 車体の中央
+    # 車のワールド寸法に比例した動的オフセットを計算
+    # 全長が長い車ほどテキストを大きく離し、短い車ほど近くに配置
+    x_margin_world = world_car_width_x * 0.3   # 車幅の30%分外側に配置
+    y_margin_world = world_car_length_y * 0.15 + 0.3  # 全長の15% + 固定0.3m
 
-    # テキストを車のリア端より後ろに配置（Y負方向）
-    # carAとcarBの文字が重ならないようにY軸方向に分離する
-    if car_key == "carA":
-        text_y_offset = min_y + 0.2   # リア端からY正方向へ0.2mずらす
-    else:
-        text_y_offset = min_y - 0.3   # carBはcarAより1文字分下（-Y方向）に大きくずらす
-    text_obj.location = (text_x_offset, text_y_offset, 0.02)  # Zを0.02に低下させて地面に近づける
+    # X位置: 車の左端から外側に配置（ワールド座標）
+    text_x_world = world_min_x - x_margin_world
+
+    # Y位置: リア端から後ろに配置（ワールド座標）
+    text_y_world = world_min_y - y_margin_world
+
+    # まず一時的な位置に設定（ペアレント用）
+    text_obj.location = (0, 0, 0)
+
+    print(f"  テキストの目標ワールド座標: X={text_x_world:.3f}, Y={text_y_world:.3f} (ワールド車幅={world_car_width_x:.3f}m, ワールド全長={world_car_length_y:.3f}m)")
     
     # Emissionマテリアルを作成（車の色と同じRGB）
     mat_name = f"emission_label_{car_key}"
@@ -942,6 +941,10 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
     # ★重要: テキストを車にペアレント設定（親子関係）
     # これにより、車のアニメーション中にテキストが自動で追従する
     text_obj.parent = car_object
+    
+    # ペアレント設定後、ワールド座標で目標位置に直接配置
+    # matrix_world を直接設定することで、車のスケール変換の影響を受けない
+    text_obj.matrix_world = Matrix.Translation((text_x_world, text_y_world, 0.02))
     
     print(f"3Dテキストラベル作成完了: {text_obj.name} -> '{text_content}' (ペアレント: {car_object.name})")
 
