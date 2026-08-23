@@ -102,9 +102,10 @@ def get_car_by_id(car_id):
     return None
 
 
-def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
+def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset=None):
     """新規車種追加"""
-    mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
+    if mirror_offset is None:
+        mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
@@ -126,9 +127,10 @@ def add_car(name, glb_filename, length, width, height, ground_clearance, turning
         return False, str(e)
 
 
-def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
+def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset=None):
     """車種情報更新"""
-    mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
+    if mirror_offset is None:
+        mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
@@ -339,7 +341,7 @@ def main():
                             st.session_state.edit_id, inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
                             int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
-                            inp_type
+                            inp_type, int(inp_mirror_offset)
                         )
                         if success:
                             st.success(f"✓ 車種 ID {st.session_state.edit_id} を更新しました")
@@ -353,7 +355,7 @@ def main():
                             inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
                             int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
-                            inp_type
+                            inp_type, int(inp_mirror_offset)
                         )
                         if success:
                             st.success(f"✓ 車種を追加しました (ID: {result})")
