@@ -92,8 +92,9 @@ with col_status:
         index=default_status_idx
     )
 
-# 車種タイプフィルタ
-all_types = sorted(set(row.get("car_type", "") for _, row in cars_df.iterrows() if row.get("car_type")))
+# 車種タイプフィルタ（登録件数の多い順に並べる）
+type_counts = cars_df["car_type"].value_counts()
+all_types = list(type_counts.index.tolist())
 col_type_a, col_type_b = st.columns([1, 1])
 with col_type_a:
     type_options_a = ["全タイプ"] + all_types
