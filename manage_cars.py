@@ -46,11 +46,31 @@ def init_db():
             ground_clearance INTEGER DEFAULT 0,
             turning_radius INTEGER DEFAULT 0,
             acceleration_0_to_100 REAL DEFAULT 0.0,
-            rotation_direction INTEGER DEFAULT 0
+            rotation_direction INTEGER DEFAULT 0,
+            car_type TEXT DEFAULT '',
+            mirror_offset_mm INTEGER DEFAULT 100
         )
     """)
-    conn.commit()
+    # mirror_offset_mm 列が存在しない場合は追加（マイグレーション対応）
+    try:
+        conn.execute("ALTER TABLE cars ADD COLUMN mirror_offset_mm INTEGER DEFAULT 100")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 列が既に存在する場合は無視
     conn.close()
+
+
+# 車種タイプ別のミラー突出量（片側 mm）
+MIRROR_OFFSET_BY_TYPE = {
+    "軽自動車": 70,
+    "スポーツカー": 90,
+    "セダン": 95,
+    "ハッチバック": 95,
+    "SUV": 100,
+    "ミニバン": 100,
+    "ピックアップ": 110,
+    "バス/トラック": 80,
+}
 
 
 def list_cars():
@@ -92,20 +112,21 @@ def search_cars(query):
 
 def add_car(args):
     """新規車種追加"""
+    mirror_offset = MIRROR_OFFSET_BY_TYPE.get(args.car_type, args.mirror_offset)
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
             INSERT INTO cars (name, glb_filename, length, width, height,
                              ground_clearance, turning_radius,
-                             acceleration_0_to_100, rotation_direction)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             acceleration_0_to_100, rotation_direction, car_type, mirror_offset_mm)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (args.name, args.glb, args.length, args.width, args.height,
               args.ground_clearance, args.turning_radius,
-              args.acceleration, args.rotation))
+              args.acceleration, args.rotation, args.car_type, mirror_offset))
         conn.commit()
         new_id = cursor.lastrowid
-        print(f"✓ 車種を追加しました (ID: {new_id}) - {args.name}")
+        print(f"✓ 車種を追加しました (ID: {new_id}) - {args.name} (ミラー突出量: {mirror_offset}mm)")
     except sqlite3.IntegrityError as e:
         if "UNIQUE constraint failed" in str(e):
             print(f"✗ エラー: GLBファイル名 '{args.glb}' は既に登録されています。")
@@ -142,6 +163,8 @@ def edit_car(car_id, args):
         ("turning_radius", "turning_radius"),
         ("acceleration", "acceleration_0_to_100"),
         ("rotation", "rotation_direction"),
+        ("car_type", "car_type"),
+        ("mirror_offset", "mirror_offset_mm"),
     ]
 
     for attr_name, db_column in field_map:
@@ -209,16 +232,22 @@ def show_car(car_id):
         conn.close()
         return
 
+    mirror_offset = row.get("mirror_offset_mm", 100)
+    if hasattr(mirror_offset, 'get'):
+        mirror_offset = mirror_offset.get("mirror_offset_mm", 100)
+    effective_width = row["width"] + (mirror_offset * 2)
     print(f"\n=== 車種詳細 (ID: {row['id']}) ===")
     print(f"  車名:             {row['name']}")
     print(f"  GLBファイル:      {row['glb_filename']}")
     print(f"  全長:             {row['length']} mm")
     print(f"  全幅:             {row['width']} mm")
+    print(f"  全幅(ミラー包含): {effective_width} mm")
     print(f"  全高:             {row['height']} mm")
     print(f"  最低地上高:       {row['ground_clearance']} mm")
     print(f"  最小回転半径:     {row['turning_radius']} mm")
     print(f"  0-100km/h加速:   {row['acceleration_0_to_100']} 秒")
     print(f"  Z軸回転角度:      {row['rotation_direction']} 度")
+    print(f"  ミラー突出量:     {mirror_offset} mm/片側")
 
     conn.close()
 
@@ -242,12 +271,18 @@ def import_from_csv(csv_path):
             if not row.get("name", "").strip():
                 continue
             try:
+                mirror_offset_val = 100  # デフォルト値
+                if "mirror_offset_mm" in row and row["mirror_offset_mm"]:
+                    mirror_offset_val = int(row["mirror_offset_mm"])
+                elif "car_type" in row and row["car_type"]:
+                    mirror_offset_val = MIRROR_OFFSET_BY_TYPE.get(row["car_type"], 100)
+                
                 cursor.execute("""
                     INSERT OR IGNORE INTO cars
                     (id, name, glb_filename, length, width, height,
                      ground_clearance, turning_radius,
-                     acceleration_0_to_100, rotation_direction)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     acceleration_0_to_100, rotation_direction, car_type, mirror_offset_mm)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     int(row["id"]),
                     row["name"],
@@ -258,7 +293,9 @@ def import_from_csv(csv_path):
                     int(row["ground_clearance"]),
                     int(row["turning_radius"]),
                     float(row["acceleration_0_to_100"]),
-                    int(row["rotation_direction"])
+                    int(row["rotation_direction"]),
+                    row.get("car_type", ""),
+                    mirror_offset_val
                 ))
                 if cursor.rowcount > 0:
                     imported += 1
@@ -284,12 +321,13 @@ def export_to_csv(output_path):
         writer = csv.writer(f)
         writer.writerow(["id", "name", "glb_filename", "length", "width", "height",
                          "ground_clearance", "turning_radius",
-                         "acceleration_0_to_100", "rotation_direction"])
+                         "acceleration_0_to_100", "rotation_direction", "car_type", "mirror_offset_mm"])
         for row in rows:
             writer.writerow([row["id"], row["name"], row["glb_filename"],
                             row["length"], row["width"], row["height"],
                             row["ground_clearance"], row["turning_radius"],
-                            row["acceleration_0_to_100"], row["rotation_direction"]])
+                            row["acceleration_0_to_100"], row["rotation_direction"],
+                            row.get("car_type", ""), row.get("mirror_offset_mm", 100)])
 
     print(f"✓ CSVエクスポート完了: {output_path} ({len(rows)} 台)")
     conn.close()
@@ -331,6 +369,10 @@ def main():
     add_parser.add_argument("--turning-radius", type=int, default=0, help="最小回転半径 (mm)")
     add_parser.add_argument("--acceleration", type=float, default=0.0, help="0-100km/h加速時間 (秒)")
     add_parser.add_argument("--rotation", type=int, default=0, help="Z軸回転角度 (度)")
+    add_parser.add_argument("--car-type", default="SUV",
+                           choices=["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
+                           help="車種タイプ（ミラー突出量を自動設定）")
+    add_parser.add_argument("--mirror-offset", type=int, default=100, help="ミラー突出量 (mm/片側)")
 
     # edit
     edit_parser = subparsers.add_parser("edit", help="車種情報修正")
@@ -344,6 +386,10 @@ def main():
     edit_parser.add_argument("--turning-radius", type=int, default=None, help="最小回転半径 (mm)")
     edit_parser.add_argument("--acceleration", type=float, default=None, help="0-100km/h加速時間 (秒)")
     edit_parser.add_argument("--rotation", type=int, default=None, help="Z軸回転角度 (度)")
+    edit_parser.add_argument("--car-type", default=None,
+                            choices=["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
+                            help="車種タイプ（ミラー突出量を自動設定）")
+    edit_parser.add_argument("--mirror-offset", type=int, default=None, help="ミラー突出量 (mm/片側)")
 
     # delete
     delete_parser = subparsers.add_parser("delete", help="車種削除")

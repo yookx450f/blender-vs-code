@@ -76,14 +76,19 @@ def load_cars_db():
         
         for row in cursor.fetchall():
             car_id = str(row["id"])
-            # Widthはミラー未包含のため、20cm(200mm)を加算して3Dスケールに使用する
+            # Widthはミラー未包含のため、mirror_offset_mm × 2 を加算して3Dスケールに使用する
+            # mirror_offset_mm が設定されていない場合はデフォルト100mm（両側200mm）を使用
             # ただしテキスト表示には生値を使用するため、width_rawを別途保持する
             width_raw = row["width"]
+            try:
+                mirror_offset = row["mirror_offset_mm"]
+            except (KeyError, IndexError):
+                mirror_offset = 100  # デフォルト値
             cars_db[car_id] = {
                 "name": row["name"],
                 "glb_filename": row["glb_filename"],
                 "length": row["length"],
-                "width": width_raw + 200,
+                "width": width_raw + (mirror_offset * 2),
                 "width_raw": width_raw,
                 "height": row["height"],
                 "ground_clearance": row["ground_clearance"],

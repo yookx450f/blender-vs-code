@@ -41,11 +41,32 @@ def init_db():
             turning_radius INTEGER DEFAULT 0,
             acceleration_0_to_100 REAL DEFAULT 0.0,
             rotation_direction INTEGER DEFAULT 0,
-            car_type TEXT DEFAULT ''
+            car_type TEXT DEFAULT '',
+            mirror_offset_mm INTEGER DEFAULT 100
         )
     """)
-    conn.commit()
+    # mirror_offset_mm 列が存在しない場合は追加（マイグレーション対応）
+    try:
+        conn.execute("ALTER TABLE cars ADD COLUMN mirror_offset_mm INTEGER DEFAULT 100")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 列が既に存在する場合は無視
     conn.close()
+
+
+# 車種タイプ別のミラー突出量（片側 mm）
+MIRROR_OFFSET_BY_TYPE = {
+    "軽自動車": 70,
+    "スポーツカー": 90,
+    "セダン": 95,
+    "ハッチバック": 95,
+    "SUV": 100,
+    "ミニバン": 100,
+    "ピックアップ": 110,
+    "バス/トラック": 80,
+}
+
+CAR_TYPE_OPTIONS = ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"]
 
 
 def get_all_cars():
@@ -83,15 +104,16 @@ def get_car_by_id(car_id):
 
 def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """新規車種追加"""
+    mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
             INSERT INTO cars (name, glb_filename, length, width, height,
                              ground_clearance, turning_radius,
-                             acceleration_0_to_100, rotation_direction, car_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             acceleration_0_to_100, rotation_direction, car_type, mirror_offset_mm)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (name, glb_filename, length, width, height,
-              ground_clearance, turning_radius, acceleration, rotation, car_type))
+              ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset))
         conn.commit()
         new_id = conn.cursor().lastrowid
         conn.close()
@@ -106,16 +128,19 @@ def add_car(name, glb_filename, length, width, height, ground_clearance, turning
 
 def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """車種情報更新"""
+    mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
             UPDATE cars SET
                 name = ?, glb_filename = ?, length = ?, width = ?, height = ?,
                 ground_clearance = ?, turning_radius = ?,
-                acceleration_0_to_100 = ?, rotation_direction = ?, car_type = ?
+                acceleration_0_to_100 = ?, rotation_direction = ?, car_type = ?,
+                mirror_offset_mm = ?
             WHERE id = ?
         """, (name, glb_filename, length, width, height,
-              ground_clearance, turning_radius, acceleration, rotation, car_type, car_id))
+              ground_clearance, turning_radius, acceleration, rotation, car_type,
+              mirror_offset, car_id))
         conn.commit()
         conn.close()
         return True, "更新しました"
@@ -208,7 +233,8 @@ def main():
     if not df.empty:
         display_df = df.copy()
         display_df.columns = ["ID", "車名", "GLBファイル", "全長(mm)", "全幅(mm)", "全高(mm)",
-                              "最低地上高(mm)", "最小回転半径(mm)", "0-100km/h加速(秒)", "Z軸回転(度)", "車種タイプ"]
+                              "最低地上高(mm)", "最小回転半径(mm)", "0-100km/h加速(秒)", "Z軸回転(度)",
+                              "車種タイプ", "ミラー突出量(mm)"]
         st.dataframe(display_df, use_container_width=True, height=400)
     else:
         st.info("データベースに車種データがありません。")
@@ -232,8 +258,17 @@ def main():
                 inp_glb = st.text_input("GLBファイル名", value=edit_car["glb_filename"] if edit_car else "")
                 inp_type = st.selectbox(
                     "車種タイプ",
-                    ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
-                    index=["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"].index(edit_car["car_type"]) if edit_car.get("car_type") and edit_car["car_type"] in ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"] else 0
+                    CAR_TYPE_OPTIONS,
+                    index=CAR_TYPE_OPTIONS.index(edit_car["car_type"]) if edit_car.get("car_type") and edit_car["car_type"] in CAR_TYPE_OPTIONS else 0
+                )
+                # ミラー突出量を表示（タイプ選択で自動設定）
+                auto_offset = MIRROR_OFFSET_BY_TYPE.get(inp_type, 100)
+                current_offset = edit_car.get("mirror_offset_mm", 100) if edit_car else 100
+                inp_mirror_offset = st.number_input(
+                    "ミラー突出量 (mm/片側)",
+                    min_value=50, max_value=150, step=5,
+                    value=current_offset,
+                    help=f"車種タイプ「{inp_type}」の推奨値: {auto_offset}mm。3Dスケール計算時に 全幅 + (この値 × 2) を使用します。"
                 )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
@@ -255,8 +290,17 @@ def main():
                 inp_glb = st.text_input("GLBファイル名", placeholder="例: civic2027.glb")
                 inp_type = st.selectbox(
                     "車種タイプ",
-                    ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"],
+                    CAR_TYPE_OPTIONS,
                     key="new_car_type"
+                )
+                # ミラー突出量を表示（タイプ選択で自動設定）
+                auto_offset = MIRROR_OFFSET_BY_TYPE.get(inp_type, 100)
+                inp_mirror_offset = st.number_input(
+                    "ミラー突出量 (mm/片側)",
+                    min_value=50, max_value=150, step=5,
+                    value=auto_offset,
+                    key="new_mirror_offset",
+                    help=f"車種タイプ「{inp_type}」の推奨値: {auto_offset}mm。3Dスケール計算時に 全幅 + (この値 × 2) を使用します。"
                 )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
@@ -331,18 +375,22 @@ def main():
 
         if car_detail:
             st.markdown(f"### {car_detail['name']}")
+            mirror_offset = car_detail.get("mirror_offset_mm", 100)
+            effective_width = car_detail["width"] + (mirror_offset * 2)
             detail_df = pd.DataFrame([{
                 "ID": car_detail["id"],
                 "車名": car_detail["name"],
                 "GLBファイル": car_detail["glb_filename"],
                 "全長(mm)": car_detail["length"],
                 "全幅(mm)": car_detail["width"],
+                "全幅(ミラー包含)(mm)": effective_width,
                 "全高(mm)": car_detail["height"],
                 "最低地上高(mm)": car_detail["ground_clearance"],
                 "最小回転半径(mm)": car_detail["turning_radius"],
                 "0-100km/h加速(秒)": car_detail["acceleration_0_to_100"],
                 "Z軸回転(度)": car_detail["rotation_direction"],
-                "車種タイプ": car_detail.get("car_type", "")
+                "車種タイプ": car_detail.get("car_type", ""),
+                "ミラー突出量(mm/片側)": mirror_offset
             }])
             st.dataframe(detail_df.set_index("ID"), use_container_width=True)
 
