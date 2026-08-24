@@ -231,15 +231,16 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
         "両方完了": "#2e7d32",       # ダークグリーン
     }
     
-    html = f'''<div style="overflow: auto; max-height: 80vh;"><table style="border-collapse: collapse; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
+    html = f'''<div style="overflow: auto; max-height: 75vh;"><table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: 'Meiryo UI', sans-serif; table-layout: fixed;">'''
     
     # ヘッダー行 - 車B（列）をヘッダーに表示（フィルタ中は有効な列のみ）
-    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20;"></th>'
+    # position: sticky でスクロール時にも常に表示されるようにする
+    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20; min-width: 140px;"></th>'
     for car_b in filtered_cars_b:
         if active_car_b_ids is not None and car_b["id"] not in active_car_b_ids:
             continue
         full_name = car_b["name"]
-        html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>'
+        html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 100px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>'
     html += '</tr>'
     
     # データ行 - 車A（行）を左側に表示
@@ -249,7 +250,7 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             continue
         
         full_name_a = car_a["name"]
-        html += f'<tr><td style="padding: 10px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>'
+        html += f'<tr><td style="padding: 4px 6px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 12px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>'
         
         for car_b in filtered_cars_b:
             # フィルタ中は有効な列のみ表示
@@ -261,9 +262,9 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             if pair_key in invalid_pairs:
                 if status_filter == "全件表示":
                     reason = "同じ車種" if car_a["id"] == car_b["id"] else "重複ペア"
-                    html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>'
+                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>'
                 else:
-                    html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: transparent;"></td>'
+                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
                 continue
             
             # ステータスを取得
@@ -306,7 +307,7 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 show_cell = False
             
             if not show_cell:
-                html += f'<td style="padding: 10px; border: 1px solid {border_color}; background: transparent;"></td>'
+                html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
                 continue
             
             # クリック可能なセル - 上段: 長尺視聴回数 / 下段: ショート視聴回数（2段表示）
@@ -326,13 +327,13 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             if has_registration:
                 tooltip_title = f"🎬 長尺: 👁{long_views:,} 👍{long_likes_val:,} 💬{long_comments_val:,}<br>📱 ショート: 👁{short_views:,} 👍{short_likes_val:,} 💬{short_comments_val:,}"
             
-            html += f'''<td style="padding: 10px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
+            html += f'''<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
                     title="{tooltip_title}"
                     onmouseover="this.style.border='2px solid #ffffff'"
                     onmouseout="this.style.border='1px solid {border_color}'">
                 <a href="{link_url}" style="text-decoration: none; color: inherit;">
-                    <div style="font-size: 13px; line-height: 1.4; font-weight: bold;">{long_views_display}</div>
-                    <div style="font-size: 13px; line-height: 1.4; font-weight: bold;">{short_views_display}</div>
+                    <div style="font-size: 12px; line-height: 1.2; font-weight: bold;">{long_views_display}</div>
+                    <div style="font-size: 12px; line-height: 1.2; font-weight: bold;">{short_views_display}</div>
                 </a>
             </td>'''
         
