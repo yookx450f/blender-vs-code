@@ -21,10 +21,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # カット定義（フレーム範囲）
 CUTS = {
-    "1": {"start": 0, "end": 648, "label": "カット1（シーン1-4）"},
-    "2": {"start": 648, "end": 1224, "label": "カット2（シーン5-7）"},
-    "3": {"start": 1224, "end": 1584, "label": "カット3（シーン8-9）"},
-    "4": {"start": 1584, "end": 1992, "label": "カット4（シーン10-11）"},
+    "1": {"start": 0, "end": 576, "label": "カット1（シーン1-4）"},
+    "2": {"start": 576, "end": 912, "label": "カット2（シーン5-7）"},
+    "3": {"start": 912, "end": 1128, "label": "カット3（シーン8-9）"},
+    "4": {"start": 1512, "end": 2256, "label": "カット4（シーン10-14）"},
+    "4b": {"start": 2136, "end": 2904, "label": "カット4b（カメラ回転カット）"},
+    "5": {"start": 2904, "end": 3528, "label": "カット5（シーン13-14）"},
 }
 
 
@@ -128,7 +130,7 @@ def merge_videos_with_ffmpeg(output_dir, final_output_path):
     """ffmpegで各カットの動画を1つに合成する"""
     # 各カットの動画ファイルを確認
     video_files = []
-    for cut in ["1", "2", "3", "4"]:
+    for cut in ["1", "2", "3", "4", "4b", "5"]:
         video_file = os.path.join(output_dir, f"cut{cut}_render.mp4")
         if os.path.exists(video_file):
             video_files.append(video_file)
@@ -205,7 +207,7 @@ def main():
     # 各カットをレンダリング
     print("\n--- 各カットのレンダリング ---")
     render_results = {}
-    for cut in ["1", "2", "3", "4"]:
+    for cut in ["1", "2", "3", "4", "4b", "5"]:
         success = render_cut_to_video(cut, output_dir)
         render_results[cut] = success
 
