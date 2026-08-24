@@ -520,9 +520,17 @@ if st.session_state.youtube_update_result:
     if succ > 0 or fail > 0:
         st.sidebar.success(f"✓ 更新完了: {succ}件成功, {fail}件失敗")
     
+    # エラー詳細表示（エクスパンダー）
     err_list = res.get("errors", [])
     if err_list:
-        st.sidebar.warning(f"⚠️ エラー {len(err_list)}件発生")
+        with st.sidebar.expander(f"⚠️ エラー {len(err_list)}件発生 (クリックで展開)", expanded=True):
+            for err_msg in err_list:
+                # タプル形式 (comp_id, message) の場合も対応
+                if isinstance(err_msg, tuple):
+                    comp_id, message = err_msg
+                    st.error(f"comp_id={comp_id}: {message}")
+                else:
+                    st.error(str(err_msg))
     
     # ログ表示（エクスパンダー）
     log_entries = res.get("log", [])
@@ -796,6 +804,12 @@ if car_a_row is not None and car_b_row is not None:
     st.subheader("📐 選択車種の諸元比較")
     
     # HTMLテーブルで車A一行・車B一行（項目を列に転置）
+    # mirror_offset_mm の値を取得（存在しない場合は空文字）
+    mirror_a = car_a_row.get('mirror_offset_mm', '') or ''
+    mirror_b = car_b_row.get('mirror_offset_mm', '') or ''
+    mirror_a_display = f"{int(mirror_a):,}" if mirror_a else "-"
+    mirror_b_display = f"{int(mirror_b):,}" if mirror_b else "-"
+
     specs_html = f'''
     <table style="width:100%; border-collapse:collapse; font-family:'Meiryo UI',sans-serif; font-size:13px;">
         <thead>
@@ -810,6 +824,7 @@ if car_a_row is not None and car_b_row is not None:
                 <th style="padding:8px; text-align:center; color:#aaa;">加速 (秒)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">Z回転 (度)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">タイプ</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">ミラー突出量 (mm)</th>
             </tr>
         </thead>
         <tbody>
@@ -824,6 +839,7 @@ if car_a_row is not None and car_b_row is not None:
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['acceleration_0_to_100']:.1f}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['rotation_direction']}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row.get('car_type', '')}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{mirror_a_display}</td>
             </tr>
             <tr style="background:#3e2a1a; border-left: 3px solid #ffb74d;">
                 <td style="padding:8px; font-weight:bold; color:#ffb74d;">🚙 {car_b_row['name']}</td>
@@ -836,6 +852,7 @@ if car_a_row is not None and car_b_row is not None:
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['acceleration_0_to_100']:.1f}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['rotation_direction']}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row.get('car_type', '')}</td>
+                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{mirror_b_display}</td>
             </tr>
         </tbody>
     </table>
