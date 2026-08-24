@@ -260,6 +260,8 @@ def _set_camera_location_keyframe(obj, frame, loc):
     """カメラの位置キーフレームを設定（F-Curve直接操作版）
     
     【修正: 試行#3】obj.locationをkeyframe_insert前に設定する。
+    【改訂: 離脱率改善】interpolationはBEZIER（デフォルト）のままにすることで、
+    シーン間のカメラ移動を滑らかにする。
     """
     x, y, z = loc if isinstance(loc, tuple) else (loc.x, loc.y, loc.z)
     
@@ -269,7 +271,28 @@ def _set_camera_location_keyframe(obj, frame, loc):
     if obj.animation_data is None:
         obj.animation_data_create()
     obj.keyframe_insert(data_path="location", index=-1)
-    _ensure_linear_interpolation_for_object(obj, frame)
+    # カメラはBEZIER interpolation（デフォルト）のままで滑らかにする
+    bpy.context.scene.frame_set(current_frame)
+
+
+def _set_camera_rotation_keyframe(obj, frame, rot):
+    """カメラの回転キーフレームを設定（F-Curve直接操作版）
+    
+    【改訂: 離脱率改善】interpolationはBEZIER（デフォルト）のままにすることで、
+    シーン間のカメラ移動を滑らかにする。
+    """
+    if hasattr(rot, 'x'):
+        rx, ry, rz = rot.x, rot.y, rot.z
+    else:
+        rx, ry, rz = rot[0], rot[1], rot[2]
+    
+    current_frame = bpy.context.scene.frame_current
+    bpy.context.scene.frame_set(frame)
+    obj.rotation_euler = (rx, ry, rz)
+    if obj.animation_data is None:
+        obj.animation_data_create()
+    obj.keyframe_insert(data_path="rotation_euler", index=-1)
+    # カメラはBEZIER interpolation（デフォルト）のままで滑らかにする
     bpy.context.scene.frame_set(current_frame)
 
 
@@ -435,32 +458,38 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
 
     # ============================================================
     # フレーム順にキーフレームを設定（カット 1）
+    # 【改訂: 離脱率改善】停止シーンをすべて削除し、カメラは常に動くようにする
+    # トップビューの高さを14m→8mに低下させ、車をアップで捉える
+    # ============================================================
+
+    # ============================================================
+    # 【改訂: 離脱率改善】フレーム配置を再調整 + BEZIER interpolationで滑らかに
     # ============================================================
 
     # --- フレーム 0: スタート ---
-    # カメラ: 斜め上の固定視点 (6.5, -6.5, 4.0)
     bpy.context.scene.frame_set(0)
-    loc_phase1 = (6.5, -6.5, 4.0)
-    set_camera_look_at(camera, loc_phase1, target)
-    rot_phase1 = camera.rotation_euler.copy()
-    _set_camera_location_keyframe(camera, 0, loc_phase1)
-    _set_rotation_keyframe(camera, 0, rot_phase1)
+    loc_frame0 = (6.5, -6.5, 4.0)
+    set_camera_look_at(camera, loc_frame0, target)
+    rot_frame0 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 0, loc_frame0)
+    _set_camera_rotation_keyframe(camera, 0, rot_frame0)
 
-    # 車 A: 左側に配置 (-2.0, rear_offset_y)
+    # 車 A: 左側に配置 (-1.25, rear_offset_y)
     _set_location_keyframe(car_a, 0, car_a_start[0], car_a_start[1], car_a_start[2])
 
-    # 車 B: 右側に配置 (2.0, 0.0)
+    # 車 B: 右側に配置 (1.25, 0.0)
     _set_location_keyframe(car_b, 0, car_b_start[0], car_b_start[1], car_b_start[2])
 
-    print(f"[フレーム 0] カメラ={loc_phase1}, carA={car_a_start}, carB={car_b_start}", file=log_fp)
+    print(f"[フレーム 0] カメラ={loc_frame0}, carA={car_a_start}, carB={car_b_start}", file=log_fp)
     log_fp.flush()
 
-    # --- フレーム 30: 出現完了、半透明化開始 ---
+    # --- フレーム 30: 出現完了、半透明化開始 + カメラゆっくり右回り接近 ---
     bpy.context.scene.frame_set(30)
-    camera.location = loc_phase1
-    camera.rotation_euler = rot_phase1
-    _set_camera_location_keyframe(camera, 30, loc_phase1)
-    _set_rotation_keyframe(camera, 30, rot_phase1)
+    loc_frame30 = (6.0, -5.5, 3.8)
+    set_camera_look_at(camera, loc_frame30, target)
+    rot_frame30 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 30, loc_frame30)
+    _set_camera_rotation_keyframe(camera, 30, rot_frame30)
 
     _set_location_keyframe(car_a, 30, car_a_start[0], car_a_start[1], car_a_start[2])
     _set_location_keyframe(car_b, 30, car_b_start[0], car_b_start[1], car_b_start[2])
@@ -470,132 +499,143 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
     if car_b_obj:
         _setup_transparency_animation(car_b_obj, 30, 96, 1.0, 0.4)
 
-    print(f"[フレーム 30] カメラ維持，車維持，Alpha(CarB のみ): 1.0→0.4 開始", file=log_fp)
+    print(f"[フレーム 30] カメラ接近開始={loc_frame30}, Alpha(CarB): 1.0→0.4 開始", file=log_fp)
+    log_fp.flush()
 
-    # --- シーン 1 終了・シーン 2 開始: フレーム 96（中央集合・半透明化完了）---
+    # --- フレーム 96: 中央集合完了 + カメラ軌道継続（停止なし）---
     bpy.context.scene.frame_set(96)
-    # カメラ: 同じ位置維持（固定視点終了）
-    camera.location = loc_phase1
-    camera.rotation_euler = rot_phase1
-    _set_camera_location_keyframe(camera, 96, loc_phase1)
-    _set_rotation_keyframe(camera, 96, rot_phase1)
+    loc_frame96 = (5.5, -3.5, 3.5)
+    set_camera_look_at(camera, loc_frame96, target)
+    rot_frame96 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 96, loc_frame96)
+    _set_camera_rotation_keyframe(camera, 96, rot_frame96)
 
-    # 車 A: 中央に集まる (0.0, 0.0, z)
+    # 車 A: 中央に集まる
     car_a.location = car_a_end
-    # 車 B: 中央に集まる (0.0, 0.0, z)
+    # 車 B: 中央に集まる
     car_b.location = car_b_end
-
-    # ============================================================
-    # 両車の視覚的中心がワールド座標(0, 0)に一致するように配置
-    # 補正値は get_car_visual_center_offset() で計算済み
-    # ============================================================
     _set_location_keyframe(car_a, 96, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 96, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 96] シーン 1 終了：カメラ維持，carA={car_a_end}, carB={car_b_end}", file=log_fp)
+    print(f"[フレーム 96] 中央集合完了: カメラ={loc_frame96}, carA={car_a_end}, carB={car_b_end}", file=log_fp)
     log_fp.flush()
 
-    # --- 停止（2 秒）: フレーム 144 ---
+    # --- フレーム 144: カメラ右回りながら上方へ昇る（停止→軌道運動に置き換え）---
     bpy.context.scene.frame_set(144)
-    camera.location = loc_phase1
-    camera.rotation_euler = rot_phase1
-    _set_camera_location_keyframe(camera, 144, loc_phase1)
-    _set_rotation_keyframe(camera, 144, rot_phase1)
+    loc_frame144 = (4.5, -2.0, 5.0)
+    set_camera_look_at(camera, loc_frame144, target)
+    rot_frame144 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 144, loc_frame144)
+    _set_camera_rotation_keyframe(camera, 144, rot_frame144)
     car_a.location = car_a_end
     _set_location_keyframe(car_a, 144, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 144, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 144] 停止（2 秒）")
+    print(f"[フレーム 144] カメラ上方へ: {loc_frame144}")
 
-    # --- シーン 2: フレーム 264（トップビュー到達・車が縦に見える）---
+    # --- フレーム 264: トップビュー到達（高さを8mに低下、車が大きい）---
     bpy.context.scene.frame_set(264)
-    loc_phase2 = (0.0, 0.0, 14.0)
-    set_camera_look_at(camera, loc_phase2, target)
-    rot_phase2 = camera.rotation_euler.copy()
-    _set_camera_location_keyframe(camera, 264, loc_phase2)
-    _set_rotation_keyframe(camera, 264, rot_phase2)
+    loc_frame264 = (3.0, -1.0, 8.0)
+    set_camera_look_at(camera, loc_frame264, target)
+    rot_frame264 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 264, loc_frame264)
+    _set_camera_rotation_keyframe(camera, 264, rot_frame264)
 
     car_a.location = car_a_end
     _set_location_keyframe(car_a, 264, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 264, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 264] シーン 2 終了：カメラ={loc_phase2}（トップビュー、車が縦）, 車維持")
+    print(f"[フレーム 264] トップビュー（接近）: カメラ={loc_frame264}, 車維持")
 
-    # --- 停止（2 秒）: フレーム 312 ---
+    # --- フレーム 312: 回転加速・前方へ降りてくる（停止→軌道運動に置き換え）---
     bpy.context.scene.frame_set(312)
-    camera.location = loc_phase2
-    camera.rotation_euler = rot_phase2
-    _set_camera_location_keyframe(camera, 312, loc_phase2)
-    _set_rotation_keyframe(camera, 312, rot_phase2)
+    loc_frame312 = (3.5, 0.5, 7.0)
+    set_camera_look_at(camera, loc_frame312, target)
+    rot_frame312 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 312, loc_frame312)
+    _set_camera_rotation_keyframe(camera, 312, rot_frame312)
     car_a.location = car_a_end
     _set_location_keyframe(car_a, 312, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 312, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 312] 停止（2 秒）")
+    print(f"[フレーム 312] カメラ前方へ: {loc_frame312}")
 
-    # --- シーン 3: フレーム 408（Z 軸回転完了・車が横に見える）---
+    # --- フレーム 408: 斜め前へ降りてくる（Z軸回転継続）---
     bpy.context.scene.frame_set(408)
-    loc_phase3 = (0.0, 0.0, 14.0)
-    rot_phase3 = (rot_phase2.x, rot_phase2.y, rot_phase2.z + math.pi / 2)
-    camera.location = loc_phase3
-    camera.rotation_euler = rot_phase3
-    _set_camera_location_keyframe(camera, 408, loc_phase3)
-    _set_rotation_keyframe(camera, 408, rot_phase3)
+    loc_frame408 = (5.0, 1.0, 5.5)
+    set_camera_look_at(camera, loc_frame408, target)
+    rot_frame408 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 408, loc_frame408)
+    _set_camera_rotation_keyframe(camera, 408, rot_frame408)
 
     car_a.location = car_a_end
     _set_location_keyframe(car_a, 408, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 408, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 408] シーン 3 終了：カメラ={loc_phase3}（Z 軸回転、車が横）, 車維持")
+    print(f"[フレーム 408] カメラ斜め前へ: {loc_frame408}, 車維持")
 
-    # --- 停止（2 秒）: フレーム 456 ---
+    # --- フレーム 456: サイドビューに接近（停止→軌道運動に置き換え）---
     bpy.context.scene.frame_set(456)
-    camera.location = loc_phase3
-    camera.rotation_euler = rot_phase3
-    _set_camera_location_keyframe(camera, 456, loc_phase3)
-    _set_rotation_keyframe(camera, 456, rot_phase3)
+    loc_frame456 = (6.5, 0.5, 3.5)
+    set_camera_look_at(camera, loc_frame456, target)
+    rot_frame456 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 456, loc_frame456)
+    _set_camera_rotation_keyframe(camera, 456, rot_frame456)
     car_a.location = car_a_end
     _set_location_keyframe(car_a, 456, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
     _set_location_keyframe(car_b, 456, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 456] 停止（2 秒）")
+    print(f"[フレーム 456] カメラサイドビュー接近: {loc_frame456}")
 
-    # --- シーン 4: フレーム 648（サイドビュー到達、8秒）---
-    bpy.context.scene.frame_set(648)
+    # --- フレーム 528: サイドビュー軌道継続（2秒）---
+    bpy.context.scene.frame_set(528)
+    loc_frame528 = (7.5, 0.0, 2.8)
+    set_camera_look_at(camera, loc_frame528, target)
+    rot_frame528 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 528, loc_frame528)
+    _set_camera_rotation_keyframe(camera, 528, rot_frame528)
+    car_a.location = car_a_end
+    _set_location_keyframe(car_a, 528, car_a_end[0], car_a_end[1], car_a_end[2])
+    car_b.location = car_b_end
+    _set_location_keyframe(car_b, 528, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    print(f"[フレーム 528] サイドビュー軌道継続: カメラ={loc_frame528}")
+
+    # --- フレーム 552: 車アップ・スローパン（1秒）---
+    bpy.context.scene.frame_set(552)
+    loc_frame552 = (7.8, 0.0, 2.6)
+    set_camera_look_at(camera, loc_frame552, target)
+    rot_frame552 = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, 552, loc_frame552)
+    _set_camera_rotation_keyframe(camera, 552, rot_frame552)
+    car_a.location = car_a_end
+    _set_location_keyframe(car_a, 552, car_a_end[0], car_a_end[1], car_a_end[2])
+    car_b.location = car_b_end
+    _set_location_keyframe(car_b, 552, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    print(f"[フレーム 552] 車アップ・スローパン: カメラ={loc_frame552}")
+
+    # --- フレーム 576: カット2接続位置に到達（1秒）---
+    bpy.context.scene.frame_set(576)
     loc_phase4 = (8.0, 0.0, 2.5)
     direction_phase4 = Vector(target) - Vector(loc_phase4)
     rot_quat_phase4 = direction_phase4.to_track_quat('-Z', 'Y')
     rot_phase4 = rot_quat_phase4.to_euler()
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
-    _set_camera_location_keyframe(camera, 648, loc_phase4)
-    _set_rotation_keyframe(camera, 648, rot_phase4)
-
+    _set_camera_location_keyframe(camera, 576, loc_phase4)
+    _set_camera_rotation_keyframe(camera, 576, rot_phase4)
     car_a.location = car_a_end
-    _set_location_keyframe(car_a, 648, car_a_end[0], car_a_end[1], car_a_end[2])
+    _set_location_keyframe(car_a, 576, car_a_end[0], car_a_end[1], car_a_end[2])
     car_b.location = car_b_end
-    _set_location_keyframe(car_b, 648, car_b_end[0], car_b_end[1], car_b_end[2])
+    _set_location_keyframe(car_b, 576, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    print(f"[フレーム 648] シーン 4 終了：カメラ={loc_phase4}（サイドビュー）, 車維持")
-
-    # --- サイドビュー静止（2 秒）: フレーム 696 ---
-    bpy.context.scene.frame_set(696)
-    camera.location = loc_phase4
-    camera.rotation_euler = rot_phase4
-    _set_camera_location_keyframe(camera, 696, loc_phase4)
-    _set_rotation_keyframe(camera, 696, rot_phase4)
-
-    car_a.location = car_a_end
-    _set_location_keyframe(car_a, 696, car_a_end[0], car_a_end[1], car_a_end[2])
-    car_b.location = car_b_end
-    _set_location_keyframe(car_b, 696, car_b_end[0], car_b_end[1], car_b_end[2])
-
-    print(f"[フレーム 696] サイドビュー静止（2 秒）, 車維持")
+    print(f"[フレーム 576] カット2接続位置到達: カメラ={loc_phase4}")
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)

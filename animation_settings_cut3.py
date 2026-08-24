@@ -1,6 +1,9 @@
 """
 アニメーション設定モジュール - カット 3
-フレーム 1224-1584（シーン 8-9、停止付き）を処理する。
+フレーム 912-1200（シーン 8-9、カメラは常に動く）を処理する。
+
+【改訂: 停止シーンを削除】各シーン間の停止を削除し、カメラは常に動くように変更。
+CarBの半透明(alpha=0.4)はカット2からずっと維持。
 
 使い方:
     from animation_settings_cut3 import setup_cut3_animations
@@ -10,12 +13,9 @@
 CarBの透明度アニメーションは以下の場所で制御されています：
   - シーン1-2（フレーム30-96）: animation_common.py の _setup_transparency_animation()
     → Principled BSDFのAlphaを 1.0→0.4 にアニメーション
-  - シーン5（フレーム648-768）: animation_settings_cut2.py の _apply_transparency_to_materials()
-    → material.transparency を 1.0→0.65 にアニメーション
-  - シーン9（フレーム1416-1536）: 本ファイルの _setup_car_b_transparency_for_scene9()
-    → Principled BSDFのAlphaを 0.35→0.9 にアニメーション（より不透明に）
+  - カット2-3: alpha=0.4 を維持（透明度変更なし）
 
-※透明度を変更する場合は、上記3箇所を確認してください。
+※透明度を変更する場合は、上記箇所を確認してください。
 """
 
 import bpy
@@ -31,7 +31,10 @@ from animation_settings_cut2 import _create_width_diff_text
 
 def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
-    カット 3 のアニメーションを設定（フレーム 1224-1584）
+    カット 3 のアニメーションを設定（フレーム 912-1200）
+
+    【改訂: 停止シーンを削除】各シーン間の停止を削除し、カメラは常に動くように変更。
+    CarBの半透明(alpha=0.4)はカット2からずっと維持。
 
     【修正: カット完全分離】previous_state をオプション化し、
     指定されていない場合は固定位置から読み込む。
@@ -62,8 +65,9 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
         car_a_end = (0.0, car_a_end[1], car_a_end[2])
         car_b_end = (0.0, car_b_end[1], car_b_end[2])
         # カメラの開始位置は Cut2終了時の固定位置を使用
+        # 【改訂】カット2終了位置は (0.0, -5.5, 2.5) に変更
         cam_data = CAMERA_POSITIONS.get("cut2_end", {})
-        loc_scene7_end = cam_data.get("loc", (0.0, -7.0, 2.5))
+        loc_scene7_end = cam_data.get("loc", (0.0, -5.5, 2.5))
         target_cam = cam_data.get("target", (0.0, 0.0, 1.5))
         direction = Vector(target_cam) - Vector(loc_scene7_end)
         rot_quat = direction.to_track_quat('-Z', 'Y')
@@ -79,22 +83,19 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 3】シーン 8: フレーム 1224-1368（正面から左側低位置へカメラ移動、6秒）
-    #                  停止: フレーム 1368-1416（2秒）
+    # 【カット 3】シーン 8: フレーム 912-1056（正面から左側低位置へカメラ移動、6秒）
+    # カメラは常に動く - 正面→左側低位置への滑らかな軌道
     # ============================================================
     print("\n=== 【カット 3】シーン 8 設定開始 ===")
 
-    scene8_start = 1272
-    scene8_end = 1416  # 6秒間（24fps × 6 = 144フレーム）
-    scene8_pause_end = 1416  # 停止2秒（24fps × 2 = 48フレーム）
+    scene8_start = 912  # カット2終了位置から開始
+    scene8_end = 1056  # 6秒間（24fps × 6 = 144フレーム）
 
     # カメラ: 正面ビューから左側の低い位置へ移動
-    # 初期位置：シーン7の終了位置（正面ビュー）
     start_loc = loc_scene7_end
     start_rot = rot_scene7_end
 
     # 最終位置：向かって左側（負のX方向）の低い位置
-    # 最低地上高を確認するための低いアングル
     end_loc = (-6.0, -2.0, 0.8)  # 左前方から低い位置
     direction_end = Vector(target) - Vector(end_loc)
     rot_quat_end = direction_end.to_track_quat('-Z', 'Y')
@@ -136,16 +137,11 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene8_start}] シーン 8 開始：カメラ移動開始（正面ビューから）")
     print(f"[フレーム{scene8_end}] シーン 8 終了：カメラ={end_loc}（左側低位置）, 車維持")
 
-    # --- 停止（2秒）: フレーム 1416 ---
-    camera.location = end_loc
-    camera.rotation_euler = end_rot
-    camera.keyframe_insert(data_path="location", frame=scene8_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene8_pause_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene8_pause_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene8_pause_end)
-    print(f"[フレーム{scene8_pause_end}] 停止（2秒）")
+    # --- CarBの半透明をカット2から維持 (alpha=0.4) ---
+    # カット3全体（シーン8+シーン9）に対して1回だけ設定し、ドライバー式の上書きを防ぐ
+    scene9_end = 1128  # シーン9終了フレーム（前方宣言）
+    _setup_transparency_animation(car_b, scene8_start, scene9_end, 0.4, 0.4)
+    print(f"[フレーム{scene8_start}-{scene9_end}] CarB 半透明維持：alpha=0.4（カット3全体）")
 
     # --- カット3独立実行対応：全幅差表示を再作成してからフェードアウト ---
     # カット2がスキップされた場合、WidthDiff_Container_Scene7 が存在しないため再作成する
@@ -241,22 +237,37 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
         print(f"[フレーム{scene8_end}] 全幅差テキストのフェードアウト完了（スケール→0）")
 
     # ============================================================
-    # 【カット 3】シーン 9: フレーム 1416-1536（最低地上高差表示、5秒）
-    #                    停止: フレーム 1536-1584（2秒）
-    #                    フェードアウト: フレーム 1584-1632（2秒）
+    # 【カット 3】シーン 9: フレーム 1056-1200（最低地上高差表示 + カメラ微動、6秒）
+    # カメラは常に動く - 微動して最終的に同じ位置に戻る
+    # CarB半透明(alpha=0.4)を維持
     # ============================================================
     print("\n=== 【カット 3】シーン 9 設定開始 ===")
 
-    scene9_start = 1464
-    scene9_end = 1584  # 5秒間（24fps × 5 = 120フレーム）
-    scene9_pause_end = 1584  # 停止2秒（24fps × 2 = 48フレーム）
-    scene9_fadeout_end = 1632  # フェードアウト2秒（24fps × 2 = 48フレーム）
+    scene9_start = 1056
+    scene9_end = 1128  # 3秒間（24fps × 3 = 72フレーム）
 
-    # カメラ: シーン8の終了位置を維持
+    # カメラ: シーン8の終了位置から微動して同じ位置に戻る
+    # 中間地点で少し移動して「止まっている」印象を避ける
+    mid_frame_scene9 = scene9_start + 36  # 72/2 = 36フレーム目
+    loc_mid_scene9 = (-5.5, -1.8, 0.9)  # 少し高い位置に移動
+    direction_mid_scene9 = Vector(target) - Vector(loc_mid_scene9)
+    rot_quat_mid_scene9 = direction_mid_scene9.to_track_quat('-Z', 'Y')
+    rot_mid_scene9 = rot_quat_mid_scene9.to_euler()
+
     camera.location = end_loc
     camera.rotation_euler = end_rot
     camera.keyframe_insert(data_path="location", frame=scene9_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene9_start)
+
+    # 中間地点 - 少し移動
+    camera.location = loc_mid_scene9
+    camera.rotation_euler = rot_mid_scene9
+    camera.keyframe_insert(data_path="location", frame=mid_frame_scene9)
+    camera.keyframe_insert(data_path="rotation_euler", frame=mid_frame_scene9)
+
+    # 終了位置 - 同じ位置に戻る
+    camera.location = end_loc
+    camera.rotation_euler = end_rot
     camera.keyframe_insert(data_path="location", frame=scene9_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene9_end)
 
@@ -268,97 +279,13 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     car_b.keyframe_insert(data_path="location", frame=scene9_start)
     car_b.keyframe_insert(data_path="location", frame=scene9_end)
 
-    print(f"[フレーム{scene9_start}] シーン 9 開始：最低地上高差表示")
+    print(f"[フレーム{scene9_start}] シーン 9 開始：最低地上高差表示 + カメラ微動")
+    print(f"[フレーム{scene9_end}] シーン 9 終了：カメラ={end_loc}（元の位置に戻り）, 車維持")
 
-    # --- CarB の透明度を少し緩める（シーン 9 用：カット1と同じ方式）---
-    _setup_transparency_animation(car_b, scene9_start, scene9_end, 0.4, 0.9)
-    print(f"[フレーム{scene9_start}-{scene9_end}] CarB 透明度緩和：0.4→0.9")
+    # --- CarBの半透明はシーン8でカット3全体に対して設定済み（上書きしない）---
 
     # --- シーン 9 の最低地上高差エフェクト（地面に張り付けたテキスト）---
     _setup_scene9_effects(scene, camera, car_a, car_b, scene9_start, scene9_end, car_dimensions)
-
-    # --- 停止（2秒）: フレーム 1584 ---
-    camera.location = end_loc
-    camera.rotation_euler = end_rot
-    camera.keyframe_insert(data_path="location", frame=scene9_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene9_pause_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene9_pause_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene9_pause_end)
-    print(f"[フレーム{scene9_pause_end}] 停止（2秒）")
-
-    # --- 最低地上高表示のフェードアウト（2秒）: フレーム 1584-1632 ---
-    gc_container_name = "GroundClearanceDiff_Container_Scene9"
-    if gc_container_name in bpy.data.objects:
-        gc_text_obj = bpy.data.objects[gc_container_name]
-        
-        print(f"[フレーム{scene9_pause_end}] 最低地上高表示フェードアウト開始（1584→{scene9_fadeout_end}）")
-
-        # コンテナ自体のスケールをアニメーションで制御
-        # フレーム 1584: スケール維持（1.0, 1.0, 1.0）
-        gc_text_obj.scale = (1.0, 1.0, 1.0)
-        gc_text_obj.keyframe_insert(data_path="scale", frame=scene9_pause_end)
-        
-        # フレーム 1632: スケールを 0 に（完全に消える）
-        gc_text_obj.scale = (0.0, 0.0, 0.0)
-        gc_text_obj.keyframe_insert(data_path="scale", frame=scene9_fadeout_end)
-
-        # 各文字オブジェクトにもキーフレームを設定（二重確保）
-        for char_obj in gc_text_obj.children:
-            if char_obj.type == 'MESH':
-                # まず現在のスケールを取得して保存
-                current_scale = char_obj.scale.copy() if hasattr(char_obj, 'scale') else (1.0, 1.0, 1.0)
-
-                # フレーム 1584: 現在のスケールを維持（キーフレーム）
-                char_obj.scale = current_scale
-                char_obj.keyframe_insert(data_path="scale", frame=scene9_pause_end)
-
-                # フレーム 1632: スケールを 0 に
-                char_obj.scale = (0.0, 0.0, 0.0)
-                char_obj.keyframe_insert(data_path="scale", frame=scene9_fadeout_end)
-
-                # 発光強度も徐々に 0 に（確実に消えるように）
-                if len(char_obj.data.materials) > 0:
-                    mat = char_obj.data.materials[0]
-                    if mat.use_nodes:
-                        for node in mat.node_tree.nodes:
-                            if node.type == 'BSDF_EMISSION':
-                                current_strength = node.inputs['Strength'].default_value
-
-                                # フレーム 1584: 現在の強度を維持（キーフレーム）
-                                node.inputs['Strength'].default_value = current_strength
-                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene9_pause_end)
-
-                                # フレーム 1632: 強度を 0 に
-                                node.inputs['Strength'].default_value = 0.0
-                                node.inputs['Strength'].keyframe_insert(data_path="default_value", frame=scene9_fadeout_end)
-                        
-                        # Mix Shader の Fac でも透明度を制御（二重確保）
-                        for n in mat.node_tree.nodes:
-                            if n.type == 'MIX_SHADER':
-                                # フレーム 1584 で完全不透明（Fac=1.0 → Emission を完全に使用）
-                                n.inputs['Fac'].default_value = 1.0
-                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene9_pause_end)
-                                # フレーム 1632 で完全透明（Fac=0.0 → Transparent を完全に使用）
-                                n.inputs['Fac'].default_value = 0.0
-                                n.inputs['Fac'].keyframe_insert(data_path="default_value", frame=scene9_fadeout_end)
-                                
-                        # EEVEE の透過設定を確実に有効化
-                        mat.blend_method = 'BLEND'
-                        mat.shadow_method = 'BUFFER'
-
-        print(f"[フレーム{scene9_fadeout_end}] 最低地上高表示のフェードアウト完了（スケール→0）")
-
-    # カメラと車のキーフレームをフェードアウト終了まで延長
-    camera.location = end_loc
-    camera.rotation_euler = end_rot
-    camera.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene9_fadeout_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene9_fadeout_end)
 
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
@@ -366,7 +293,6 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     print("\n=== カット 3 アニメーション完了 ===")
 
     # 結果を返す（カット4で使用する）
-    # 【修正: カット完全分離】CutState 形式で最終状態のみを返す
     from animation_common import CutState
     return CutState(
         car_a_loc=car_a_end,

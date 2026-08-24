@@ -12,23 +12,24 @@ import os
 # フレーム範囲定義
 # ============================================================
 
+# 【改訂: カット1短縮】カット1が696→576に短縮され、各カットのフレームが120ずつずれた
 CUT1_START_FRAME = 0
-CUT1_END_FRAME = 696
+CUT1_END_FRAME = 576
 
-CUT2_START_FRAME = 696
-CUT2_END_FRAME = 1272
+CUT2_START_FRAME = 576
+CUT2_END_FRAME = 912  # 【改訂】カット2短縮 (24秒→14秒)
 
-CUT3_START_FRAME = 1272
-CUT3_END_FRAME = 1632
+CUT3_START_FRAME = 912  # 【改訂】カット2終了に合わせて開始フレーム変更
+CUT3_END_FRAME = 1128  # 【改訂】カット3さらに短縮 (12秒→9秒)
 
-CUT4_START_FRAME = 1632
-CUT4_END_FRAME = 2256
+CUT4_START_FRAME = 1512
+CUT4_END_FRAME = 2136
 
-CUT4B_START_FRAME = 2256
-CUT4B_END_FRAME = 3024
+CUT4B_START_FRAME = 2136
+CUT4B_END_FRAME = 2904
 
-CUT5_START_FRAME = 3024
-CUT5_END_FRAME = 3288
+CUT5_START_FRAME = 2904
+CUT5_END_FRAME = 3168
 
 # ショート動画用（縦長9:16、フレーム0-144、約6秒）
 SHORT_START_FRAME = 0
@@ -51,7 +52,7 @@ CUT_FRAMES = {
 CAMERA_POSITIONS = {
     "cut1_start": {"loc": (6.5, -6.5, 4.0), "target": (0.0, 0.0, 1.5)},
     "cut1_end":   {"loc": (8.0, 0.0, 2.5), "target": (0.0, 0.0, 1.5)},
-    "cut2_end":   {"loc": (0.0, -7.0, 2.5), "target": (0.0, 0.0, 1.5)},
+    "cut2_end":   {"loc": (0.0, -5.5, 2.5), "target": (0.0, 0.0, 1.5)},
     "cut3_end":   {"loc": (-6.0, -2.0, 0.8), "target": (0.0, 0.0, 1.5)},
     "cut4_end":   {"loc": None, "target": None},  # Cut4は回転中心に依存
     "cut4b_end":  {"loc": None, "target": None},  # Cut4bはCut4のカメラ位置を継承（俯瞰に戻す）

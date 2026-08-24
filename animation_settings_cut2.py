@@ -1,6 +1,9 @@
 """
 アニメーション設定モジュール - カット 2
-フレーム 648-1272（シーン 5-7、各シーン後に停止 2 秒付き）を処理する。
+フレーム 576-1152（シーン 5-7、滑らかなカメラ移動付き）を処理する。
+
+【改訂: 停止シーンを削除】各シーン間の停止を削除し、カメラは常に動くように変更。
+BEZIER interpolation でシーン間の接続を滑らかにする。
 
 使い方:
     from animation_settings_cut2 import setup_cut2_animations
@@ -18,7 +21,10 @@ from animation_common import (
 
 def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
     """
-    カット 2 のアニメーションを設定（フレーム 648-1224、各シーン後に停止 2 秒付き）
+    カット 2 のアニメーションを設定（フレーム 576-1152、滑らかなカメラ移動付き）
+
+    【改訂: 停止シーンを削除】各シーン間の停止を削除し、カメラは常に動くように変更。
+    BEZIER interpolation でシーン間の接続を滑らかにする。
 
     【修正: カット完全分離】previous_state をオプション化し、
     指定されていない場合は固定位置から読み込む。
@@ -69,14 +75,13 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 2】シーン 5: フレーム 648-768（真横固定視点・全長差表示エフェクト、5 秒）
-    #              停止: フレーム 768-816（2 秒）
+    # 【カット 2】シーン 5: フレーム 576-624（全長差表示エフェクト、2秒）
+    # カメラは常に動く - 接近しながらテキスト表示
     # ============================================================
     print("\n=== 【カット 2】シーン 5 設定開始 ===")
 
-    scene5_start = 696
-    scene5_end = 816  # 5 秒間（24fps × 5 = 120 フレーム）
-    scene5_pause_end = 864  # 停止 2 秒（24fps × 2 = 48 フレーム）
+    scene5_start = 576
+    scene5_end = 624  # 2秒間（24fps × 2 = 48 フレーム）
 
     # カメラ: 全長差表示時に少し寄せる（X方向を8.0→6.0に接近）
     loc_phase4_close = (6.0, 0.0, 2.5)
@@ -84,20 +89,13 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     rot_quat_close = direction_close.to_track_quat('-Z', 'Y')
     rot_phase4_close = rot_quat_close.to_euler()
 
-    # フレーム 696: 元のサイドビュー位置から開始
+    # フレーム 576: カット1終了位置から開始
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
     camera.keyframe_insert(data_path="location", frame=scene5_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene5_start)
 
-    # フレーム 720 (約1秒後): より近い位置に滑らかに移動
-    close_frame = scene5_start + 24
-    camera.location = loc_phase4_close
-    camera.rotation_euler = rot_phase4_close
-    camera.keyframe_insert(data_path="location", frame=close_frame)
-    camera.keyframe_insert(data_path="rotation_euler", frame=close_frame)
-
-    # フレーム 816: 近い位置を維持
+    # フレーム 624: 近い位置に移動（2秒で接近完了）
     camera.location = loc_phase4_close
     camera.rotation_euler = rot_phase4_close
     camera.keyframe_insert(data_path="location", frame=scene5_end)
@@ -114,48 +112,33 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene5_start}] シーン 5 開始：カメラ={loc_phase4} → {loc_phase4_close}（全長差表示時に接近）, 車維持")
 
     # --- CarB の半透明化（カット1と同じ方式で半透明化）---
-    # カット2単独実行時はカット1がスキップされるため、透明度の初期化が必要
-    # カット1終了時(CarB alpha=0.4)の状態を維持し、さらに半透明にする
     _setup_transparency_animation(car_b, scene5_start, scene5_end, 0.4, 0.4)
     print(f"[フレーム{scene5_start}-{scene5_end}] CarB 半透明化：0.4（カット1終了時の状態を維持）")
 
     # --- シーン 5 の全長差エフェクト（レーザー線＋数値テキスト）---
     _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions)
 
-    # --- 停止（2 秒）: フレーム 816-864 ---
-    # カメラを元の位置に戻す（シーン6の移行のため）
-    camera.location = loc_phase4
-    camera.rotation_euler = rot_phase4
-    camera.keyframe_insert(data_path="location", frame=scene5_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene5_pause_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene5_pause_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene5_pause_end)
-    print(f"[フレーム{scene5_pause_end}] 停止（2 秒）：カメラ={loc_phase4}（元の位置に戻す）")
-
     # ============================================================
-    # 【カット 2】シーン 6: フレーム 864-1032（サイドビューから正面へカメラ移動、7 秒）
-    #                  停止: フレーム 1032-1080（2 秒）
+    # 【カット 2】シーン 6: フレーム 624-816（サイドビューから正面へカメラ移動、8秒）
+    # カメラは常に動く - サイド→正面への滑らかな軌道
     # ============================================================
     print("\n=== 【カット 2】シーン 6 設定開始 ===")
 
-    scene6_start = 864
-    scene6_end = 1032  # 7 秒間（24fps × 7 = 168 フレーム）
+    scene6_start = 624
+    scene6_end = 816  # 8秒間（24fps × 8 = 192 フレーム）
 
     # カメラ: サイドビュー位置から車の正面にゆっくり移動
-    # 初期位置：サイドビュー（loc_phase4, rot_phase4）
-    start_loc = loc_phase4
-    start_rot = rot_phase4
+    start_loc = loc_phase4_close
+    start_rot = rot_phase4_close
     
-    # 最終位置：車により近い正面ビュー（より近い距離）
+    # 最終位置：車により近い正面ビュー
     end_loc = (0.0, -7.0, 2.5)  # 車に近づけた正面、やや上
     direction_end = Vector(target) - Vector(end_loc)
     rot_quat_end = direction_end.to_track_quat('-Z', 'Y')
     end_rot = rot_quat_end.to_euler()
 
     # 中間地点 - 距離 50%
-    mid_frame = scene6_start + 84  # 168/2 = 84 フレーム目
+    mid_frame = scene6_start + 96  # 192/2 = 96 フレーム目
     loc_mid = (start_loc[0] + end_loc[0]) / 2.0, (start_loc[1] + end_loc[1]) / 2.0, (start_loc[2] + end_loc[2]) / 2.0
     direction_mid = Vector(target) - Vector(loc_mid)
     rot_quat_mid = direction_mid.to_track_quat('-Z', 'Y')
@@ -187,35 +170,30 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     car_b.keyframe_insert(data_path="location", frame=scene6_start)
     car_b.keyframe_insert(data_path="location", frame=scene6_end)
 
-    print(f"[フレーム{scene6_start}] シーン 6 開始：カメラ移動開始（サイドビュー）")
+    print(f"[フレーム{scene6_start}] シーン 6 開始：カメラ移動開始（サイドビュー→正面）")
     print(f"[フレーム{scene6_end}] シーン 6 終了：カメラ={end_loc}（正面ビュー）, 車維持")
 
-    # --- 停止（2 秒）: フレーム 1080 ---
-    scene6_pause_end = scene6_end + 48  # 1032 + 48 = 1080
-    camera.location = end_loc
-    camera.rotation_euler = end_rot
-    camera.keyframe_insert(data_path="location", frame=scene6_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene6_pause_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene6_pause_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene6_pause_end)
-    print(f"[フレーム{scene6_pause_end}] 停止（2 秒）")
-
     # ============================================================
-    # 【カット 2】シーン 7: フレーム 1080-1224（正面ビュー固定・横幅差表示、6 秒）
-    #                    停止: フレーム 1224-1272（2 秒）
+    # 【カット 2】シーン 7: フレーム 816-912（横幅差表示 + カメラゆっくり接近、4秒）
+    # カメラは常に動く - 正面ビューからさらに接近
     # ============================================================
     print("\n=== 【カット 2】シーン 7 設定開始 ===")
 
-    scene7_start = 1080
-    scene7_end = 1224  # 6 秒間（24fps × 6 = 144 フレーム）
+    scene7_start = 816
+    scene7_end = 912  # 4秒間（24fps × 4 = 96 フレーム）
 
-    # カメラ: シーン 6 の終了位置に固定
+    # カメラ: シーン6の終了位置からさらに接近
+    scene7_end_loc = (0.0, -5.5, 2.5)  # さらに車に接近
+    direction_scene7_end = Vector(target) - Vector(scene7_end_loc)
+    rot_quat_scene7_end = direction_scene7_end.to_track_quat('-Z', 'Y')
+    scene7_end_rot = rot_quat_scene7_end.to_euler()
+
     camera.location = end_loc
     camera.rotation_euler = end_rot
     camera.keyframe_insert(data_path="location", frame=scene7_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene7_start)
+    camera.location = scene7_end_loc
+    camera.rotation_euler = scene7_end_rot
     camera.keyframe_insert(data_path="location", frame=scene7_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene7_end)
 
@@ -227,30 +205,18 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     car_b.keyframe_insert(data_path="location", frame=scene7_start)
     car_b.keyframe_insert(data_path="location", frame=scene7_end)
 
-    print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ固定（正面ビュー）")
-    print(f"[フレーム{scene7_end}] シーン 7 終了：カメラ={end_loc}（正面ビュー）, 車維持")
+    print(f"[フレーム{scene7_start}] シーン 7 開始：カメラ={end_loc} → {scene7_end_loc}（横幅差表示+接近）")
+    print(f"[フレーム{scene7_end}] シーン 7 終了：カメラ={scene7_end_loc}, 車維持")
 
     # --- シーン 7 の横幅差エフェクト（テキストのみ）---
     _setup_scene7_effects(scene, camera, car_a, car_b, scene7_start, scene7_end, car_dimensions)
-
-    # --- 停止（2 秒）: フレーム 1272 ---
-    scene7_pause_end = 1272
-    camera.location = end_loc
-    camera.rotation_euler = end_rot
-    camera.keyframe_insert(data_path="location", frame=scene7_pause_end)
-    camera.keyframe_insert(data_path="rotation_euler", frame=scene7_pause_end)
-    car_a.location = car_a_end
-    car_a.keyframe_insert(data_path="location", frame=scene7_pause_end)
-    car_b.location = car_b_end
-    car_b.keyframe_insert(data_path="location", frame=scene7_pause_end)
-    print(f"[フレーム{scene7_pause_end}] 停止（2 秒）")
 
     # シーン 5 のテキストをフェードアウト（シーン 6 終了時）
     text_container_name = "LengthDiff_Container_Scene5"
     if text_container_name in bpy.data.objects:
         text_obj = bpy.data.objects[text_container_name]
 
-        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（864→1032）")
+        print(f"[フレーム{scene6_start}] テキストフェードアウト開始（{scene6_start}→{scene6_end}）")
 
         # コンテナ自体のスケールをアニメーションで制御（最も確実な方法）
         # フレーム 864: スケール維持（1.0, 1.0, 1.0）
@@ -319,8 +285,8 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     return CutState(
         car_a_loc=car_a_end,
         car_b_loc=car_b_end,
-        camera_loc=end_loc,
-        camera_rot=end_rot,
+        camera_loc=scene7_end_loc,
+        camera_rot=scene7_end_rot,
     )
 
 
@@ -392,14 +358,14 @@ def _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end,
     print(f"[シーン 5] 全長差：{length_diff_mm:+d}mm (CarB: {length_b_mm}mm, CarA: {length_a_mm}mm)")
 
     # --- 数値テキストの作成（ピピピッ出現アニメーション付き）---
-    text_obj = _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, car_dimensions)
+    text_obj = _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, scene5_start, scene5_end, car_dimensions)
     if text_obj:
         print(f"[シーン 5] 数値テキスト '{text_obj.name}' を作成しました")
 
     print(f"[フレーム{scene5_end}] シーン 5 終了：全長差表示完了")
 
 
-def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, car_dimensions=None):
+def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_diff_mm, car_a, car_b, start_frame, end_frame, car_dimensions=None):
     """計算式を表示するテキストを作成（CarB - CarA → 結果）"""
 
     # 各車の中心座標を取得
@@ -610,7 +576,7 @@ def _create_length_diff_text(scene, camera, length_a_mm, length_b_mm, length_dif
         char_obj.location = (local_x, local_y, local_z)
 
     # アニメーションを設定（コンテナの子オブジェクトに対して）
-    _setup_char_by_char_animation(char_objects, start_frame=696, end_frame=816)
+    _setup_char_by_char_animation(char_objects, start_frame=start_frame, end_frame=end_frame)
 
     print(f"[シーン 5] 計算式テキスト '{text_str}' を {len(char_objects)} 文字で作成")
     return text_container

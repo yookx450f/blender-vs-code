@@ -71,7 +71,7 @@ def setup_cut4_animations(scene, camera, imported_cars, previous_state=None, car
     # ============================================================
     print("\n=== 【カット 4】シーン 10 設定開始 ===")
 
-    scene10_start = 1632
+    scene10_start = 1512  # 【改訂】カット1短縮で120フレームずらす
     scene10_end = 1752  # 5秒間（24fps × 5 = 120フレーム）
     scene10_pause_end = 1752  # 停止2秒（24fps × 2 = 48フレーム）
 

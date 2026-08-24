@@ -74,13 +74,13 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
         car_a_end = (car_a_global_x, empty_a_end_loc[1], empty_a_end_loc[2])
         car_b_end = (car_b_global_x, empty_b_end_loc[1], empty_b_end_loc[2])
         
-        # カメラ位置: Cut4b終了時の俯瞰視点（Z=25.0、車の中央真上）
+        # カメラ位置: Cut4b終了時の斜め上からの位置（Z=15.0m）
         mid_turn_center_x = (empty_a_end_loc[0] + empty_b_end_loc[0]) / 2.0
         mid_turn_center_y = (empty_a_end_loc[1] + empty_b_end_loc[1]) / 2.0
-        loc_scene12_end = (mid_turn_center_x, mid_turn_center_y, 25.0)
+        loc_scene12_end = (mid_turn_center_x, mid_turn_center_y, 15.0)
         
-        # 注視点は回転中心の中間点
-        target_cam = (mid_turn_center_x, mid_turn_center_y, 0.0)
+        # 注視点は車の中央（orbit_centerと同じ）
+        target_cam = (0.0, mid_turn_center_y, 1.0)
         direction = Vector(target_cam) - Vector(loc_scene12_end)
         rot_quat = direction.to_track_quat('-Z', 'Y')
         rot_scene12_end = rot_quat.to_euler()
@@ -93,33 +93,31 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
         return None
 
     # ============================================================
-    # 【カット 5】シーン 13: フレーム 2208-2352（カメラ回転6秒）
+    # 【カット 5】シーン 13: フレーム 2904-2976（車のX軸方向に離す、3秒）
+    # カメラ位置は固定、向きだけで車を追う
     # ============================================================
     print("\n=== 【カット 5】シーン 13 設定開始 ===")
 
-    scene13_start = 3024
-    scene13_end = 3168  # カメラ移動完了（計6秒：24fps × 6 = 144フレーム）
+    scene13_start = 2904  # カット4b終了フレームから開始
+    scene13_end = 2976  # 3秒間（24fps × 3 = 72フレーム）
 
-    # カメラ: 6秒かけてゆっくり90度回転
-    # 開始位置: シーン12終了時のカメラ位置・回転
+    # カメラ: 位置は固定、回転のみで車を追う
     camera.location = loc_scene12_end
     camera.rotation_euler = rot_scene12_end
     camera.keyframe_insert(data_path="location", frame=scene13_start)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_start)
     
-    # 終了位置: Z軸を中心に90度（π/2ラジアン）回転したカメラ
-    start_rot = rot_scene12_end  # タプル
-    end_rot = (start_rot[0], start_rot[1], start_rot[2] + math.pi / 2)
-    
-    camera.location = loc_scene12_end  # 位置は変えずに回転のみ
-    camera.rotation_euler = end_rot
+    # 終了位置: カメラ位置は固定、注視点は車の中央を維持
+    camera.location = loc_scene12_end
+    # 注視点は車の中央（X軸方向に離れても中央は変わらない）
+    set_camera_look_at(camera, loc_scene12_end, (0.0, car_a_end[1], 1.0))
     camera.keyframe_insert(data_path="location", frame=scene13_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=scene13_end)
 
     # シーン14でもカメラ位置は固定（この変数を保存）
     fixed_camera_loc = loc_scene12_end
 
-    print(f"[フレーム{scene13_start}] カメラ位置をシーン12と同じに維持: {loc_scene12_end}")
+    print(f"[フレーム{scene13_start}] カメラ位置固定: {loc_scene12_end}（カット4b終了位置と同じ）")
 
     # 車の位置: 6秒かけてX軸方向に3m離す（carA: X=-1.5m, carB: X=+1.5m）
     # カット5はEmptyを使わず、車の位置を直接制御する
@@ -184,7 +182,7 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
     print("\n=== 【カット 5】シーン 14 設定開始 ===")
 
     scene14_start = scene13_end  # 2808
-    scene14_end = 3648  # 15秒間（24fps × 15 = 480フレーム）
+    scene14_end = 3528  # 【改訂】カット1短縮で120フレームずらす（15秒間：24fps × 15 = 480フレーム）
 
     # Empty親オブジェクトを削除
     bpy.ops.object.select_all(action='DESELECT')
@@ -414,12 +412,12 @@ def _create_car_acceleration_text(car_obj, text, material, container_name, start
     # 車にペアレント設定
     bpy.context.view_layer.objects.active = car_obj
     text_container.parent = car_obj
-    text_container.location = (0.0, 0.0, 2.0)  # 車の上面から2.0mの位置
+    text_container.location = (0.0, 0.0, 0.8)  # 車の上面にかなり近い位置
     # テキストを90度時計回りに回転（車と水平に表示）
     text_container.rotation_euler = (0.0, 0.0, -math.pi / 2)
 
-    half_spacing = 0.15
-    full_spacing = 0.30
+    half_spacing = 0.08
+    full_spacing = 0.15
 
     def is_fullwidth(c):
         code = ord(c)
@@ -452,7 +450,7 @@ def _create_car_acceleration_text(car_obj, text, material, container_name, start
             char_obj.data.font = default_font
 
         if hasattr(char_obj.data, 'size'):
-            char_obj.data.size = 0.35  # 車名テキストと同じサイズ
+            char_obj.data.size = 0.25  # やや大きめのフォントサイズ
 
         char_obj.scale = (1.0, 1.0, 1.0)
 
@@ -511,7 +509,7 @@ def _attach_lights_to_cars(car_a, car_b, start_frame, end_frame):
     bpy.ops.object.light_add(type='AREA', location=(0, 0, 0))
     light_a = bpy.context.active_object
     light_a.name = "CarA_Light"
-    light_a.data.energy = 800   # 元のKeyLightと同じ明るさ
+    light_a.data.energy = 200   # 他のカットに合わせたやや暗めの明るさ
     light_a.data.size = 3       # 元のKeyLightと同じサイズ
     if hasattr(light_a.data, 'distance'):
         light_a.data.distance = 0
@@ -528,7 +526,7 @@ def _attach_lights_to_cars(car_a, car_b, start_frame, end_frame):
     bpy.ops.object.light_add(type='AREA', location=(0, 0, 0))
     light_b = bpy.context.active_object
     light_b.name = "CarB_Light"
-    light_b.data.energy = 800   # 元のKeyLightと同じ明るさ
+    light_b.data.energy = 200   # 他のカットに合わせたやや暗めの明るさ
     light_b.data.size = 3       # 元のKeyLightと同じサイズ
     if hasattr(light_b.data, 'distance'):
         light_b.data.distance = 0
@@ -544,5 +542,5 @@ def _attach_lights_to_cars(car_a, car_b, start_frame, end_frame):
     # --- 既存のライトはエネルギー変更しない（元の明るさを維持）---
     bpy.context.view_layer.update()
     
-    print(f"[シーン14] CarA_Light (energy=800, size=3) を CarA にペアレント設定")
-    print(f"[シーン14] CarB_Light (energy=800, size=3) を CarB にペアレント設定")
+    print(f"[シーン14] CarA_Light (energy=200, size=3) を CarA にペアレント設定")
+    print(f"[シーン14] CarB_Light (energy=200, size=3) を CarB にペアレント設定")

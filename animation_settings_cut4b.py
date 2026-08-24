@@ -126,7 +126,7 @@ def setup_cut4b_animations(scene, camera, imported_cars, previous_state=None, ca
     # ============================================================
     # カット 4b のフレーム定義
     # ============================================================
-    cut4b_start = 2256
+    cut4b_start = 2136  # 【改訂】カット1短縮で120フレームずらす
     phase1_end = cut4b_start + 312   # 13秒（下降）: 24fps × 13 = 312
     phase2_end = phase1_end + 144   # 6秒（回り込み）: 24fps × 6 = 144
     cut4b_end = phase2_end + 312    # 13秒（戻り）: 24fps × 13 = 312 → 合計=3024
@@ -313,27 +313,23 @@ def setup_cut4b_animations(scene, camera, imported_cars, previous_state=None, ca
 
         # 開始位置: フェーズ2終了時の右側低位置
         start_loc = phase2_end_loc
-        # 終了位置: カット4終了時の俯瞰位置（カット5の開始位置と同じ）
-        end_loc = Vector(loc_cut4_end)
+        # 終了位置: Z=15.0mの斜め上からの位置
+        end_loc = Vector((loc_cut4_end[0], loc_cut4_end[1], 15.0))
 
         cam_loc = start_loc.lerp(end_loc, eased_t)
         camera.location = cam_loc
 
-        # 俯瞰位置（Zが高い）の場合は直接Euler=(0,0,0)を設定
-        if cam_loc.z > OVERHEAD_THRESHOLD:
-            camera.rotation_euler = (0.0, 0.0, 0.0)
-        else:
-            # 注視点: 横位置時はorbit_center、俯瞰時はcut4_look_at に補間
-            current_look_at = orbit_center.lerp(cut4_look_at, eased_t)
-            set_camera_look_at(camera, cam_loc, current_look_at)
+        # 注視点: 常に車の中央(orbit_center)を向く（Z=8.0でも車が見えるように）
+        set_camera_look_at(camera, cam_loc, orbit_center)
         
         camera.keyframe_insert(data_path="location", frame=frame)
         camera.keyframe_insert(data_path="rotation_euler", frame=frame)
 
-    # 最終位置を保存
-    final_loc = Vector(loc_cut4_end)
+    # 最終位置を保存（Z=15.0mで斜め上からの位置）
+    final_loc = Vector((loc_cut4_end[0], loc_cut4_end[1], 15.0))
     camera.location = final_loc
-    camera.rotation_euler = (0.0, 0.0, 0.0)  # 俯瞰時は直接(0,0,0)を設定
+    # 注視点は常に車の中央(orbit_center)に向ける（車が見えるように）
+    set_camera_look_at(camera, final_loc, orbit_center)
     rot_final = camera.rotation_euler.copy()
     camera.keyframe_insert(data_path="location", frame=cut4b_end)
     camera.keyframe_insert(data_path="rotation_euler", frame=cut4b_end)
