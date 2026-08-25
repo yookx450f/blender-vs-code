@@ -785,10 +785,10 @@ def setup_viewport_shading(shading_type='MATERIAL'):
 # 3Dテキストラベル作成関数（ステップ4）
 # ============================================================
 def create_glowing_text_label_short2(car_key, car_object, text_content, color_rgb):
-    """short2用: 車の上方前方に配置され、フロント方向を向く発光3Dテキストラベル
+    """short2用: 車の真上に配置される発光3Dテキストラベル
     
+    テキストは車のジオメトリ中心の真上に配置され、カメラから水平に読めるように回転する。
     CarA は上側（X負方向寄り）、CarB は下側（X正方向寄り）に配置。
-    テキストは車のフロント方向（+Y）を向く。
     """
     if car_object is None:
         print(f"エラー: {car_key} の車オブジェクトがNoneです")
@@ -800,6 +800,14 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
     
     text_obj.data.body = text_content
     text_obj.data.size = 0.35
+    text_obj.data.extrude = 0.025  # テキストの厚み（適度に）
+    text_obj.data.align_x = 'CENTER'  # 水平方向を中央揃えに設定
+    text_obj.data.align_y = 'CENTER'  # 垂直方向も中央揃えに設定
+    
+    # 太字フォントを指定（Windows標準のメイリオ太字）
+    bold_font_path = r"C:\Windows\Fonts\mebold.ttc"
+    if os.path.exists(bold_font_path):
+        text_obj.data.font = bpy.data.fonts.load(bold_font_path)
     text_obj.scale = (1.0, 1.0, 1.0)
     
     car_object.update_tag()
@@ -810,23 +818,22 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
         print(f"警告: {car_object.name} のバウンディングボックスが取得できません")
         return
     
-    local_corners = [Vector(corner) for corner in local_bounds]
-    local_center_x = (min(c.x for c in local_corners) + max(c.x for c in local_corners)) / 2.0
-    local_max_z = max(c.z for c in local_corners)
-    local_max_y = max(c.y for c in local_corners)
+    # ワールド座標でバウンディングボックスを計算（正確な中心位置を取得）
+    corners_world = [car_object.matrix_world @ Vector(corner) for corner in local_bounds]
     
-    text_y = local_max_y + 0.3
+    world_center_x = (min(c.x for c in corners_world) + max(c.x for c in corners_world)) / 2.0
+    world_center_y = (min(c.y for c in corners_world) + max(c.y for c in corners_world)) / 2.0
+    world_max_z = max(c.z for c in corners_world)
     
-    # Z位置: CarAは少し低く、CarBは上面より高く
+    # Z位置: CarAは少し低く、CarBは上面より高く（Z軸プラス方向にずらす）
     if car_key == "carA":
-        text_z = local_max_z + 0.25   # CarAはもう少し下げる
+        text_z_world = world_max_z + 0.8  # CarAのZ位置を維持
     else:
-        text_z = local_max_z + 0.5
+        text_z_world = world_max_z + 1.2  # CarBをCarAと重ならないようにさらに上にずらす
     
-    # X座標は車の中心と揃える
-    text_x = local_center_x
+    # まず一時的な位置に設定（ペアレント用）
+    text_obj.location = (0, 0, 0)
     
-    text_obj.location = (text_x, text_y, text_z)
     # テキストを上方向（+Z）に向けることで、カメラから水平に読めるようにする
     text_obj.rotation_euler = (math.pi / 2, 0, 0)
     
@@ -852,13 +859,34 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
     
     text_obj.data.materials.clear()
     text_obj.data.materials.append(emission_mat)
+    
+    # テキストを車にペアレント設定
     text_obj.parent = car_object
     
-    print(f"3Dテキストラベル作成完了 (short2): {text_obj.name} -> '{text_content}' (上方配置, ペアレント: {car_object.name})")
+    # ペアレント設定後、ワールド座標で目標位置に直接配置
+    # 回転情報も保持するため、移動行列と回転行列を組み合わせる
+    rotation_matrix = Matrix.Rotation(math.pi / 2, 4, 'X')
+    translation_matrix = Matrix.Translation((world_center_x, world_center_y, text_z_world))
+    text_obj.matrix_world = translation_matrix @ rotation_matrix
+    
+    print(f"3Dテキストラベル作成完了 (short2): {text_obj.name} -> '{text_content}' "
+          f"(ワールド中心: X={world_center_x:.3f}, Y={world_center_y:.3f}, Z={text_z_world:.3f}, "
+          f"ペアレント: {car_object.name})")
 
 
-def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
-    """車の足元に発光する3Dテキストラベルを作成し、車にペアレント設定"""
+def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shared_rear_y=None):
+    """車の足元に発光する3Dテキストラベルを作成し、車にペアレント設定
+
+    【修正】shared_rear_y が指定された場合、両車のリア端の平均Y座標を基準に
+    CarAは上方（Y負方向）、CarBは下方（Y正方向）に固定オフセットで配置する。
+
+    Parameters:
+        car_key: "carA" または "carB"
+        car_object: 車オブジェクト
+        text_content: テキスト文字列
+        color_rgb: テキストの色 (R, G, B)
+        shared_rear_y: 両車のリア端の平均Y座標（指定された場合、上下配置モードになる）
+    """
     if car_object is None:
         print(f"エラー: {car_key} の車オブジェクトがNoneです")
         return
@@ -903,8 +931,19 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb):
     # X位置: 車の左端から外側に配置（ワールド座標）
     text_x_world = world_min_x - x_margin_world
 
-    # Y位置: リア端から後ろに配置（ワールド座標）
-    text_y_world = world_min_y - y_margin_world
+    if shared_rear_y is not None:
+        # 【修正】上下配置モード: 両車のリア端平均Yを基準に、CarAは上方、CarBは下方に配置
+        # スクリーンショット2の位置に合わせてオフセット値を調整（リア端から前方への距離）
+        y_offset_car_a = -1.3   # CarAの前方オフセット
+        y_offset_car_b = -1.8   # CarBの前方オフセット
+        if car_key == "carA":
+            text_y_world = shared_rear_y + y_offset_car_a  # CarAは上方（Y正方向=画面の上側）
+        else:
+            text_y_world = shared_rear_y + y_offset_car_b  # CarBは下方（Y正方向=画面の下側）
+        print(f"  【上下配置モード】shared_rear_y={shared_rear_y:.3f}, car_key={car_key} -> text_y={text_y_world:.3f}")
+    else:
+        # 従来モード: リア端から後ろに配置（ワールド座標）
+        text_y_world = world_min_y - y_margin_world
 
     # まず一時的な位置に設定（ペアレント用）
     text_obj.location = (0, 0, 0)
@@ -1166,6 +1205,18 @@ def main():
     # =============================================
     print("\n=== 3Dテキストラベルを設定 ===")
     
+    # 両車のリア端Y座標を計算し、平均値を取得（上下配置用）
+    def get_rear_end_y_for_label(car_obj):
+        """バウンディングボックスから後端（Y最小）のワールド座標を取得"""
+        bounds = [Vector(b) for b in car_obj.bound_box]
+        corners_world = [car_obj.matrix_world @ corner for corner in bounds]
+        return min(c.y for c in corners_world)
+
+    rear_y_a_label = get_rear_end_y_for_label(car_a) if car_a else 0.0
+    rear_y_b_label = get_rear_end_y_for_label(car_b) if car_b else 0.0
+    shared_rear_y = (rear_y_a_label + rear_y_b_label) / 2.0
+    print(f"車名テキストの基準Y座標: CarA={rear_y_a_label:.3f}, CarB={rear_y_b_label:.3f}, 平均={shared_rear_y:.3f}")
+
     for key, car_data in CARS.items():
         car_obj = imported_cars.get(key)
         if not car_obj:
@@ -1179,7 +1230,7 @@ def main():
         if CUT_NUMBER == "short2":
             create_glowing_text_label_short2(key, car_obj, text_content, color_rgb)
         else:
-            create_glowing_text_label(key, car_obj, text_content, color_rgb)
+            create_glowing_text_label(key, car_obj, text_content, color_rgb, shared_rear_y=shared_rear_y)
     
     print("3Dテキストラベル設定完了")
     
