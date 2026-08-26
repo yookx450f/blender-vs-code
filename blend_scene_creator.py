@@ -1000,6 +1000,7 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shar
 CUT_NUMBER = os.environ.get("CUT_NUMBER", "all")
 FRAME_START_OVERRIDE = int(os.environ.get("FRAME_START", "-1"))
 FRAME_END_OVERRIDE = int(os.environ.get("FRAME_END", "-1"))
+SHORT2_EXTRA_FRAMES = int(os.environ.get("SHORT2_EXTRA_FRAMES", "0"))
 
 
 def main():
@@ -1163,7 +1164,9 @@ def main():
         setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     elif CUT_NUMBER == "short2":
         from animation_settings_short2 import setup_short2_animations
-        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+        total_frames_short2 = 240 + SHORT2_EXTRA_FRAMES
+        print(f"  short2: total_frames={total_frames_short2} (延長+{SHORT2_EXTRA_FRAMES}フレーム)")
+        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, total_frames=total_frames_short2)
     else:
         from animation_settings import setup_all_animations
         

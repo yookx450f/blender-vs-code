@@ -125,9 +125,9 @@ def _ensure_linear_interpolation_for_object(obj, frame):
                                     kf.interpolation = 'LINEAR'
 
 
-def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions):
+def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, total_frames=240):
     """
-    ショート動画v2のアニメーションを設定（フレーム 0-240、約10秒）
+    ショート動画v2のアニメーションを設定（フレーム 0-total_frames）
     
     カット1の「車が重なっていく部分」だけを抽出。
     縦長9:16フォーマット用。
@@ -141,11 +141,12 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
         imported_cars: {key: car_object} の辞書 (carA, carB)
         rear_offset_y: リア端揃え用の Y オフセット値
         grounded_z_positions: {object_name: z_value} 接地後の Z 位置を保存する辞書
+        total_frames: 総フレーム数（デフォルト240=約10秒、ランダム延長で最大288=約12秒）
     
     Returns:
         dict: 最終状態情報
     """
-    print("\n=== ショート動画v2 アニメーション設定を開始 ===")
+    print(f"\n=== ショート動画v2 アニメーション設定を開始 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
     
     # ============================================================
     # 前提計算：車の位置・接地 Z を準備
@@ -209,8 +210,8 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # スタート角度（X-Y平面上的な極座標の角度）
     start_angle = math.atan2(cam_start[0], cam_start[1])
     # 向かって左から右へ移動（角度を負の方向に減少）
-    # 6秒(144フレーム)で-0.85ラジアン → 10秒(240フレーム)に比例延長
-    total_rotation = -0.85 * (240 / 144)  # ラジアン（約83度）
+    # 6秒(144フレーム)で-0.85ラジアン → total_framesに比例延長
+    total_rotation = -0.85 * (total_frames / 144)  # ラジアン
 
     # レンズ焦距（数値を大きくしてズームイン）
     original_lens = camera.data.lens
@@ -227,8 +228,11 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # フレーム順にキーフレームを設定（円弧パンニング）
     # ============================================================
     
-    # キーフレーム間隔（24フレーム=1秒ごと、144→240に延長）
-    arc_keyframes = [0, 24, 48, 72, 96, 120, 144, 168, 192, 216, 240]
+    # キーフレーム間隔（24フレーム=1秒ごと、total_framesまで延長）
+    keyframe_interval = 24  # 1秒ごと
+    arc_keyframes = list(range(0, total_frames + 1, keyframe_interval))
+    if arc_keyframes[-1] != total_frames:
+        arc_keyframes.append(total_frames)
     num_segments = len(arc_keyframes) - 1
     
     for i, frame in enumerate(arc_keyframes):
@@ -254,24 +258,22 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # --- フレーム 144: 車の位置維持 ---
     _set_location_keyframe(car_a, 144, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, 144, car_b_end[0], car_b_end[1], car_b_end[2])
-    
-    # --- フレーム 168, 192, 216, 240: 車の位置維持（延長分）---
-    _set_location_keyframe(car_a, 168, car_a_end[0], car_a_end[1], car_a_end[2])
-    _set_location_keyframe(car_b, 168, car_b_end[0], car_b_end[1], car_b_end[2])
-    _set_location_keyframe(car_a, 192, car_a_end[0], car_a_end[1], car_a_end[2])
-    _set_location_keyframe(car_b, 192, car_b_end[0], car_b_end[1], car_b_end[2])
-    _set_location_keyframe(car_a, 216, car_a_end[0], car_a_end[1], car_a_end[2])
-    _set_location_keyframe(car_b, 216, car_b_end[0], car_b_end[1], car_b_end[2])
-    _set_location_keyframe(car_a, 240, car_a_end[0], car_a_end[1], car_a_end[2])
-    _set_location_keyframe(car_b, 240, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    # --- 車の位置維持（144フレーム以降をtotal_framesまで延長）---
+    maintenance_frames = [f for f in range(168, total_frames + 1, keyframe_interval)]
+    if maintenance_frames and maintenance_frames[-1] != total_frames:
+        maintenance_frames.append(total_frames)
+    for frame in maintenance_frames:
+        _set_location_keyframe(car_a, frame, car_a_end[0], car_a_end[1], car_a_end[2])
+        _set_location_keyframe(car_b, frame, car_b_end[0], car_b_end[1], car_b_end[2])
     
     # 最終カメラ回転を保存（CutState用）
     final_angle = start_angle + total_rotation
     final_cam = get_cam_on_arc(final_angle)
     set_camera_look_at(camera, final_cam, target)
-    rot_f192 = camera.rotation_euler.copy()
-    
-    print(f"  [フレーム 240] カメラパンニング完了（右方向に{math.degrees(total_rotation):.1f}°回転）")
+    rot_final = camera.rotation_euler.copy()
+
+    print(f"  [フレーム {total_frames}] カメラパンニング完了（右方向に{math.degrees(total_rotation):.1f}°回転）")
     
     # ============================================================
     # CarBの半透明化を設定（ドライバー式 - Cut1と同じ方式）
@@ -284,13 +286,13 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
-    
-    print("\n=== ショート動画v2 アニメーション完了 ===")
-    
+
+    print(f"\n=== ショート動画v2 アニメーション完了 (total_frames={total_frames}) ===")
+
     from animation_common import CutState
     return CutState(
         car_a_loc=car_a_end,
         car_b_loc=car_b_end,
         camera_loc=final_cam,
-        camera_rot=(rot_f192.x, rot_f192.y, rot_f192.z),
+        camera_rot=(rot_final.x, rot_final.y, rot_final.z),
     )
