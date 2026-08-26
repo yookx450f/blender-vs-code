@@ -795,6 +795,53 @@ if st.session_state.config_error_msg:
     st.session_state.config_error_msg = None
 
 # ============================================================
+# YouTube概要欄用テキスト生成関数
+# ============================================================
+def generate_youtube_description(car_a, car_b):
+    """
+    2台車の基本諸元をYouTube概要欄向けに整形したテキストを返す。
+    
+    出力項目: 全長・全幅・全高・地上高・回転半径 (5項目)
+    """
+    name_a = car_a["name"]
+    name_b = car_b["name"]
+    
+    length_a = f"{int(car_a['length']):,}"
+    length_b = f"{int(car_b['length']):,}"
+    width_a = f"{int(car_a['width']):,}"
+    width_b = f"{int(car_b['width']):,}"
+    height_a = f"{int(car_a['height']):,}"
+    height_b = f"{int(car_b['height']):,}"
+    
+    gc_a = car_a.get("ground_clearance", "-") or "-"
+    gc_b = car_b.get("ground_clearance", "-") or "-"
+    if gc_a != "-":
+        gc_a = str(int(gc_a))
+    if gc_b != "-":
+        gc_b = str(int(gc_b))
+    
+    tr_a = f"{car_a['turning_radius']/1000:.1f}"
+    tr_b = f"{car_b['turning_radius']/1000:.1f}"
+    
+    # 車名を短縮（年式部分を簡略化）
+    short_name_a = name_a
+    short_name_b = name_b
+    
+    lines = []
+    lines.append(f"🚗 {name_a} vs 🚙 {name_b}")
+    lines.append("")
+    lines.append("【主要諸元比較】")
+    lines.append(f"項目        │ {short_name_a.ljust(12)} │ {short_name_b}")
+    lines.append(f"全長        │ {length_a}mm      │ {length_b}mm")
+    lines.append(f"全幅        │ {width_a}mm      │ {width_b}mm")
+    lines.append(f"全高        │ {height_a}mm      │ {height_b}mm")
+    lines.append(f"地上高      │ {gc_a}mm        │ {gc_b}mm")
+    lines.append(f"回転半径    │ {tr_a}m         │ {tr_b}m")
+    
+    return "\n".join(lines)
+
+
+# ============================================================
 # 選択車種の諸元比較表示
 # ============================================================
 car_a_row = cars_df[cars_df["id"] == car_a_id].iloc[0] if not cars_df.empty else None
@@ -859,6 +906,14 @@ if car_a_row is not None and car_b_row is not None:
     </table>
     '''
     st.markdown(specs_html, unsafe_allow_html=True)
+    
+    # YouTube概要欄用テキスト表示
+    st.markdown("---")
+    st.subheader("📝 YouTube概要欄用テキスト")
+    st.caption("下のテキストをコピーして、YouTube動画の概要欄に貼り付けてください")
+    
+    description_text = generate_youtube_description(car_a_row, car_b_row)
+    st.code(description_text, language="text")
 
 # ============================================================
 # 統計情報
