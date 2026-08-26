@@ -705,10 +705,10 @@ def _create_width_diff_text(scene, camera, width_a_mm, width_b_mm, width_diff_mm
 
     scene.collection.objects.link(text_container)
 
-    # 差の計算は+20cm加算後の値で行うが、表示数字はCSV生値を使用
+    # 差の計算も表示と同じCSV生値（width_raw）で行う
     if car_dimensions:
-        width_a_for_calc = car_dimensions.get("carA", {}).get("width", 0)
-        width_b_for_calc = car_dimensions.get("carB", {}).get("width", 0)
+        width_a_for_calc = car_dimensions.get("carA", {}).get("width_raw", car_dimensions.get("carA", {}).get("width", 0))
+        width_b_for_calc = car_dimensions.get("carB", {}).get("width_raw", car_dimensions.get("carB", {}).get("width", 0))
         diff_mm = width_b_for_calc - width_a_for_calc
     else:
         diff_mm = width_diff_mm

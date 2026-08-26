@@ -494,10 +494,10 @@ def setup_cut1_animations(scene, camera, imported_cars, rear_offset_y, grounded_
     _set_location_keyframe(car_a, 30, car_a_start[0], car_a_start[1], car_a_start[2])
     _set_location_keyframe(car_b, 30, car_b_start[0], car_b_start[1], car_b_start[2])
 
-    # Alpha: CarB のみ半透明化アニメーション開始（フレーム 30-96 で 1.0→0.4）
+    # Alpha: CarB のみ半透明化アニメーション開始（フレーム 30-96 で 0.40→0.35）
     car_b_obj = imported_cars.get("carB")
     if car_b_obj:
-        _setup_transparency_animation(car_b_obj, 30, 96, 1.0, 0.4)
+        _setup_transparency_animation(car_b_obj, 30, 96, 0.40, 0.35)
 
     print(f"[フレーム 30] カメラ接近開始={loc_frame30}, Alpha(CarB): 1.0→0.4 開始", file=log_fp)
     log_fp.flush()
