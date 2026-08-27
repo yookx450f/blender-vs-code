@@ -116,11 +116,14 @@ def setup_all_animations(scene, camera, imported_cars, rear_offset_y, grounded_z
 
     # カット 5 を実行（独立実行: previous_state不要）
     if target_cut in ("all", "5"):
+        cut5_extra = int(os.environ.get("CUT5_EXTRA_FRAMES", "0"))
+        print(f"[カット5] ランダム延長: {cut5_extra:+d}フレーム ({cut5_extra/24:+.1f}秒)")
         setup_cut5_animations(
             scene=scene,
             camera=camera,
             imported_cars=imported_cars,
-            car_dimensions=car_dimensions
+            car_dimensions=car_dimensions,
+            extra_frames=cut5_extra
         )
     else:
         print(f"[アニメーション設定] カット 5 をスキップ（対象カット: {target_cut}）")

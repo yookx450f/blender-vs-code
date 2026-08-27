@@ -54,13 +54,23 @@ def run_single_cut(cut_number):
     cut_label = cut_info["label"]
 
     # short2の場合、ランダム延長を追加（+0〜48フレーム = +0〜2秒）
+    # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
+    cut5_extra_frames = 0
     if cut_number == "short2":
         extra_frames = random.randint(0, 48)
         frame_end = frame_start + 240 + extra_frames
         print(f"\n{'='*60}")
         print(f"=== カット{cut_number}実行: {cut_label} ===")
         print(f"ランダム延長: +{extra_frames}フレーム (+{extra_frames/24:.1f}秒)")
+        print(f"フレーム範囲: {frame_start}-{frame_end} ({(frame_end - frame_start)/24:.1f}秒)")
+        print(f"{'='*60}")
+    elif cut_number == "5":
+        cut5_extra_frames = random.randint(-48, 48)
+        frame_end = frame_start + 624 + cut5_extra_frames
+        print(f"\n{'='*60}")
+        print(f"=== カット{cut_number}実行: {cut_label} ===")
+        print(f"ランダム延長: {cut5_extra_frames:+d}フレーム ({cut5_extra_frames/24:+.1f}秒)")
         print(f"フレーム範囲: {frame_start}-{frame_end} ({(frame_end - frame_start)/24:.1f}秒)")
         print(f"{'='*60}")
     else:
@@ -86,6 +96,7 @@ def run_single_cut(cut_number):
     env["FRAME_START"] = str(frame_start)
     env["FRAME_END"] = str(frame_end)
     env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
+    env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
 
     print(f"Blenderを起動します...")
     print(f"コマンド: {' '.join(cmd)}")
@@ -172,14 +183,21 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     cut_label = cut_info["label"]
 
     # short2の場合、ランダム延長を追加（+0〜48フレーム = +0〜2秒）
+    # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
+    cut5_extra_frames = 0
     if cut_number == "short2":
         extra_frames = random.randint(0, 48)
         frame_end = frame_start + 240 + extra_frames
+    elif cut_number == "5":
+        cut5_extra_frames = random.randint(-48, 48)
+        frame_end = frame_start + 624 + cut5_extra_frames
 
     print(f"=== カット選択: {cut_label} ===")
     if cut_number == "short2":
         print(f"ランダム延長: +{extra_frames}フレーム (+{extra_frames/24:.1f}秒)")
+    elif cut_number == "5":
+        print(f"ランダム延長: {cut5_extra_frames:+d}フレーム ({cut5_extra_frames/24:+.1f}秒)")
     print(f"フレーム範囲: {frame_start}-{frame_end}")
 
     # glTFアドオンを有効にするために、--addonsフラグで明示的に有効化
@@ -207,6 +225,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     env["FRAME_START"] = str(frame_start)
     env["FRAME_END"] = str(frame_end)
     env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
+    env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
 
     print(f"Blenderを起動します...")
     print(f"コマンド: {' '.join(cmd)}")

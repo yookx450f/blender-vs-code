@@ -17,9 +17,9 @@ from mathutils import Vector
 from animation_common import set_camera_look_at
 
 
-def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None):
+def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car_dimensions=None, extra_frames=0):
     """
-    カット 5 のアニメーションを設定（フレーム 2208-2832）
+    カット 5 のアニメーションを設定（フレーム 2904-3528±extra_frames）
 
     【修正: カット完全分離】previous_state をオプション化し、
     指定されていない場合は固定位置から読み込む。
@@ -30,6 +30,7 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
         imported_cars: {key: car_object} の辞書 (carA, carB)
         previous_state: CutState — 前のカットの最終状態（オプション、未指定時は固定位置使用）
         car_dimensions: {key: {"turning_radius": mm}} 車の寸法情報
+        extra_frames: 終了フレームの補正値（±48フレーム = ±2秒のランダム延長用）
 
     Returns:
         CutState: このカットの最終状態
@@ -177,12 +178,12 @@ def setup_cut5_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene13_end}] シーン 13 終了：カメラ移動完了")
 
     # ============================================================
-    # 【カット 5】シーン 14: フレーム 2352-2832（走り去るアニメーション、15秒）
+    # 【カット 5】シーン 14: フレーム 2976-3528±extra_frames（走り去るアニメーション、約23秒±2秒）
     # ============================================================
     print("\n=== 【カット 5】シーン 14 設定開始 ===")
 
-    scene14_start = scene13_end  # 2808
-    scene14_end = 3528  # 【改訂】カット1短縮で120フレームずらす（15秒間：24fps × 15 = 480フレーム）
+    scene14_start = scene13_end  # 2976
+    scene14_end = 3528 + extra_frames  # 【改訂】カット1短縮で120フレームずらす（15秒間：24fps × 15 = 480フレーム）+ ランダム延長
 
     # Empty親オブジェクトを削除
     bpy.ops.object.select_all(action='DESELECT')
