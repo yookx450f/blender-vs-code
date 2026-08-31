@@ -105,7 +105,6 @@ def load_cars_db():
     
     return cars_db
 
-
 def load_cars_config():
     """cars_config.json + cars.db を結合して車の設定辞書を返す
     
@@ -178,7 +177,6 @@ def load_cars_config():
         print(f"エラー: 設定ファイルの読み込みに失敗しました - {e}")
         sys.exit(1)
 
-
 # ============================================================
 # シーン初期化・インポート関数群
 # ============================================================
@@ -196,7 +194,6 @@ def clear_scene():
             bpy.data.materials.remove(mat)
     
     print("シーンクリア完了")
-
 
 def import_glb_file(file_path):
     """GLBファイルをBlenderにインポートし、メインオブジェクトを返す"""
@@ -253,19 +250,57 @@ def import_glb_file(file_path):
         traceback.print_exc()
         return None
 
-
 # ============================================================
 # マテリアル・床面作成関数群
 # ============================================================
-def create_grid_floor():
-    """サイバー空間用の発光グリッド床面を作成する（1M間隔のネオン線）"""
-    bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, 0))
+def create_grid_floor(x_half_width=5.0, y_half_length=50.0):
+    """サイバー空間用の発光グリッド床面を作成する（1M間隔のネオン線）
+
+    X方向: ±x_half_width、Y方向: ±y_half_length の矩形グリッドを表示
+    横線と縦線の両方を世界座標で正確に1m間隔で表示
+
+    - short-s   : (5.0, 120.0) → X±5m × Y±120m（道幅10m・長さ240mの道状グリッド）
+    - それ以外  : x_half_width/y_half_length を呼び出し側が指定する矩形グリッド
+      （共通仕様: グリッド線の間隔は全カット・両軸とも世界座標1m / シアン発光 / ライン幅・色・強度=現状維持）
+
+    Parameters:
+        x_half_width:  X方向の半分の幅（デフォルト5.0m = ±5m。それ以外のカットは10.0で指定）
+        y_half_length: Y方向の半分の長さ（デフォルト50m = ±50m。それ以外のカットは10.0で指定）
+    """
+    plane_size = y_half_length * 2
+    bpy.ops.mesh.primitive_plane_add(size=plane_size, location=(0, 0, 0))
     grid = bpy.context.active_object
     grid.name = "CyberGrid"
+
+    import bmesh
+    # Xハーフ幅をワールドメートル単位(x_half_width)に正規化する。
+    # object.scale=(1,1,1)/Mapping恒等と組み合わせることで、全カット・両軸ともグリッド周期=世界1mになる（「常に1M」仕様）
+    _target_local_x_half = float(x_half_width)
+    mesh_data = grid.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh_data)
+    max_abs_x = max((abs(v.co.x) for v in bm.verts), default=0.0) or 1e-9
+    if abs(max_abs_x - _target_local_x_half) > 1e-6:
+        fx = _target_local_x_half / max_abs_x
+        for v in bm.verts:
+            v.co.x *= fx
+        bm.to_mesh(mesh_data)
+    mesh_data.update(calc_edges=True)
+    bm.free()
+
+    # オブジェクトスケールは恒等(1,1,1)。メッシュ頂点がそのままワールドメートル単位なので、
+    # X幅=±x_half_width / Y幅=±y_half_length が直接世界座標に反映される（線間隔は常に1m）。
+    grid.scale = (1.0, 1.0, 1.0)
     
     grid_mat_name = "NeonGridMaterial"
     
     if grid_mat_name in bpy.data.materials:
+        # 過去ビルド由来の旧Mapping補正値(50/x_half_width等)が残りうるため、再利用前に恒等スケールへ強制リセットする。
+        _existing_grid_mat = bpy.data.materials[grid_mat_name]
+        if _existing_grid_mat.node_tree:
+            for _node in _existing_grid_mat.node_tree.nodes:
+                if getattr(_node, "type", None) == "MAPPING":
+                    _node.inputs["Scale"].default_value = (1.0, 1.0, 1.0)
         grid.data.materials.clear()
         grid.data.materials.append(bpy.data.materials[grid_mat_name])
         return grid
@@ -281,28 +316,32 @@ def create_grid_floor():
     
     # Output Material ノード
     output_node = nodes.new(type='ShaderNodeOutputMaterial')
-    output_node.location = (1000, 0)
+    output_node.location = (1200, 0)
     
-    # ColorRamp ノード（線と背景を分離）
-    color_ramp = nodes.new(type='ShaderNodeValToRGB')
-    color_ramp.location = (600, 0)
+    # ColorRamp ノード（横線用: Y座標の整数位置で横線）
+    color_ramp_h = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_h.location = (800, -100)
+    color_ramp_h.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # 白（発光強度MAX）
+    color_ramp_h.color_ramp.elements[0].position = 0.0
+    color_ramp_h.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # 完全な黒（発光なし）
+    color_ramp_h.color_ramp.elements[1].position = 0.04  # 横線の線幅
     
-    # ColorRamp の要素を設定：小数部分が0に近い位置（整数座標）で線を表示
-    # X - FLOOR(X) の結果は 0〜1 の範囲。0に近い=整数座標=グリッド線
-    color_ramp.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # 白（発光強度MAX）
-    color_ramp.color_ramp.elements[0].position = 0.0
-    
-    color_ramp.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # 完全な黒（発光なし）
-    color_ramp.color_ramp.elements[1].position = 0.03  # 線幅をさらに細く調整
+    # ColorRamp ノード（縦線用: X座標の整数位置で縦線）
+    color_ramp_v = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_v.location = (800, 100)
+    color_ramp_v.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)  # 白（発光強度MAX）
+    color_ramp_v.color_ramp.elements[0].position = 0.0
+    color_ramp_v.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)  # 完全な黒（発光なし）
+    color_ramp_v.color_ramp.elements[1].position = 0.04  # 縦線の線幅
     
     # Emission ノード（ネオン発光）- Colorは固定、StrengthをColorRampで制御
     emission_node = nodes.new(type='ShaderNodeEmission')
-    emission_node.location = (850, 0)
+    emission_node.location = (1050, 0)
     emission_node.inputs['Color'].default_value = (0.0, 1.0, 1.0, 1.0)  # シアンブルー（固定）
     emission_node.inputs['Strength'].default_value = 6.0  # 基準強度（ColorRampで制御される）
     
-    # Math ノード群：正弦波ベースで正確な1M間隔グリッドを計算
-    # X座標からグリッド線を抽出
+    # Math ノード群：正確な1M間隔グリッドを計算
+    # X座標から縦グリッド線を抽出（Xが整数の位置で縦線）
     separate_xyz_x = nodes.new(type='ShaderNodeSeparateXYZ')
     separate_xyz_x.location = (250, 150)
     
@@ -326,55 +365,55 @@ def create_grid_floor():
     math_subtract_y.operation = 'SUBTRACT'
     math_subtract_y.location = (550, -180)
     
-    # XとYのグリッド線を組み合わせる（最小値で両方の線を表示）
-    math_min_xy = nodes.new(type='ShaderNodeMath')
-    math_min_xy.operation = 'MINIMUM'
-    math_min_xy.location = (700, 0)
+    # 横線と縦線の強度をMAXで組み合わせる（両方の線を表示）
+    math_max_hv = nodes.new(type='ShaderNodeMath')
+    math_max_hv.operation = 'MAXIMUM'
+    math_max_hv.location = (1000, 0)
     
     # Mapping ノード（グリッド間隔を正確に制御）
     mapping_node = nodes.new(type='ShaderNodeMapping')
     mapping_node.location = (50, 0)
-    # Scale を (1, 1, 1) に設定 → ワールド座標で正確に1m四方のグリッド間隔
+    # スケールは恒等(1,1,1)。メッシュ頂点がワールドメートル単位&object.scale=identity のため、
+    # Object座標の進み＝世界メートル数 そのままで、縦線(X)/横線(Y)いずれも周期が常に世界1mに揃う（全カット共通）。
     mapping_node.inputs['Scale'].default_value = (1.0, 1.0, 1.0)
     
     # Texture Coordinate ノード（Generated を使用）
     tex_coord = nodes.new(type='ShaderNodeTexCoord')
     tex_coord.location = (-200, 0)
     
-    # ノード接続：Texture Coordinate (Object) → SeparateXYZ/Math → ColorRamp → Emission → Output
+    # ノード接続：Texture Coordinate (Object) → Mapping → SeparateXYZ/Math → ColorRamp → MAXimum → Emission → Output
     # Object座標を使用することで、ワールド座標で正確に1M間隔のグリッドを表示
     links.new(tex_coord.outputs['Object'], mapping_node.inputs['Vector'])
     
-    # X軸のグリッド線計算
+    # X軸の縦グリッド線計算: X - FLOOR(X) → ColorRamp(縦線用)
     links.new(mapping_node.outputs['Vector'], separate_xyz_x.inputs['Vector'])
     links.new(separate_xyz_x.outputs['X'], math_floor_x.inputs[0])
     links.new(math_floor_x.outputs[0], math_subtract_x.inputs[1])  # FLOOR(X) を引数として使用
     links.new(separate_xyz_x.outputs['X'], math_subtract_x.inputs[0])  # X - FLOOR(X) で小数部分を取得
+    links.new(math_subtract_x.outputs[0], color_ramp_v.inputs['Fac'])  # 縦線用ColorRampに接続
     
-    # Y軸のグリッド線計算
+    # Y軸の横グリッド線計算: Y - FLOOR(Y) → ColorRamp(横線用)
     links.new(mapping_node.outputs['Vector'], separate_xyz_y.inputs['Vector'])
     links.new(separate_xyz_y.outputs['Y'], math_floor_y.inputs[0])
     links.new(math_floor_y.outputs[0], math_subtract_y.inputs[1])  # FLOOR(Y) を引数として使用
     links.new(separate_xyz_y.outputs['Y'], math_subtract_y.inputs[0])  # Y - FLOOR(Y) で小数部分を取得
+    links.new(math_subtract_y.outputs[0], color_ramp_h.inputs['Fac'])  # 横線用ColorRampに接続
     
-    # XとYのグリッド線を組み合わせ（MINIMUMで両方の線を表示）
-    links.new(math_subtract_x.outputs[0], math_min_xy.inputs[0])
-    links.new(math_subtract_y.outputs[0], math_min_xy.inputs[1])
-    
-    # ColorRamp で閾値処理して発光強度を制御（Colorは固定のシアンブルー）
-    links.new(math_min_xy.outputs[0], color_ramp.inputs['Fac'])
-    links.new(color_ramp.outputs['Color'], emission_node.inputs['Strength'])  # Strengthに接続
+    # 横線と縦線の強度をMAXで組み合わせ → Emission → Output
+    links.new(color_ramp_h.outputs['Color'], math_max_hv.inputs[0])
+    links.new(color_ramp_v.outputs['Color'], math_max_hv.inputs[1])
+    links.new(math_max_hv.outputs[0], emission_node.inputs['Strength'])
     links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
     
     grid.data.materials.clear()
     grid.data.materials.append(grid_mat)
     
-    print(f"グリッドマテリアル作成完了: {grid_mat_name}")
+    print(f"グリッドマテリアル作成完了: {grid_mat_name} (X幅 ±{x_half_width:.0f}m / Y長 ±{y_half_length:.0f}m)")
     print("  - グリッド間隔: 1.0m四方（正確）")
     print("  - 線色: シアンブルー (RGB: 0, 1, 1)")
     print("  - 発光強度: 6.0")
+    print("  - 横線・縦線の両方を表示（MAXimum組み合わせ）")
     return grid
-
 
 def create_clay_material(name, color):
     """単色クレイモデル用のマテリアルを作成する（Principled BSDFベース）"""
@@ -404,7 +443,6 @@ def create_clay_material(name, color):
     material.node_tree.links.new(principled_node.outputs['BSDF'], output_node.inputs['Surface'])
     
     return material
-
 
 # ============================================================
 # 車の設定・配置関数群（スケール・接地・マテリアル適用）
@@ -439,7 +477,6 @@ def create_placeholder_car(key, color, location):
     print(f"プレースホルダー車作成: {body.name} at {location}")
     return body
 
-
 def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_height_mm):
     """オブジェクトを指定した寸法（mm）にスケールする"""
     # 現在のサイズを取得（Blender単位: メートル）
@@ -473,7 +510,6 @@ def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_he
     
     print(f"スケール適用: {obj.name} -> ({scale_x:.3f}, {scale_y:.3f}, {scale_z:.3f})")
     return obj
-
 
 def auto_ground_car(car_object):
     """オブジェクトのバウンディングボックスから最低点を計算し、Z=0.0 に接地するオフセットを適用"""
@@ -525,7 +561,6 @@ def _apply_clay_to_all_meshes(obj, clay_material):
     # 子オブジェクトも再帰的に処理
     for child in obj.children:
         _apply_clay_to_all_meshes(child, clay_material)
-
 
 def setup_car(key, car_data, imported_object):
     """車の設定（位置、名前、マテリアル、サイズ）を適用"""
@@ -648,7 +683,6 @@ def setup_camera_and_lighting():
     
     return camera
 
-
 def setup_world_background():
     """世界背景を完全な漆黒（真っ黒）に設定する"""
     world = bpy.data.worlds["World"]
@@ -657,7 +691,6 @@ def setup_world_background():
     # Strengthを0.0に設定して完全に暗闇にする
     world.node_tree.nodes["Background"].inputs['Strength'].default_value = 0.0
     print("世界背景を完全な漆黒（真っ黒）に設定しました")
-
 
 # ============================================================
 # アニメーション設定関数（ステップ2）
@@ -672,7 +705,6 @@ def setup_car_animation(car_object, start_frame, end_frame, start_x, end_x):
     car_object.keyframe_insert(data_path="location", frame=end_frame)
     
     print(f"アニメーション設定: {car_object.name} ({start_frame}-{end_frame}フレーム)")
-
 
 # ============================================================
 # 車の配置・整列関数群（リア端揃え）
@@ -721,7 +753,6 @@ def align_cars_by_rear_simple(car_a, car_b):
     
     return offset, axis
 
-
 def setup_car_animation_aligned_simple(car_object, start_frame, end_frame, start_x, end_x, rear_offset, rear_axis):
     """リア端を揃えた位置へのアニメーションを設定（シンプル版）"""
     # 初期位置：リアオフセット分だけずらす
@@ -739,7 +770,6 @@ def setup_car_animation_aligned_simple(car_object, start_frame, end_frame, start
     car_object.keyframe_insert(data_path="location", frame=end_frame)
     
     print(f"リア揃えアニメーション設定：{car_object.name} ({start_frame}-{end_frame}フレーム)")
-
 
 def apply_clay_material_to_object(object_name, color_rgb):
     """指定されたオブジェクトにクレイマテリアルを適用"""
@@ -766,7 +796,6 @@ def apply_clay_material_to_object(object_name, color_rgb):
     
     print(f"マテリアル適用完了: {object_name} -> {mat_name}")
 
-
 # ============================================================
 # ビューポートシェーディング設定（ステップ3）
 # ============================================================
@@ -779,7 +808,6 @@ def setup_viewport_shading(shading_type='MATERIAL'):
                     # シェーディングモードを設定（MATERIAL, RENDER, TEXTURED など）
                     space.shading.type = shading_type
     print(f"ビューポートシェーディングを {shading_type} モードに設定しました")
-
 
 # ============================================================
 # 3Dテキストラベル作成関数（ステップ4）
@@ -872,7 +900,6 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
     print(f"3Dテキストラベル作成完了 (short2): {text_obj.name} -> '{text_content}' "
           f"(ワールド中心: X={world_center_x:.3f}, Y={world_center_y:.3f}, Z={text_z_world:.3f}, "
           f"ペアレント: {car_object.name})")
-
 
 def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shared_rear_y=None):
     """車の足元に発光する3Dテキストラベルを作成し、車にペアレント設定
@@ -992,19 +1019,19 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shar
     
     print(f"3Dテキストラベル作成完了: {text_obj.name} -> '{text_content}' (ペアレント: {car_object.name})")
 
-
 # ============================================================
 # メイン処理
 # ============================================================
 # カット番号とフレーム範囲の取得（環境変数から）
-CUT_NUMBER = os.environ.get("CUT_NUMBER", "all")
+# 末尾スペース等の不純物が混入すると分岐・保存先ファイル名のマッチングが壊れるため、strip()で防御する
+CUT_NUMBER = os.environ.get("CUT_NUMBER", "all").strip()
 FRAME_START_OVERRIDE = int(os.environ.get("FRAME_START", "-1"))
 FRAME_END_OVERRIDE = int(os.environ.get("FRAME_END", "-1"))
 SHORT2_EXTRA_FRAMES = int(os.environ.get("SHORT2_EXTRA_FRAMES", "0"))
 
-
 def main():
     print("=" * 50)
+    print(f"CUT_NUMBER = {CUT_NUMBER!r}（環境変数から取得）")
     print("3Dシーン作成パイプライン開始")
     print("=" * 50)
 
@@ -1013,16 +1040,21 @@ def main():
         print(f"\n=== カットモード: {CUT_NUMBER} ===")
         if FRAME_START_OVERRIDE >= 0 and FRAME_END_OVERRIDE >= 0:
             print(f"フレーム範囲: {FRAME_START_OVERRIDE}-{FRAME_END_OVERRIDE}")
-    
     # cars_config.json から車の設定を読み込む
     CARS = load_cars_config()
     
     # シーンをクリア
     clear_scene()
     
-    # グリッド床面を作成
-    grid = create_grid_floor()
-    print(f"グリッド床面を作成しました: {grid.name}")
+    # グリッド床面を作成（仕様確定 2026-08-29）:
+    #   - short-s : X道幅 ±5m × Y長 ±120m のまま維持（GOAL(Y=-100) より先まで伸ばした道状グリッド）
+    #   - それ以外: xy座標(原点)中心の 20m四方正方形グリッド (X±10m × Y±10m) に変更
+    if CUT_NUMBER == "short-s":
+        grid_x_half, grid_y_half = 5.0, 120.0   # GOAL(Y=-100) より先まで伸ばす
+    else:
+        grid_x_half, grid_y_half = 10.0, 10.0   # xy座標中心の20m四方グリッド
+    grid = create_grid_floor(x_half_width=grid_x_half, y_half_length=grid_y_half)
+    print(f"グリッド床面を作成しました: {grid.name} (X方向±{grid_x_half:.0f}m / Y方向±{grid_y_half:.0f}m)")
     
     # 世界背景を設定
     setup_world_background()
@@ -1167,6 +1199,23 @@ def main():
         total_frames_short2 = 240 + SHORT2_EXTRA_FRAMES
         print(f"  short2: total_frames={total_frames_short2} (延長+{SHORT2_EXTRA_FRAMES}フレーム)")
         setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, total_frames=total_frames_short2)
+    elif CUT_NUMBER == "short-s":
+        from animation_settings_short_s import setup_short_s_animations
+        # 車の寸法情報を抽出（加速時間用）
+        car_dimensions_short_s = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            car_dimensions_short_s[key] = {
+                "length": dims.get("length", 0),
+                "width": dims.get("width", 0),
+                "height": dims.get("height", 0),
+                "ground_clearance": dims.get("ground_clearance", 0),
+                "turning_radius": dims.get("turning_radius", 0),
+            }
+            accel = car_data.get("acceleration_0_to_100_km_h")
+            if accel:
+                car_dimensions_short_s[key]["acceleration_0_to_100_km_h"] = accel
+        setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=car_dimensions_short_s)
     else:
         from animation_settings import setup_all_animations
         
@@ -1255,6 +1304,8 @@ def main():
         output_filename = "short_overlap.mp4"
     elif CUT_NUMBER == "short2":
         output_filename = "short2_overlap.mp4"
+    elif CUT_NUMBER == "short-s":
+        output_filename = "short-s_overlap.mp4"
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
@@ -1278,7 +1329,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16）
-    if CUT_NUMBER in ("short", "short2"):
+    if CUT_NUMBER in ("short", "short2", "short-s"):
         scene.render.resolution_x = 1080
         scene.render.resolution_y = 1920
         scene.render.resolution_percentage = 100
@@ -1314,6 +1365,8 @@ def main():
         blend_output_path = os.path.join(SCRIPT_DIR, "short_scene.blend")
     elif CUT_NUMBER == "short2":
         blend_output_path = os.path.join(SCRIPT_DIR, "short2_scene.blend")
+    elif CUT_NUMBER == "short-s":
+        blend_output_path = os.path.join(SCRIPT_DIR, "short_s_scene.blend")
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:
@@ -1330,10 +1383,8 @@ def main():
     
     return imported_cars
 
-
 # スクリプトディレクトリのパス（保存用）
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
-
 
 # スクリプトとして実行された場合
 if __name__ == "__main__":

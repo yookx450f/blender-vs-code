@@ -13,6 +13,66 @@ import math
 from mathutils import Vector
 
 
+
+# 【short-s 仕様「２．構成」】共通のフェーズ計算ヘルパー
+#   2-1 : フレーム0から3秒間（72fr@24fps）、車は初期位置で停止
+#   2-2 : cars_config.json由来の0-100km/h加速ペース(a=(100/3.6)/T)で全速走行開始
+#   2-3 : 両車のGOAL(Y=-100)到達後、さらに3秒間（72fr）経過して動画終了
+
+SHORT_S_FPS = 24.0                             # フレームレート（run.py / blend_scene_creator.py と同一前提）
+SHORT_S_IDLE_FRAMES = int(3 * SHORT_S_FPS)     # 2-1: 初期位置停止 3秒 -> 72フレーム
+SHORT_S_GOAL_Y = -100.0                        # GOALラインのY座標（_create_goal_text と同一）
+SHORT_S_AFTER_GOAL_FRAMES = int(3 * SHORT_S_FPS)   # 2-3: ゴール後 3秒 -> 72フレーム
+
+
+def compute_short_s_phases(accel_a, accel_b):
+    """
+    【short-s 仕様「２．構成」】のタイムラインを計算する（実車準拠・定加速度モデル）。
+
+      - フレーム0〜idle : 両車が初期位置で静止（2-1）
+      - idle発车以降   : a = (100/3.6) / T の定加速度でY負方向へ走行、d(t)=0.5*a*t² （2-2）
+                         GOAL到達時刻は t_go = sqrt(2*d/a) で解析算出。
+      - 終了フレーム   : max(GOAL両車)+3秒（idle発车からの相対値を72fr足して計算）（2-3）
+
+    Parameters:
+        accel_a, accel_b: carA/carB の0-100km/h加速時間 [秒]
+
+    Returns:
+        dict: idle_frame(発车フレーム), accel (m/s²の組), goal_time_a/b(発车からのGOAL到達時刻[s]), anim_end(終了フレーム)
+    """
+    def _accel(t_sec):
+        # 0-100km/h を T秒で到達する定加速度 [m/s²]
+        return (100.0 / 3.6) / max(1e-6, float(t_sec))
+
+    accel = (_accel(accel_a), _accel(accel_b))
+    distance = abs(SHORT_S_GOAL_Y)   # 発车位置(Y=0基準)からGOALまでの距離[m]
+
+    def _goal_time(a):
+        return math.sqrt(2.0 * distance / a) if a > 0 else float('inf')
+
+    goal_a = _goal_time(accel[0])
+    goal_b = _goal_time(accel[1])
+
+    # ゴール後の3秒を加えた終了フレーム（遅い方のGOAL到達を基準）
+    end_after_idle = int(math.ceil(max(goal_a, goal_b) * SHORT_S_FPS)) + SHORT_S_AFTER_GOAL_FRAMES
+    anim_end = max(SHORT_S_IDLE_FRAMES + 1, SHORT_S_IDLE_FRAMES + end_after_idle)
+
+    return {
+        'idle_frame': SHORT_S_IDLE_FRAMES,   # フレーム72（3秒目、発车）
+        'accel': accel,                       # (carA m/s², carB m/s²)
+        'goal_time_a': goal_a,                # 発车からのGOAL到達時刻[s]
+        'goal_time_b': goal_b,
+        'anim_end': anim_end,                 # アニメーション終了フレーム
+    }
+
+
+def short_s_distance_at(phases, index, t_seconds):
+    """【short-s】発车(frame=idle_frame)からt秒経過した時点の走行距離[m]（d=0.5*a*t²）"""
+    a = phases['accel'][index]
+    return 0.5 * a * max(0.0, t_seconds) ** 2
+
+
+
 class CutState:
     """カット間の状態継承用データ構造
     

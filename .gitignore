@@ -38,10 +38,14 @@ temp_*.obj
 
 # レンダリング出力
 output/
+_preview/
 *.mp4
 
 # デバッグスクリプト・出力
 debug_*.py
+_tmp_*.py
+_tmp_*.py.txt
+ss_part*.py.txt
 output.txt
 
 # SQLite データベース

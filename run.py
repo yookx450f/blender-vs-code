@@ -11,6 +11,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py 5            # カット5のみ（シーン13-14、フレーム3024-3648）
     python run.py short        # ショート動画（縦長9:16、車重なりカット、フレーム0-240）
     python run.py short2       # ショート動画v2（縦長9:16、キーフレーム半透明、フレーム0-240）
+    python run.py short-s      # ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了／終端フレーム自動計算）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -35,6 +36,9 @@ CUTS = {
     "5": {"start": 2904, "end": 3528, "label": "カット5（シーン13-14）"},
     "short": {"start": 0, "end": 240, "label": "ショート動画（縦長9:16、車重なりカット）"},
     "short2": {"start": 0, "end": 240, "label": "ショート動画v2（縦長9:16、キーフレーム半透明）"},
+    # 【仕様「２．構成」】end=-1 → animation_settings_short_s.py が cars_config.json の0-100km/h加速時間から
+    # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
+    "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -76,7 +80,10 @@ def run_single_cut(cut_number):
     else:
         print(f"\n{'='*60}")
         print(f"=== カット{cut_number}実行: {cut_label} ===")
-        print(f"フレーム範囲: {frame_start}-{frame_end}")
+        if frame_end < 0:
+            print("フレーム範囲: " + str(frame_start) + "-AUTO（両車GOAL到達時刻+ゴール後3秒で動画終了・定加速度モデル）")
+        else:
+            print(f"フレーム範囲: {frame_start}-{frame_end}")
         print(f"{'='*60}")
 
     if not os.path.exists(MAIN_SCRIPT):
@@ -175,7 +182,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     # 単一カット実行
     cut_info = CUTS.get(cut_number)
     if not cut_info:
-        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5")
+        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s")
         return False
 
     frame_start = cut_info["start"]
@@ -274,7 +281,7 @@ def main():
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short")
+        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s")
         sys.exit(1)
 
     success = run_blender(

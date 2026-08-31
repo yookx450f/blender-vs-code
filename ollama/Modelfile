@@ -1,0 +1,6 @@
+FROM qwen3.8:27b
+PARAMETER temperature 1.0
+PARAMETER top_p 0.95
+PARAMETER repeat_penalty 1.15
+
+# ollama create qwen27b-zoo -f ./Modelfile
