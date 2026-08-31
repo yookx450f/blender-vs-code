@@ -43,10 +43,12 @@ _preview/
 
 # デバッグスクリプト・出力
 debug_*.py
-_tmp_*.py
-_tmp_*.py.txt
+_tmp_*
 ss_part*.py.txt
 output.txt
+
+# Windows PowerShell 一時ファイル
+$null
 
 # SQLite データベース
 *.db
