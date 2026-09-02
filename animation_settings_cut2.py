@@ -75,13 +75,13 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 2】シーン 5: フレーム 576-624（全長差表示エフェクト、2秒）
+    # 【カット 2】シーン 5: フレーム 408-456（全長差表示エフェクト、2秒）【改訂:-168フレーム】
     # カメラは常に動く - 接近しながらテキスト表示
     # ============================================================
     print("\n=== 【カット 2】シーン 5 設定開始 ===")
 
-    scene5_start = 576
-    scene5_end = 624  # 2秒間（24fps × 2 = 48 フレーム）
+    scene5_start = 408  # 【改訂】-168フレーム (576→408)
+    scene5_end = 456  # 2秒間（24fps × 2 = 48 フレーム）【改訂】624→456
 
     # カメラ: 全長差表示時に少し寄せる（X方向を8.0→6.0に接近）
     loc_phase4_close = (6.0, 0.0, 2.5)
@@ -89,7 +89,7 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     rot_quat_close = direction_close.to_track_quat('-Z', 'Y')
     rot_phase4_close = rot_quat_close.to_euler()
 
-    # フレーム 576: カット1終了位置から開始
+    # フレーム 408: カット1終了位置から開始【改訂】
     camera.location = loc_phase4
     camera.rotation_euler = rot_phase4
     camera.keyframe_insert(data_path="location", frame=scene5_start)
@@ -119,13 +119,13 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     _setup_scene5_effects(scene, camera, car_a, car_b, scene5_start, scene5_end, car_dimensions)
 
     # ============================================================
-    # 【カット 2】シーン 6: フレーム 624-816（サイドビューから正面へカメラ移動、8秒）
+    # 【カット 2】シーン 6: フレーム 456-648（サイドビューから正面へカメラ移動、8秒）【改訂:-168フレーム】
     # カメラは常に動く - サイド→正面への滑らかな軌道
     # ============================================================
     print("\n=== 【カット 2】シーン 6 設定開始 ===")
 
-    scene6_start = 624
-    scene6_end = 816  # 8秒間（24fps × 8 = 192 フレーム）
+    scene6_start = 456  # 【改訂】-168フレーム (624→456)
+    scene6_end = 648  # 8秒間（24fps × 8 = 192 フレーム）【改訂】816→648
 
     # カメラ: サイドビュー位置から車の正面にゆっくり移動
     start_loc = loc_phase4_close
@@ -174,13 +174,13 @@ def setup_cut2_animations(scene, camera, imported_cars, previous_state=None, car
     print(f"[フレーム{scene6_end}] シーン 6 終了：カメラ={end_loc}（正面ビュー）, 車維持")
 
     # ============================================================
-    # 【カット 2】シーン 7: フレーム 816-912（横幅差表示 + カメラゆっくり接近、4秒）
+    # 【カット 2】シーン 7: フレーム 648-744（横幅差表示 + カメラゆっくり接近、4秒）【改訂:-168フレーム】
     # カメラは常に動く - 正面ビューからさらに接近
     # ============================================================
     print("\n=== 【カット 2】シーン 7 設定開始 ===")
 
-    scene7_start = 816
-    scene7_end = 912  # 4秒間（24fps × 4 = 96 フレーム）
+    scene7_start = 648  # 【改訂】-168フレーム (816→648)
+    scene7_end = 744  # 4秒間（24fps × 4 = 96 フレーム）【改訂】912→744
 
     # カメラ: シーン6の終了位置からさらに接近
     scene7_end_loc = (0.0, -5.5, 2.5)  # さらに車に接近

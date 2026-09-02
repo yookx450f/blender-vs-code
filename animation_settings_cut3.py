@@ -83,13 +83,13 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     target = (0.0, 0.0, 1.5)
 
     # ============================================================
-    # 【カット 3】シーン 8: フレーム 912-1056（正面から左側低位置へカメラ移動、6秒）
+    # 【カット 3】シーン 8: フレーム 744-888（正面から左側低位置へカメラ移動、6秒）【改訂:-168フレーム】
     # カメラは常に動く - 正面→左側低位置への滑らかな軌道
     # ============================================================
     print("\n=== 【カット 3】シーン 8 設定開始 ===")
 
-    scene8_start = 912  # カット2終了位置から開始
-    scene8_end = 1056  # 6秒間（24fps × 6 = 144フレーム）
+    scene8_start = 744  # 【改訂】-168フレーム (912→744)、カット2終了位置から開始
+    scene8_end = 888  # 6秒間（24fps × 6 = 144フレーム）【改訂】1056→888
 
     # カメラ: 正面ビューから左側の低い位置へ移動
     start_loc = loc_scene7_end
@@ -139,7 +139,7 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
 
     # --- CarBの半透明をカット2から維持 (alpha=0.4) ---
     # カット3全体（シーン8+シーン9）に対して1回だけ設定し、ドライバー式の上書きを防ぐ
-    scene9_end = 1128  # シーン9終了フレーム（前方宣言）
+    scene9_end = 960  # 【改訂】-168フレーム (1128→960)、シーン9終了フレーム（前方宣言）
     _setup_transparency_animation(car_b, scene8_start, scene9_end, 0.4, 0.4)
     print(f"[フレーム{scene8_start}-{scene9_end}] CarB 半透明維持：alpha=0.4（カット3全体）")
 
@@ -243,8 +243,8 @@ def setup_cut3_animations(scene, camera, imported_cars, previous_state=None, car
     # ============================================================
     print("\n=== 【カット 3】シーン 9 設定開始 ===")
 
-    scene9_start = 1056
-    scene9_end = 1128  # 3秒間（24fps × 3 = 72フレーム）
+    scene9_start = 888  # 【改訂】-168フレーム (1056→888)
+    scene9_end = 960  # 3秒間（24fps × 3 = 72フレーム）【改訂】1128→960
 
     # カメラ: シーン8の終了位置から微動して同じ位置に戻る
     # 中間地点で少し移動して「止まっている」印象を避ける
