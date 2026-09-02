@@ -12,26 +12,53 @@ def _ss_clamp_accel(s):
     return max(float(s), 0.5)
 
 
+def _get_accel_params(T):
+    """T秒で恰好100m走るよう、加速パラメータを計算する。
+    
+    基本モデル: 等加速度 d(T) = 0.5*a*T^2 = 100 → a = 200/T^2
+    ただし v(T) > V_MAX の場合は「加速→等速」の2フェーズモデルに切り替え。
+    
+    Args:
+        T: 設定の0-100km/h加速時間[s]（ゴール到達タイム）
+    Returns:
+        t1: Vmax到達までの時間[s], a: 加速度[m/s^2], dmax: 加速フェーズ距離[m]
+    """
+    T = _ss_clamp_accel(T)
+    a_prime = 200.0 / (T * T)
+    v_at_T = a_prime * T
+    
+    if v_at_T <= SS_V_MAX:
+        # 等加速度のみで100m走破 → t1=T (加速時間がそのままゴールタイム)
+        return T, a_prime, 100.0
+    else:
+        # 2フェーズモデル
+        t1 = 2.0 * (T - 100.0 / SS_V_MAX)
+        if t1 > 0:
+            a_fallback = SS_V_MAX / t1
+            dmax_fallback = 0.5 * a_fallback * t1 * t1
+            return t1, a_fallback, dmax_fallback
+        # 極端なケースのフォールバック
+        return T, SS_V_MAX / T, 0.5 * SS_V_MAX * T
+
+
 def ss_distance(t, accel_s):
+    """t秒後の走行距離を返す。加速時間が100m走破タイムに一致するよう計算。"""
     if t <= 0.0:
         return 0.0
-    T = _ss_clamp_accel(accel_s)
-    a = SS_V_MAX / T
-    dmax = 0.5 * a * T * T               # (=SS_V_MAX*T/2)
-    if t <= T:
+    t1, a, dmax = _get_accel_params(accel_s)
+    if t <= t1:
         return 0.5 * a * t * t
-    return dmax + SS_V_MAX * (t - T)
+    return dmax + SS_V_MAX * (t - t1)
 
 
 def ss_arrival_frame(start_y, accel_s):
+    """ゴール到達フレームを計算する。"""
     D = max(float(start_y) - SS_GOAL_Y, 1e-6)
-    T = _ss_clamp_accel(accel_s)
-    a = SS_V_MAX / T
-    dmax = 0.5 * a * T * T
+    t1, a, dmax = _get_accel_params(accel_s)
     if D <= dmax:
         ta = math.sqrt((2.0 * D) / a)
     else:
-        ta = T + (D - dmax) / SS_V_MAX
+        ta = t1 + (D - dmax) / SS_V_MAX
     return int(round(SS_LAUNCH_FRAME + ta * SS_FPS))
 
 
@@ -575,21 +602,22 @@ def setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, ground
         car_a.keyframe_insert("location", frame=fr)
         car_b.keyframe_insert("location", frame=fr)
 
-    # ── カメラ速度計算用パラメータ ──
+    # ── カメラ速度計算用パラメータ（_get_accel_paramsで再計算）──
     T_a = _ss_clamp_accel(aa)  # 車Aの0-100加速時間[s]
     T_b = _ss_clamp_accel(ba)  # 車Bの0-100加速時間[s]
-    a_max = SS_V_MAX / T_a     # 車Aの最大加速度[m/s²]
-    b_max = SS_V_MAX / T_b     # 車Bの最大加速度[m/s²]
+    t1_a, a_max, dmax_a = _get_accel_params(T_a)   # 車A: Vmax到達時間, 加速度, 加速距離[m]
+    t1_b, b_max, dmax_b = _get_accel_params(T_b)   # 車B: Vmax到達時間, 加速度, 加速距離[m]
 
-    def _car_speed(car_T, car_acc, t):
-        """車の進行速度 (m/s)。"""
-        if t <= car_T:
-            return car_acc * t
+    def _car_speed(t1, car_a, t):
+        """車の進行速度 (m/s)。t1はVmax到達時間。"""
+        if t <= t1:
+            return car_a * t
         return SS_V_MAX
 
     # 遅い/早い判定 (加速時間が長い=遅い)
     slow_T = max(T_a, T_b)
     fast_T = min(T_a, T_b)
+    slow_t1, slow_a, _ = _get_accel_params(slow_T)
 
     # Phase時間の定義 (仕様「3-2」「3-3」準拠)
     phase2_dur = 3.0   # Phase 3-2: 遅い車と同じ速度で3秒間
@@ -609,7 +637,7 @@ def setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, ground
     phase2_end_cam_y = cam_y_prev
     for _pre_i in range(phase2_frames):
         t_s_pre = _pre_i / SS_FPS
-        s = _car_speed(slow_T, SS_V_MAX / slow_T, t_s_pre)
+        s = _car_speed(slow_t1, slow_a, t_s_pre)
         phase2_end_cam_y -= s / SS_FPS
     
     # Phase 2終了時の車の平均Y位置（回転補間の起点として固定値を使用）
@@ -630,7 +658,7 @@ def setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, ground
 
         if i < phase2_frames:
             # ── 【3-2】遅いほうの車と同じ速度でY軸を移動 (2秒間) ──
-            cam_speed = _car_speed(slow_T, SS_V_MAX / slow_T, t_s_i)
+            cam_speed = _car_speed(slow_t1, slow_a, t_s_i)
             dt = 1.0 / SS_FPS
             cam_y_prev -= cam_speed * dt
             

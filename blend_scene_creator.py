@@ -927,7 +927,7 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shar
     text_obj.data.body = text_content
     
     # テキストのサイズ設定（画面で読みやすい大きさに調整）
-    text_obj.data.size = 0.35         # フォントサイズ（70%に縮小）
+    text_obj.data.size = 0.525         # フォントサイズ（1.5倍）
     text_obj.scale = (1.0, 1.0, 1.0)  # スケール
     
     # バウンディングボックスから車の寸法を計算（ワールド座標系）
