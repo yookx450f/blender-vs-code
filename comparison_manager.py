@@ -614,3 +614,444 @@ def bulk_update_all_stats(comparisons_data, api_stats):
 
     logger.info(f"[BULK UPDATE] 完了: success={success}, failed={failed}")
     return {"success": success, "failed": failed, "errors": errors}
+
+
+# ============================================================
+# 動物用データ層 (animals / animal_comparisons)
+# ============================================================
+
+# クレイモデルの色定義（色名 → RGB値）
+CLAY_COLOR_MAP = {
+    "グレー": [0.5, 0.5, 0.5],
+    "青": [0.0, 0.7, 1.0],
+    "赤": [1.0, 0.2, 0.2],
+    "黄色": [1.0, 0.9, 0.1],
+    "ピンク": [1.0, 0.5, 0.7],
+    "緑": [0.2, 0.8, 0.3],
+    "茶色": [0.6, 0.4, 0.2],
+    "黒": [0.15, 0.15, 0.15],
+}
+CLAY_COLOR_OPTIONS = list(CLAY_COLOR_MAP.keys())
+
+
+def init_animals_table():
+    """animalsテーブルを作成（存在しない場合）"""
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS animals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            glb_filename TEXT DEFAULT '',
+            animal_type TEXT DEFAULT 'other',
+            height REAL DEFAULT 0,
+            weight REAL DEFAULT 0,
+            rotation_direction INTEGER DEFAULT 0,
+            color_name TEXT DEFAULT 'グレー'
+        )
+    """)
+    # weight カラムが存在しない場合は追加（旧DBのマイグレーション対応）
+    try:
+        conn.execute("ALTER TABLE animals ADD COLUMN weight REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 既に存在する場合は無視
+    # color_name カラムが存在しない場合は追加（マイグレーション対応）
+    try:
+        conn.execute("ALTER TABLE animals ADD COLUMN color_name TEXT DEFAULT 'グレー'")
+    except sqlite3.OperationalError:
+        pass  # 既に存在する場合は無視
+    conn.commit()
+    conn.close()
+    logger.info("animals テーブルを初期化しました")
+
+
+def init_animal_comparisons_table():
+    """animal_comparisonsテーブルを作成（存在しない場合）"""
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS animal_comparisons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            animal_a_id INTEGER NOT NULL,
+            animal_b_id INTEGER NOT NULL,
+            short_status INTEGER DEFAULT 0,
+            long_status INTEGER DEFAULT 0,
+            short_video_url TEXT DEFAULT '',
+            long_video_url TEXT DEFAULT '',
+            short_views INTEGER DEFAULT 0,
+            long_views INTEGER DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (animal_a_id) REFERENCES animals(id),
+            FOREIGN KEY (animal_b_id) REFERENCES animals(id),
+            UNIQUE(animal_a_id, animal_b_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info("animal_comparisons テーブルを初期化しました")
+
+
+def get_all_animals():
+    """全動物データをDataFrameとして取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM animals ORDER BY id")
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
+
+
+def get_all_animal_comparisons():
+    """全動物比較ペアを取得（動物名付き）"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            c.id,
+            c.animal_a_id,
+            c.animal_b_id,
+            aa.name AS animal_a_name,
+            ab.name AS animal_b_name,
+            c.short_status,
+            c.long_status,
+            c.short_video_url,
+            c.long_video_url,
+            c.short_views,
+            c.long_views,
+            c.notes,
+            c.created_at,
+            c.updated_at
+        FROM animal_comparisons c
+        LEFT JOIN animals aa ON c.animal_a_id = aa.id
+        LEFT JOIN animals ab ON c.animal_b_id = ab.id
+        ORDER BY c.animal_a_id, c.animal_b_id
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
+
+
+def get_animals_db_dict():
+    """SQLiteデータベースから動物マスターデータを辞書として読み込む"""
+    init_animals_table()
+    animals_db = {}
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM animals")
+    for row in cursor.fetchall():
+        animal = dict(row)  # sqlite3.Row → dict に変換（.get() のため）
+        animal_id = str(animal["id"])
+        color_name = animal.get("color_name", "グレー")
+        if color_name not in CLAY_COLOR_MAP:
+            color_name = "グレー"
+        animals_db[animal_id] = {
+            "name": animal["name"],
+            "glb_filename": animal.get("glb_filename", ""),
+            "animal_type": animal.get("animal_type", "other"),
+            "height": animal.get("height", 0),
+            "weight": animal.get("weight", 0),
+            "rotation_direction": animal.get("rotation_direction", 0),
+            "color_name": color_name,
+            "color_rgb": CLAY_COLOR_MAP[color_name]
+        }
+    conn.close()
+    logger.info(f"動物マスターDBを読み込みました: {len(animals_db)} 種類")
+    return animals_db
+
+
+def get_animal_comparison_by_ids(animal_a_id, animal_b_id):
+    """指定ペアの情報を取得（存在しない場合はNone）"""
+    init_animals_table()
+    init_animal_comparisons_table()
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM animal_comparisons WHERE animal_a_id = ? AND animal_b_id = ?
+    """, (animal_a_id, animal_b_id))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+
+def create_animal_comparison_if_not_exists(animal_a_id, animal_b_id):
+    """ペアが存在しない場合は自動作成し、IDを返す"""
+    existing = get_animal_comparison_by_ids(animal_a_id, animal_b_id)
+    if existing:
+        return existing["id"]
+    
+    init_animals_table()
+    init_animal_comparisons_table()
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO animal_comparisons (animal_a_id, animal_b_id, short_status, long_status)
+            VALUES (?, ?, 0, 0)
+        """, (animal_a_id, animal_b_id))
+        conn.commit()
+        new_id = cursor.lastrowid
+        conn.close()
+        return new_id
+    except sqlite3.IntegrityError:
+        conn.close()
+        return None
+    except Exception:
+        conn.close()
+        return None
+
+
+def update_animal_comparison_full(comp_id, short_status, long_status, short_views, long_views, notes):
+    """動物比較ペアの全情報を一括更新"""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            UPDATE animal_comparisons
+            SET short_status = ?, long_status = ?,
+                short_views = ?, long_views = ?, notes = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (short_status, long_status, short_views, long_views, notes, comp_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def update_animal_comparison_url(comp_id, video_type, url):
+    """YouTube URLを登録 (video_type: 'short' or 'long')"""
+    conn = get_connection()
+    try:
+        if video_type == "short":
+            conn.execute("""
+                UPDATE animal_comparisons
+                SET short_video_url = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (url, comp_id))
+        else:
+            conn.execute("""
+                UPDATE animal_comparisons
+                SET long_video_url = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (url, comp_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def delete_animal_comparison(comp_id):
+    """動物比較ペアを削除"""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            DELETE FROM animal_comparisons WHERE id = ?
+        """, (comp_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.close()
+        return False
+
+
+def set_animal_comparison_pair_to_config(animal_a_id, animal_b_id):
+    """animals_config.json に比較ペアを設定（色もDBから取得してRGBに変換）"""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "animals_config.json")
+    
+    try:
+        import json
+        glb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "C:\\\\3d\\\\Modly\\\\glb")
+        
+        # DBから動物データを取得（色情報を含む）
+        animals_db = get_animals_db_dict()
+        
+        animal_a_data = animals_db.get(str(animal_a_id), {})
+        animal_b_data = animals_db.get(str(animal_b_id), {})
+        
+        color_a = animal_a_data.get("color_rgb", CLAY_COLOR_MAP.get("グレー", [0.5, 0.5, 0.5]))
+        color_b = animal_b_data.get("color_rgb", CLAY_COLOR_MAP.get("青", [0.0, 0.7, 1.0]))
+        
+        # 既存設定を読み込む
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        else:
+            config = {
+                "glb_dir": glb_dir,
+                "animalA": {"id": "1", "color": color_a, "position": [2.0, 0.0, 0]},
+                "animalB": {"id": "2", "color": color_b, "position": [-2.0, 0.0, 0]}
+            }
+        
+        config["animalA"]["id"] = str(animal_a_id)
+        config["animalA"]["color"] = color_a
+        config["animalB"]["id"] = str(animal_b_id)
+        config["animalB"]["color"] = color_b
+        
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        return True, f"動物A={animal_a_id}, 動物B={animal_b_id} を設定しました"
+    except Exception as e:
+        return False, str(e)
+
+
+def is_invalid_animal_pair(animal_a_id, animal_b_id):
+    """無効ペアかどうかを判定（同じ動物 or 重複パターン）"""
+    if animal_a_id == animal_b_id:
+        return True
+    # 逆順のペアが存在するかチェック
+    existing = get_animal_comparison_by_ids(animal_b_id, animal_a_id)
+    if existing:
+        return True
+    return False
+
+
+def get_animal_matrix_data():
+    """
+    動物マトリクス表示用のデータを生成
+    
+    戻り値:
+    - animals_df: 動物リスト (縦軸・横軸用)
+    - animal_comparisons_df: 全動物比較ペアデータ
+    """
+    animals_df = get_all_animals()
+    animal_comparisons_df = get_all_animal_comparisons()
+    return animals_df, animal_comparisons_df
+
+
+def get_animal_dashboard_stats():
+    """動物ダッシュボード統計データを取得"""
+    comps = get_all_animal_comparisons()
+    
+    if comps.empty:
+        return {
+            "total_pairs": 0,
+            "not_started": 0,
+            "short_only": 0,
+            "short_published": 0,
+            "long_in_progress": 0,
+            "both_done": 0,
+            "total_short_views": 0
+        }
+    
+    total = len(comps)
+    not_started = len(comps[(comps["short_status"] == 0) & (comps["long_status"] == 0)])
+    short_only = len(comps[(comps["short_status"] >= 1) & (comps["long_status"] == 0)])
+    short_published = len(comps[comps["short_status"] == 2])
+    long_in_progress = len(comps[comps["long_status"] == 1])
+    both_done = len(comps[(comps["short_status"] == 2) & (comps["long_status"] == 2)])
+    total_views = comps["short_views"].sum()
+    
+    return {
+        "total_pairs": total,
+        "not_started": not_started,
+        "short_only": short_only,
+        "short_published": short_published,
+        "long_in_progress": long_in_progress,
+        "both_done": both_done,
+        "total_short_views": int(total_views)
+    }
+
+
+def add_animal(name, glb_filename, animal_type, height, weight, rotation, color_name="グレー"):
+    """新規動物追加"""
+    if color_name not in CLAY_COLOR_MAP:
+        color_name = "グレー"
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO animals (name, glb_filename, animal_type, height, weight, rotation_direction, color_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, glb_filename, animal_type, float(height), float(weight), int(rotation), color_name))
+        conn.commit()
+        new_id = conn.cursor().lastrowid
+        conn.close()
+        return True, new_id
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "動物名の登録に失敗しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def get_animal_by_id(animal_id):
+    """IDで動物データを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM animals WHERE id = ?", (animal_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+
+def update_animal(animal_id, name, glb_filename, animal_type, height, weight, rotation, color_name="グレー"):
+    """動物情報更新"""
+    if color_name not in CLAY_COLOR_MAP:
+        color_name = "グレー"
+    conn = get_connection()
+    try:
+        conn.execute("""
+            UPDATE animals SET
+                name = ?, glb_filename = ?, animal_type = ?, height = ?, weight = ?,
+                rotation_direction = ?, color_name = ?
+            WHERE id = ?
+        """, (name, glb_filename, animal_type, float(height), float(weight), int(rotation), color_name, animal_id))
+        conn.commit()
+        conn.close()
+        return True, "更新しました"
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "動物名の登録に失敗しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def delete_animal(animal_id):
+    """動物を削除"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM animals WHERE id = ?", (animal_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False, "指定されたIDの動物が見つかりません"
+    animal_name = row["name"]
+    cursor.execute("DELETE FROM animals WHERE id = ?", (animal_id,))
+    conn.commit()
+    conn.close()
+    return True, animal_name
+
+
+def search_animals(query):
+    """動物名で部分一致検索"""
+    conn = get_connection_raw()
+    df = pd.read_sql_query(
+        "SELECT * FROM animals WHERE name LIKE ? ORDER BY id",
+        (f"%{query}%",),
+        conn
+    )
+    conn.close()
+    return df
+
+
+def export_animals_to_csv():
+    """CSVデータを生成"""
+    df = get_all_animals()
+    return df.to_csv(index=False, encoding="utf-8-sig")

@@ -51,6 +51,24 @@ scene.render.image_settings.file_format = 'FFMPEG'
 scene.render.ffmpeg.format = 'MPEG4'
 scene.render.ffmpeg.codec = 'H264'
 
+# 【重要】アニメーションの終了フレームを自動検出し、確実に最後までレンダリング
+# scene.frame_end が正しく設定されていればそのまま使用
+# キーフレームから最終フレームを検出して補完する
+final_keyframe = 0
+for obj in bpy.data.objects:
+    if obj.animation_data and obj.animation_data.action:
+        action = obj.animation_data.action
+        if hasattr(action, 'fcurves'):
+            for fc in action.fcurves:
+                for kf in fc.keyframe_points:
+                    if kf.co.x > final_keyframe:
+                        final_keyframe = kf.co.x
+
+# 現在のframe_endがfinal_keyframe未満なら補正
+if scene.frame_end < final_keyframe:
+    print(f"フレーム末端を補正: {scene.frame_end} → {int(final_keyframe) + 1}")
+    scene.frame_end = int(final_keyframe) + 1
+
 print(f"出力先: {output_filepath}.mp4")
 print(f"フレーム範囲: {scene.frame_start}-{scene.frame_end}")
 

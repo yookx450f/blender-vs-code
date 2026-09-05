@@ -105,6 +105,123 @@ def load_cars_db():
     
     return cars_db
 
+
+def load_animals_db():
+    """SQLiteデータベース (cars.db) から動物マスターデータを辞書として読み込む"""
+    db_path = os.path.join(SCRIPT_DIR, "cars.db")
+    
+    if not os.path.exists(db_path):
+        print(f"エラー: データベースが見つかりません - {db_path}")
+        sys.exit(1)
+    
+    animals_db = {}
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # animalsテーブルが存在するか確認
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='animals'")
+        if not cursor.fetchone():
+            print("エラー: animals テーブルが見つかりません")
+            print("pages/01_動物一覧.py で動物データを登録してください。")
+            conn.close()
+            sys.exit(1)
+        
+        cursor.execute("SELECT * FROM animals")
+        
+        for row in cursor.fetchall():
+            animal_id = str(row["id"])
+            animals_db[animal_id] = {
+                "name": row["name"],
+                "glb_filename": row["glb_filename"],
+                "animal_type": row["animal_type"],
+                "height": row["height"],
+                "weight": row["weight"],
+                "rotation_direction": row["rotation_direction"],
+                "color_name": row["color_name"]
+            }
+        
+        conn.close()
+        print(f"動物マスターDBを読み込みました: {db_path} ({len(animals_db)} 種類)")
+    except Exception as e:
+        print(f"エラー: animals テーブルの読み込みに失敗しました - {e}")
+        sys.exit(1)
+    
+    return animals_db
+
+
+def load_animals_config():
+    """animals_config.json + cars.db(animalsテーブル) を結合して動物の設定辞書を返す
+    
+    JSONでは animalA/animalB に id, color, position のみを指定し、
+    寸法データは DBからidで自動的に取得・結合する。
+    戻り値のキーは carA/carB に変換（アニメーション設定との互換性）。
+    """
+    config_path = os.path.join(SCRIPT_DIR, "animals_config.json")
+    
+    if not os.path.exists(config_path):
+        print(f"エラー: 設定ファイルが見つかりません - {config_path}")
+        print("animals_config.json を作成してください。")
+        sys.exit(1)
+    
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        
+        # DBから動物マスターデータを取得
+        animals_db = load_animals_db()
+        
+        # GLBディレクトリの取得（JSONのグローバル設定）
+        glb_dir = config.get("glb_dir", "")
+        
+        # animalA/animalB ごとにDBデータを結合し、carA/carB キーに変換
+        key_mapping = {"animalA": "carA", "animalB": "carB"}
+        merged = {}
+        for src_key, dst_key in key_mapping.items():
+            if src_key not in config:
+                continue
+            
+            animal_cfg = config[src_key]
+            animal_id = animal_cfg.get("id", "")
+            
+            if animal_id not in animals_db:
+                print(f"エラー: DBに動物ID '{animal_id}' が見つかりません")
+                print(f"  利用可能なID: {', '.join(animals_db.keys())}")
+                sys.exit(1)
+            
+            db_data = animals_db[animal_id]
+            merged[dst_key] = {
+                "name": db_data["name"],
+                "glb_path": os.path.join(glb_dir, db_data["glb_filename"]),
+                "position": tuple(animal_cfg.get("position", [0.0, 0.0, 0])),
+                "color": tuple(animal_cfg.get("color", [0.5, 0.5, 0.5])),
+                "dimensions_mm": {
+                    "height": db_data["height"],
+                    "weight": db_data["weight"],
+                },
+                "rotation_z_degrees": db_data["rotation_direction"]
+            }
+        
+        print(f"動物設定ファイルを読み込みました: {config_path}")
+        for key, animal_data in merged.items():
+            dims = animal_data.get("dimensions_mm", {})
+            src_key = "animalA" if key == "carA" else "animalB"
+            print(f"  - {key}: {animal_data['name']} (ID: {config[src_key].get('id', '?')})")
+            print(f"    GLBパス: {animal_data['glb_path']}")
+            print(f"    寸法: 全高{dims.get('height', '?')}mm, 体重{dims.get('weight', '?')}kg")
+        
+        return merged
+    
+    except json.JSONDecodeError as e:
+        print(f"エラー: animals_config.json の形式が正しくありません - {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"エラー: 動物設定ファイルの読み込みに失敗しました - {e}")
+        sys.exit(1)
+
+
+
 def load_cars_config():
     """cars_config.json + cars.db を結合して車の設定辞書を返す
     
@@ -415,8 +532,151 @@ def create_grid_floor(x_half_width=5.0, y_half_length=50.0):
     print("  - 横線・縦線の両方を表示（MAXimum組み合わせ）")
     return grid
 
-def create_clay_material(name, color):
-    """単色クレイモデル用のマテリアルを作成する（Principled BSDFベース）"""
+def create_back_grid_wall(x_half_width=10.0, height=8.0):
+    """背面垂直壁面用の発光グリッドを作成する（床面と同じ1m間隔のネオン線）
+
+    垂直壁面として X/Z方向に1m間隔のグリッドを表示し、Y=-10の位置に配置する。
+    テキストラベルなどが壁面と重ならないよう、背面のサイバー空間感を出す。
+
+    Parameters:
+        x_half_width: X方向の半分の幅（デフォルト10.0m = ±10m）
+        height: 壁面の高さ（デフォルト8.0m）
+    """
+    # 壁面メッシュを作成（X=2*x_half_width, Z=height の垂直板）
+    bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0.0, -10.0, height / 2.0))
+    wall = bpy.context.active_object
+    wall.name = "BackGridWall"
+    
+    # スケールで幅と高さを設定（X方向=幅, Z方向=高さ）
+    wall.scale = (x_half_width * 2, 1.0, height)
+    
+    # オブジェクトスケールをメッシュに適用してシェーダー座標が正しいようにする
+    bpy.context.view_layer.objects.active = wall
+    bpy.ops.object.transform_apply(scale=True)
+    wall.scale = (1.0, 1.0, 1.0)
+    
+    # 壁面用のマテリアルを作成（床面と同じグリッドパターンだが X/Z方向）
+    wall_mat_name = "NeonGridWallMaterial"
+    
+    if wall_mat_name in bpy.data.materials:
+        wall.data.materials.clear()
+        wall.data.materials.append(bpy.data.materials[wall_mat_name])
+        return wall
+    
+    wall_mat = bpy.data.materials.new(name=wall_mat_name)
+    wall_mat.use_nodes = True
+    nodes = wall_mat.node_tree.nodes
+    links = wall_mat.node_tree.links
+    
+    # 既存ノードをすべて削除
+    for node in nodes:
+        nodes.remove(node)
+    
+    # Output Material ノード
+    output_node = nodes.new(type='ShaderNodeOutputMaterial')
+    output_node.location = (1200, 0)
+    
+    # ColorRamp ノード（横線用: Z座標の整数位置）
+    color_ramp_h = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_h.location = (800, -100)
+    color_ramp_h.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)
+    color_ramp_h.color_ramp.elements[0].position = 0.0
+    color_ramp_h.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)
+    color_ramp_h.color_ramp.elements[1].position = 0.04
+    
+    # ColorRamp ノード（縦線用: X座標の整数位置）
+    color_ramp_v = nodes.new(type='ShaderNodeValToRGB')
+    color_ramp_v.location = (800, 100)
+    color_ramp_v.color_ramp.elements[0].color = (1.0, 1.0, 1.0, 1.0)
+    color_ramp_v.color_ramp.elements[0].position = 0.0
+    color_ramp_v.color_ramp.elements[1].color = (0.0, 0.0, 0.0, 1.0)
+    color_ramp_v.color_ramp.elements[1].position = 0.04
+    
+    # Emission ノード
+    emission_node = nodes.new(type='ShaderNodeEmission')
+    emission_node.location = (1050, 0)
+    emission_node.inputs['Color'].default_value = (0.0, 1.0, 1.0, 1.0)
+    emission_node.inputs['Strength'].default_value = 6.0
+    
+    # X座標から縦グリッド線を抽出
+    separate_xyz_x = nodes.new(type='ShaderNodeSeparateXYZ')
+    separate_xyz_x.location = (250, 150)
+    
+    math_floor_x = nodes.new(type='ShaderNodeMath')
+    math_floor_x.operation = 'FLOOR'
+    math_floor_x.location = (400, 200)
+    
+    math_subtract_x = nodes.new(type='ShaderNodeMath')
+    math_subtract_x.operation = 'SUBTRACT'
+    math_subtract_x.location = (550, 180)
+    
+    # Z座標から横グリッド線を抽出（YではなくZを使用）
+    separate_xyz_z = nodes.new(type='ShaderNodeSeparateXYZ')
+    separate_xyz_z.location = (250, -150)
+    
+    math_floor_z = nodes.new(type='ShaderNodeMath')
+    math_floor_z.operation = 'FLOOR'
+    math_floor_z.location = (400, -200)
+    
+    math_subtract_z = nodes.new(type='ShaderNodeMath')
+    math_subtract_z.operation = 'SUBTRACT'
+    math_subtract_z.location = (550, -180)
+    
+    # 横線と縦線の強度をMAXで組み合わせる
+    math_max_hv = nodes.new(type='ShaderNodeMath')
+    math_max_hv.operation = 'MAXIMUM'
+    math_max_hv.location = (1000, 0)
+    
+    # Mapping ノード
+    mapping_node = nodes.new(type='ShaderNodeMapping')
+    mapping_node.location = (50, 0)
+    mapping_node.inputs['Scale'].default_value = (1.0, 1.0, 1.0)
+    
+    # Texture Coordinate ノード
+    tex_coord = nodes.new(type='ShaderNodeTexCoord')
+    tex_coord.location = (-200, 0)
+    
+    # ノード接続
+    links.new(tex_coord.outputs['Object'], mapping_node.inputs['Vector'])
+    
+    # X軸の縦グリッド線計算
+    links.new(mapping_node.outputs['Vector'], separate_xyz_x.inputs['Vector'])
+    links.new(separate_xyz_x.outputs['X'], math_floor_x.inputs[0])
+    links.new(math_floor_x.outputs[0], math_subtract_x.inputs[1])
+    links.new(separate_xyz_x.outputs['X'], math_subtract_x.inputs[0])
+    links.new(math_subtract_x.outputs[0], color_ramp_v.inputs['Fac'])
+    
+    # Z軸の横グリッド線計算
+    links.new(mapping_node.outputs['Vector'], separate_xyz_z.inputs['Vector'])
+    links.new(separate_xyz_z.outputs['Z'], math_floor_z.inputs[0])
+    links.new(math_floor_z.outputs[0], math_subtract_z.inputs[1])
+    links.new(separate_xyz_z.outputs['Z'], math_subtract_z.inputs[0])
+    links.new(math_subtract_z.outputs[0], color_ramp_h.inputs['Fac'])
+    
+    # 組み合せ → Emission → Output
+    links.new(color_ramp_h.outputs['Color'], math_max_hv.inputs[0])
+    links.new(color_ramp_v.outputs['Color'], math_max_hv.inputs[1])
+    links.new(math_max_hv.outputs[0], emission_node.inputs['Strength'])
+    links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
+    
+    wall.data.materials.clear()
+    wall.data.materials.append(wall_mat)
+    
+    print(f"背面壁面グリッド作成完了: {wall_mat_name} (X幅 ±{x_half_width:.0f}m / 高さ {height:.0f}m)")
+    print("  - グリッド間隔: 1.0m四方（正確）")
+    print("  - 線色: シアンブルー (RGB: 0, 1, 1)")
+    print("  - 発光強度: 6.0")
+    return wall
+
+def create_clay_material(name, color, emission=None, emission_strength=0.0):
+    """単色クレイモデル用のマテリアルを作成する（Principled BSDFベース）
+    
+    Parameters:
+        name: マテリアル名
+        color: ベースカラー (R, G, B) のタプル
+        emission: エミッションカラー (R, G, B) のタプル（None=発光なし）
+        emission_strength: エミッション強度（デフォルト0.0=発光なし）
+    """
     if name in bpy.data.materials:
         return bpy.data.materials[name]
     
@@ -440,70 +700,147 @@ def create_clay_material(name, color):
     principled_node.inputs['Roughness'].default_value = 0.8
     principled_node.inputs['Metallic'].default_value = 0.0
     
+    # エミッション設定（オプション）
+    if emission is not None and emission_strength > 0:
+        principled_node.inputs['Emission Strength'].default_value = emission_strength
+        if 'Emission Color' in principled_node.inputs:
+            principled_node.inputs['Emission Color'].default_value = (*emission, 1.0)
+        elif 'Emission' in principled_node.inputs:
+            principled_node.inputs['Emission'].default_value = (*emission, emission_strength)
+    
     material.node_tree.links.new(principled_node.outputs['BSDF'], output_node.inputs['Surface'])
     
     return material
 
-# ============================================================
-# 車の設定・配置関数群（スケール・接地・マテリアル適用）
-# ============================================================
-def create_placeholder_car(key, color, location):
-    """GLBファイルがない場合のプレースホルダー車（円柱ベース）"""
-    bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.8, depth=2.5, location=location)
-    body = bpy.context.active_object
-    body.name = f"{key}_body"
-    body.rotation_euler = (0, 0, math.pi / 2)
+def create_human_figure(location=(-2.8, 0.0, 0.0), height_m=1.7, rotation_z_degrees=0):
+    """human.glb をインポートして人間フィギュアを作成（高さ比較用）
     
-    mat_name = f"clay_{key}"
-    clay_material = create_clay_material(mat_name, color)
-    body.data.materials.clear()
-    body.data.materials.append(clay_material)
+    Parameters:
+        location: 配置位置 (x, y, z) デフォルトは左側(-1.8, 0.0, 0.0)
+        height_m: 身長（メートル）デフォルト1.7m
+        rotation_z_degrees: Z軸回転角度（度）DBのrotation_direction値をそのまま渡す
     
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=16, radius=0.6, location=(location[0] + 0.3, location[1] + 0.5, location[2] + 0.8))
-    cabin = bpy.context.active_object
-    cabin.name = f"{key}_cabin"
-    cabin.scale = (1.2, 0.7, 0.8)
+    Returns:
+        インポートしたオブジェクト
+    """
+    # human.glb のパスを構築 (animal_glbディレクトリを使用)
+    human_glb_path = r"C:\3d\Modly\animal_glb\human.glb"
     
-    cabin_mat_name = f"clay_{key}_cabin"
-    cabin_material = create_clay_material(cabin_mat_name, color)
-    cabin.data.materials.clear()
-    cabin.data.materials.append(cabin_material)
+    if not os.path.exists(human_glb_path):
+        print(f"警告: human.glb が見つかりません - {human_glb_path}")
+        print(" プレースホルダー（円柱）を使用します")
+        # プレースホルダー作成
+        bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=0.12, depth=height_m, location=location)
+        human_obj = bpy.context.active_object
+        human_obj.name = "HumanFigure"
+        mat_name = "clay_human"
+        if mat_name not in bpy.data.materials:
+            mat = create_clay_material(mat_name, (0.4, 0.4, 0.4))
+        else:
+            mat = bpy.data.materials[mat_name]
+        human_obj.data.materials.clear()
+        human_obj.data.materials.append(mat)
+        return human_obj
     
-    bpy.context.view_layer.objects.active = body
-    body.select_set(True)
-    cabin.select_set(True)
-    bpy.ops.object.join()
+    # GLBをインポート
+    imported = import_glb_file(human_glb_path)
+    if imported is None:
+        print(f"警告: human.glb のインポートに失敗しました")
+        return None
     
-    print(f"プレースホルダー車作成: {body.name} at {location}")
-    return body
+    imported.name = "HumanFigure"
+    
+    # 寸法から身長にスケーリング
+    current_z = abs(imported.dimensions.z)
+    if current_z > 0:
+        scale_factor = height_m / current_z
+        imported.scale = (scale_factor, scale_factor, scale_factor)
+    
+    # ★ Z軸回転をメッシュデータレベルで適用（動物と同じ処理）
+    if rotation_z_degrees != 0:
+        rot_angle = math.radians(rotation_z_degrees)
+        
+        def rotate_human_mesh_recursive(obj):
+            """オブジェクトとその全子オブジェクトのメッシュデータをZ軸回転"""
+            if obj.type == 'MESH' and obj.data is not None:
+                import bmesh
+                mesh = obj.data
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                rot_matrix = Matrix.Rotation(rot_angle, 3, 'Z')
+                for vert in bm.verts:
+                    vert.co.rotate(rot_matrix)
+                bm.to_mesh(mesh)
+                bm.free()
+                mesh.update(calc_edges=True)
+            for child in obj.children:
+                rotate_human_mesh_recursive(child)
+        
+        rotate_human_mesh_recursive(imported)
+        bpy.context.view_layer.update()
+        print(f"  ヒューマンメッシュ回転: Z軸 {rotation_z_degrees}度 を再帰的に全メッシュに適用")
+    
+    # 位置を設定
+    imported.location = location
+    
+    # 自動接地処理
+    auto_ground_car(imported)
+    
+    # グレーエミッションマテリアルを適用（仕様: Humanの色は暗いグレー）
+    mat_name = "clay_human"
+    if mat_name not in bpy.data.materials:
+        mat = create_clay_material(mat_name, (0.35, 0.35, 0.35), emission=(0.35, 0.35, 0.35), emission_strength=1.5)
+    else:
+        mat = bpy.data.materials[mat_name]
+    _apply_clay_to_all_meshes(imported, mat)
+    
+    print(f"ヒューマノイドフィギュア作成完了: {imported.name} at {location} (高さ={height_m}m, 回転={rotation_z_degrees}度)")
+    return imported
 
 def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_height_mm):
-    """オブジェクトを指定した寸法（mm）にスケールする"""
+    """オブジェクトを指定した寸法（mm）にスケールする
+    
+    length または width が None の場合、height のみを基準に等倍スケールを適用し、
+    元のモデルの縦横比率を維持する（動物モデル用）。
+    """
     # 現在のサイズを取得（Blender単位: メートル）
     current_x = abs(obj.dimensions.x)
     current_y = abs(obj.dimensions.y)
     current_z = abs(obj.dimensions.z)
     
     # mmをBlender単位（メートル）に変換
-    target_length_m = target_length_mm / 1000.0
-    target_width_m = target_width_mm / 1000.0
     target_height_m = target_height_mm / 1000.0
     
-    # スケール係数を計算（全長→Y軸、全幅→X軸、全高→Z軸）
-    if current_x > 0:
-        scale_x = target_width_m / current_x   # 全幅をX軸に適用
+    # length/width が None の場合 → 高さだけで等倍スケール（比率維持）
+    if target_length_mm is None or target_width_mm is None:
+        if current_z > 0:
+            uniform_scale = target_height_m / current_z
+        else:
+            uniform_scale = 1.0
+        scale_x = uniform_scale
+        scale_y = uniform_scale
+        scale_z = uniform_scale
+        print(f"等倍スケール適用（高さ基準）: {obj.name} -> {uniform_scale:.4f}")
     else:
-        scale_x = 1.0
-    
-    if current_y > 0:
-        scale_y = target_length_m / current_y  # 全長をY軸に適用
-    else:
-        scale_y = 1.0
-    
-    if current_z > 0:
-        scale_z = target_height_m / current_z  # 全高をZ軸に適用
-    else:
-        scale_z = 1.0
+        # mmをBlender単位（メートル）に変換
+        target_length_m = target_length_mm / 1000.0
+        target_width_m = target_width_mm / 1000.0
+        
+        # スケール係数を計算（全長→Y軸、全幅→X軸、全高→Z軸）
+        if current_x > 0:
+            scale_x = target_width_m / current_x   # 全幅をX軸に適用
+        else:
+            scale_x = 1.0
+        
+        if current_y > 0:
+            scale_y = target_length_m / current_y  # 全長をY軸に適用
+        else:
+            scale_y = 1.0
+        
+        if current_z > 0:
+            scale_z = target_height_m / current_z  # 全高をZ軸に適用
+        else:
+            scale_z = 1.0
     
     # スケールを適用
     obj.scale = (scale_x, scale_y, scale_z)
@@ -573,11 +910,16 @@ def setup_car(key, car_data, imported_object):
     # サイズ指定がある場合はスケール適用
     if 'dimensions_mm' in car_data:
         dims = car_data['dimensions_mm']
+        has_length = 'length' in dims
+        has_width = 'width' in dims
+        length_val = dims.get('length', None) if has_length else None
+        width_val = dims.get('width', None) if has_width else None
+        height_val = dims.get('height', 1620)
         scale_object_to_dimensions(
             imported_object,
-            dims.get('length', 4460),
-            dims.get('width', 1825),
-            dims.get('height', 1620)
+            length_val,
+            width_val,
+            height_val
         )
 
     # 初期位置を設定（後で接地処理で調整される）
@@ -642,7 +984,7 @@ def setup_camera_and_lighting():
     # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
     # ライトもカメラの位置に合わせて調整（より広い照明範囲に）
     # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
-    bpy.ops.object.light_add(type='AREA', location=(8.5*0.6, -8.5*0.6, 7))
+    bpy.ops.object.light_add(type='AREA', location=(4.0, -8.5*0.6, 7))
     key_light = bpy.context.active_object
     key_light.name = "KeyLight"
     key_light.data.energy = 800  # さらに明るさを抑える
@@ -1019,6 +1361,8 @@ def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shar
     
     print(f"3Dテキストラベル作成完了: {text_obj.name} -> '{text_content}' (ペアレント: {car_object.name})")
 
+
+
 # ============================================================
 # メイン処理
 # ============================================================
@@ -1041,7 +1385,11 @@ def main():
         if FRAME_START_OVERRIDE >= 0 and FRAME_END_OVERRIDE >= 0:
             print(f"フレーム範囲: {FRAME_START_OVERRIDE}-{FRAME_END_OVERRIDE}")
     # cars_config.json から車の設定を読み込む
-    CARS = load_cars_config()
+    # shortAnimal モードは animals_config.json を使用
+    if CUT_NUMBER == "shortAnimal":
+        CARS = load_animals_config()
+    else:
+        CARS = load_cars_config()
     
     # シーンをクリア
     clear_scene()
@@ -1055,6 +1403,11 @@ def main():
         grid_x_half, grid_y_half = 10.0, 10.0   # xy座標中心の20m四方グリッド
     grid = create_grid_floor(x_half_width=grid_x_half, y_half_length=grid_y_half)
     print(f"グリッド床面を作成しました: {grid.name} (X方向±{grid_x_half:.0f}m / Y方向±{grid_y_half:.0f}m)")
+    
+    # 背面壁面グリッド（一旦無効化 - 縦グリッドが浮く問題のため）
+    # if CUT_NUMBER == "shortAnimal":
+    #     back_wall = create_back_grid_wall(x_half_width=10.0, height=8.0)
+    #     print(f"背面壁面グリッドを作成しました: {back_wall.name}")
     
     # 世界背景を設定
     setup_world_background()
@@ -1079,22 +1432,31 @@ def main():
             print("GLBファイルが破損しているか、形式が正しくありません。処理を停止します。")
             sys.exit(1)
         
-        # メッシュデータを直接回転（スケール/origin_setの影響を受けない）
+        # ★ Z軸回転をメッシュデータレベルで適用（再帰的に全子メッシュに適用）
+        # GLBは親オブジェクト+複数の子メッシュの構造になるので、すべて処理する必要がある
         rotation_z = car_data.get("rotation_z_degrees", 0)
         if rotation_z != 0:
-            import bmesh
-            mesh = imported_object.data
-            bm = bmesh.new()
-            bm.from_mesh(mesh)
             rot_angle = math.radians(rotation_z)
-            rot_matrix = Matrix.Rotation(rot_angle, 3, 'Z')
-            for vert in bm.verts:
-                vert.co.rotate(rot_matrix)
-            bm.to_mesh(mesh)
-            bm.free()
-            mesh.update(calc_edges=True)
+            
+            def rotate_mesh_data_recursive(obj):
+                """オブジェクトとその全子オブジェクトのメッシュデータをZ軸回転"""
+                if obj.type == 'MESH' and obj.data is not None:
+                    import bmesh
+                    mesh = obj.data
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh)
+                    rot_matrix = Matrix.Rotation(rot_angle, 3, 'Z')
+                    for vert in bm.verts:
+                        vert.co.rotate(rot_matrix)
+                    bm.to_mesh(mesh)
+                    bm.free()
+                    mesh.update(calc_edges=True)
+                for child in obj.children:
+                    rotate_mesh_data_recursive(child)
+            
+            rotate_mesh_data_recursive(imported_object)
             bpy.context.view_layer.update()
-            print(f"  メッシュ回転: Z軸 {rotation_z}度 を適用")
+            print(f"  メッシュ回転: Z軸 {rotation_z}度 を再帰的に全メッシュに適用")
         
         setup_car(key, car_data, imported_object)
         imported_cars[key] = imported_object
@@ -1164,7 +1526,6 @@ def main():
     # =============================================
     # オフセットデータをJSONに保存（カット分離用）
     # =============================================
-    import sys
     if SCRIPT_DIR not in sys.path:
         sys.path.insert(0, SCRIPT_DIR)
     from animation_cut_positions import save_offsets
@@ -1216,6 +1577,37 @@ def main():
             if accel:
                 car_dimensions_short_s[key]["acceleration_0_to_100_km_h"] = accel
         setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=car_dimensions_short_s)
+    elif CUT_NUMBER == "shortAnimal":
+        from animation_settings_shortAnimal import setup_shortAnimal_animations
+        # 動物用: height, weight, rotation_direction のみを渡す（他の寸法は使用しない）
+        animal_dimensions = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            animal_dimensions[key] = {
+                "height": dims.get("height", 0),
+                "weight": dims.get("weight", 0),
+            }
+        SHORT_ANIMAL_TOTAL_FRAMES = 888  # 仕様書に基づく総フレーム数（約37秒@24fps） - カット1(72fr)+カット1-2(72fr)+カット2(72fr)+カット3(600fr)+カット4(72fr)
+        setup_shortAnimal_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=animal_dimensions, total_frames=SHORT_ANIMAL_TOTAL_FRAMES)
+        
+        # シーンの終了フレームを設定（動画が最後までレンダリングされるように）
+        scene.frame_end = SHORT_ANIMAL_TOTAL_FRAMES
+        print(f"  shortAnimal: scene.frame_end={SHORT_ANIMAL_TOTAL_FRAMES} (約{SHORT_ANIMAL_TOTAL_FRAMES/24:.1f}秒)")
+        
+        # 動物ショート動画に人間フィギュアを追加（高さ比較用）
+        # DB から human の rotation_direction を取得する
+        animals_db_for_human = load_animals_db()
+        human_rotation = 0
+        for aid, data in animals_db_for_human.items():
+            if "human" in data.get("glb_filename", "").lower():
+                human_rotation = data.get("rotation_direction", 0)
+                break
+        print(f"  ヒューマンのDB回転角度: {human_rotation}度")
+        human_figure = create_human_figure(location=(2.0, -3.0, 0.0), height_m=1.7, rotation_z_degrees=human_rotation)
+        
+        # Human も半透明化（CarB と同期）
+        from short_animal_transparency import setup_human_transparency
+        setup_human_transparency(human_figure)
     else:
         from animation_settings import setup_all_animations
         
@@ -1284,6 +1676,7 @@ def main():
         else:
             create_glowing_text_label(key, car_obj, text_content, color_rgb, shared_rear_y=shared_rear_y)
     
+
     print("3Dテキストラベル設定完了")
     
     # =============================================
@@ -1306,6 +1699,8 @@ def main():
         output_filename = "short2_overlap.mp4"
     elif CUT_NUMBER == "short-s":
         output_filename = "short-s_overlap.mp4"
+    elif CUT_NUMBER == "shortAnimal":
+        output_filename = "shortAnimal_overlap.mp4"
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
@@ -1329,7 +1724,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16）
-    if CUT_NUMBER in ("short", "short2", "short-s"):
+    if CUT_NUMBER in ("short", "short2", "short-s", "shortAnimal"):
         scene.render.resolution_x = 1080
         scene.render.resolution_y = 1920
         scene.render.resolution_percentage = 100
@@ -1367,6 +1762,8 @@ def main():
         blend_output_path = os.path.join(SCRIPT_DIR, "short2_scene.blend")
     elif CUT_NUMBER == "short-s":
         blend_output_path = os.path.join(SCRIPT_DIR, "short_s_scene.blend")
+    elif CUT_NUMBER == "shortAnimal":
+        blend_output_path = os.path.join(SCRIPT_DIR, "shortAnimal_scene.blend")
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:

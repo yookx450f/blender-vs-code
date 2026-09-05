@@ -44,6 +44,7 @@ _preview/
 # デバッグスクリプト・出力
 debug_*.py
 _tmp_*
+_temp_*
 ss_part*.py.txt
 output.txt
 

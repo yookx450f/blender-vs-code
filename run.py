@@ -12,6 +12,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py short        # ショート動画（縦長9:16、車重なりカット、フレーム0-240）
     python run.py short2       # ショート動画v2（縦長9:16、キーフレーム半透明、フレーム0-240）
     python run.py short-s      # ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了／終端フレーム自動計算）
+    python run.py shortAnimal  # 動物ショート動画（縦長9:16、背面壁面グリッド付き、フレーム0-624、約26秒@24fps）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -39,6 +40,7 @@ CUTS = {
     # 【仕様「２．構成」】end=-1 → animation_settings_short_s.py が cars_config.json の0-100km/h加速時間から
     # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
+    "shortAnimal": {"start": 0, "end": 984, "label": "動物ショート動画（縦長9:16、約41秒@24fps）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -182,7 +184,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     # 単一カット実行
     cut_info = CUTS.get(cut_number)
     if not cut_info:
-        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s")
+        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal")
         return False
 
     frame_start = cut_info["start"]
@@ -281,7 +283,7 @@ def main():
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s")
+        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal")
         sys.exit(1)
 
     success = run_blender(
