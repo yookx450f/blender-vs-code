@@ -1578,6 +1578,12 @@ def main():
                 car_dimensions_short_s[key]["acceleration_0_to_100_km_h"] = accel
         setup_short_s_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=car_dimensions_short_s)
     elif CUT_NUMBER == "shortAnimal":
+        # KeyLight の X 座標を動物用に調整 (4.0 → 3.0)
+        if "KeyLight" in bpy.data.objects:
+            kl = bpy.data.objects["KeyLight"]
+            current_loc = kl.location.copy()
+            kl.location = (3.0, current_loc.y, current_loc.z)
+            print(f"  KeyLight位置を動物用に調整: X={current_loc.x:.1f}→3.0, Y={current_loc.y:.1f}, Z={current_loc.z:.1f}")
         from animation_settings_shortAnimal import setup_shortAnimal_animations
         # 動物用: height, weight, rotation_direction のみを渡す（他の寸法は使用しない）
         animal_dimensions = {}
@@ -1603,7 +1609,7 @@ def main():
                 human_rotation = data.get("rotation_direction", 0)
                 break
         print(f"  ヒューマンのDB回転角度: {human_rotation}度")
-        human_figure = create_human_figure(location=(2.0, -3.0, 0.0), height_m=1.7, rotation_z_degrees=human_rotation)
+        human_figure = create_human_figure(location=(2.0, -4.0, 0.0), height_m=1.7, rotation_z_degrees=human_rotation)
         
         # Human も半透明化（CarB と同期）
         from short_animal_transparency import setup_human_transparency

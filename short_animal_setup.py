@@ -145,11 +145,13 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     ターゲットEmptyのアニメーション（カメラの「向き」を制御）を設定。
 
     仕様に従って、各カットでのターゲットZ座標を変化させる。
-      カット1 (fr0-72, 3秒):     正面→動物Aの最高部+0.5mへ視点移動
-      カット1-2 (fr72-216, 6秒): 動物Aの最高部→動物Bの最高部へ視点移動（半透明フェーズ）
-      カット2 (fr216-360, 6秒):  分離スライド、視点固定（動物A高さの半分を向く）
-      カット3 (fr360-960, 25秒): 円軌道1周、動物Aの高さの半分を向く
-      カット4 (fr960-1032, 3秒):  正面に戻る、動物Aの高さの半分を向く
+    视点は高めに保ち、カット間で连续な过渡を行う（ジャンプ禁止）。
+
+      カット1 (fr0-72, 3秒):     斜め上20度→動物Bの最高部へ視点移動
+      カット1-2 (fr72-216, 6秒): 動物Bの最高部→max(A,B)*0.75へ視点移动（半透明フェーズ）
+      カット2 (fr216-360, 6秒):  分离スライド、max(A,B)*0.75を维持（高位化完了）
+      カット3 (fr360-960, 25秒): 円軌道1周、max(动物A,B)*0.75を向く（高位维持）
+      カット4 (fr960-1032, 3秒):  正面に戻る、max(动物A,B)*0.75を向く
     """
     print("\n  === ターゲットEmptyアニメーション設定 ===")
 
@@ -165,36 +167,32 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     CUT4_START = 960
     CUT4_END = 1032
 
-    # カット1: 動物Aの一番高いところー2m（仕様変更）
-    animal_a_top_target_z = animal_a_max_z - 2.0
+    # 两动物の最大高さ（视点高めで见切れ防止）
+    max_animal_z = max(animal_a_max_z, animal_b_max_z)
+    high_target_z = max_animal_z * 0.75  # 高位ターゲット（max高さの75%）
 
-    # カット1-2: 動物Aの最高部→動物Bの最高部（仕様書準拠）
-    animal_b_top_target_z = animal_b_max_z
-
-    # カット2/3/4: 動物Aの高さの半分のZ位置を向く（仕様書準拠）
-    animal_a_half_z = animal_a_max_z * 0.5
-
-    # カット1: fr0-72, 斜め上20度から动物Aの最高部+0.2mへ視点移動
-    # カメラ位置(1, -5, 0.5)、ターゲットXY=(0,0) → 水平距離=sqrt(1^2+5^2)=sqrt(26)≈5.1
+    # カット1: fr0-72, 斜め上20度から动物Bの最高部へ视点移动
+    # カメラ位置(1, -8, 0.5)、ターゲットXY=(0,0) → 水平距離=sqrt(1^2+8^2)=sqrt(65)≈8.06
     # 斜め上20度: tan(20°)*水平距離 = delta_z
-    initial_target_z = 0.5 + math.tan(math.radians(20)) * math.sqrt(1**2 + 5**2)
+    initial_target_z = 0.5 + math.tan(math.radians(20)) * math.sqrt(1**2 + 8**2)
     _set_empty_location_keyframe(target_empty, CUT1_START, target_base[0], target_base[1], initial_target_z)
-    _set_empty_location_keyframe(target_empty, CUT1_END, target_base[0], target_base[1], animal_a_max_z + 0.2)
+    _set_empty_location_keyframe(target_empty, CUT1_END, target_base[0], target_base[1], animal_b_max_z)
 
-    # カット1-2: fr72-216, 动物Aの最高部から动物Bの最高部へ視点移動（半透明フェーズ）
-    _set_empty_location_keyframe(target_empty, CUT1_2_START, target_base[0], target_base[1], animal_a_top_target_z)
-    _set_empty_location_keyframe(target_empty, CUT1_2_END, target_base[0], target_base[1], animal_b_top_target_z)
+    # カット1-2: fr72-216, 动物Bの最高部からmax(A,B)*0.75へ视点移动（半透明フェーズ）
+    # 连续性を保つため、开始値はカット1终了値と一致
+    _set_empty_location_keyframe(target_empty, CUT1_2_START, target_base[0], target_base[1], animal_b_max_z)
+    _set_empty_location_keyframe(target_empty, CUT1_2_END, target_base[0], target_base[1], high_target_z)
 
-    # カット2: fr216-360, 分離スライド、視点固定（動物Aの高さの半分を向く - 仕様に準拠）
-    _set_empty_location_keyframe(target_empty, CUT2_START, target_base[0], target_base[1], animal_a_half_z)
-    _set_empty_location_keyframe(target_empty, CUT2_END, target_base[0], target_base[1], animal_a_half_z)
+    # カット2: fr216-360, 分离スライド、max(A,B)*0.75を维持（高位化完了）
+    _set_empty_location_keyframe(target_empty, CUT2_START, target_base[0], target_base[1], high_target_z)
+    _set_empty_location_keyframe(target_empty, CUT2_END, target_base[0], target_base[1], high_target_z)
 
-    # カット3: fr360-960, 円軌道中は動物Aの高さの半分を向く（仕様に準拠）
-    _set_empty_location_keyframe(target_empty, CUT3_START, target_base[0], target_base[1], animal_a_half_z)
-    _set_empty_location_keyframe(target_empty, CUT3_END, target_base[0], target_base[1], animal_a_half_z)
+    # カット3: fr360-960, 円軌道中は高位を维持（见切れ防止）
+    _set_empty_location_keyframe(target_empty, CUT3_START, target_base[0], target_base[1], high_target_z)
+    _set_empty_location_keyframe(target_empty, CUT3_END, target_base[0], target_base[1], high_target_z)
 
-    # カット4: fr960-1032, 正面に戻り、動物Aの高さの半分を向く
-    _set_empty_location_keyframe(target_empty, CUT4_START, target_base[0], target_base[1], animal_a_half_z)
-    _set_empty_location_keyframe(target_empty, CUT4_END, target_base[0], target_base[1], animal_a_half_z)
+    # カット4: fr960-1032, 正面に戻り、高位を维持
+    _set_empty_location_keyframe(target_empty, CUT4_START, target_base[0], target_base[1], high_target_z)
+    _set_empty_location_keyframe(target_empty, CUT4_END, target_base[0], target_base[1], high_target_z)
 
-    print(f"  ターゲットZ: {initial_target_z:.2f}→{animal_a_top_target_z:.2f} (fr0-72), {animal_a_top_target_z:.2f}→{animal_b_top_target_z:.2f} (fr72-216), {animal_a_half_z:.2f}固定 (fr216-360), {animal_a_half_z:.2f}固定 (fr360-960), {animal_a_half_z:.2f} (fr960-1032)")
+    print(f"  ターゲットZ: {initial_target_z:.2f}→{animal_b_max_z:.2f} (fr0-72), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr72-216), {high_target_z:.2f}固定 (fr216-360), {high_target_z:.2f}固定 (fr360-960), {high_target_z:.2f} (fr960-1032)")
