@@ -51,10 +51,11 @@ output.txt
 # Windows PowerShell 一時ファイル
 $null
 
-# SQLite データベース
-*.db
-*.sqlite
-*.sqlite3
+# SQLite データベース (cars.db はバージョン管理対象)
+# *.db
+# *.sqlite
+# *.sqlite3
+# シャドウメモリとWALログは管理外（自動生成される）
 *.db-shm
 *.db-wal
 
