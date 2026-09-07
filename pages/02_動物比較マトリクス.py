@@ -361,7 +361,7 @@ else:
             
             notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
             
-            submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("💾 保存", type="primary", width='stretch')
         
         if submitted:
             from comparison_manager import update_animal_comparison_url
@@ -399,7 +399,7 @@ else:
         
         st.sidebar.info("このペアはまだ登録されていません。")
         
-        if st.button("➕ 新規追加", type="primary", use_container_width=True, key="add_animal_comparison_btn"):
+        if st.button("➕ 新規追加", type="primary", width='stretch', key="add_animal_comparison_btn"):
             new_id = create_animal_comparison_if_not_exists(animal_a_id, animal_b_id)
             if new_id:
                 st.sidebar.success("✓ 登録しました")
@@ -411,7 +411,7 @@ else:
     
     st.sidebar.markdown("---")
     with st.form("set_animal_config_form", clear_on_submit=False):
-        set_config_btn = st.form_submit_button("🎬 animals_configに設定", type="primary", use_container_width=True)
+        set_config_btn = st.form_submit_button("🎬 animals_configに設定", type="primary", width='stretch')
     
     if set_config_btn:
         success, msg = set_animal_comparison_pair_to_config(animal_a_id, animal_b_id)

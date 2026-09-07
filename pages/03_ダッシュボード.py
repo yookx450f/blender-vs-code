@@ -68,14 +68,14 @@ if stats["total_pairs"] > 0:
                 title="制作状況内訳"
             )
             fig.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         except ImportError:
             # plotlyがない場合はバーチャートで代替
             st.bar_chart(status_data.set_index("ステータス"))
             st.info("plotlyをインストールすると円グラフが表示されます: `pip install plotly`")
     
     with col_table:
-        st.dataframe(status_data, use_container_width=True, hide_index=True)
+        st.dataframe(status_data, width='stretch', hide_index=True)
 
 else:
     st.info("比較ペアデータがありません。マトリクスページからペアを追加してください。")
@@ -106,7 +106,7 @@ if not candidates.empty:
         })
     
     display_df = pd.DataFrame(display_data)
-    st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
+    st.dataframe(display_df, width='stretch', hide_index=True, height=400)
     
     # 上位ペアのクイックアクション
     st.markdown("---")
@@ -120,7 +120,7 @@ if not candidates.empty:
                 if st.button(
                     "🎬 cars_configに設定",
                     key=f"config_{row['id']}",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     from comparison_manager import set_comparison_pair_to_config
                     success, msg = set_comparison_pair_to_config(row["car_a_id"], row["car_b_id"])
@@ -132,7 +132,7 @@ if not candidates.empty:
                 if st.button(
                     "📊 長尺制作中にステータス変更",
                     key=f"status_{row['id']}",
-                    use_container_width=True
+                    width='stretch'
                 ):
                     from comparison_manager import update_comparison_status
                     success = update_comparison_status(row["id"], long_status=1)
@@ -169,7 +169,7 @@ if not car_counts.empty:
             color_continuous_scale="Blues"
         )
         fig.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     except ImportError:
         st.bar_chart(car_counts.set_index("car_name"))
         st.info("plotlyをインストールすると詳細チャートが表示されます")
@@ -177,7 +177,7 @@ if not car_counts.empty:
     # テーブル表示
     st.dataframe(
         car_counts[["car_name", "comparison_count"]], 
-        use_container_width=True, 
+        width='stretch', 
         hide_index=True
     )
 else:
@@ -209,7 +209,7 @@ if not all_comps.empty:
     
     st.dataframe(
         display_df[show_cols].rename(columns=col_names),
-        use_container_width=True,
+        width='stretch',
         height=400
     )
 else:

@@ -40,7 +40,7 @@ CUTS = {
     # 【仕様「２．構成」】end=-1 → animation_settings_short_s.py が cars_config.json の0-100km/h加速時間から
     # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
-    "shortAnimal": {"start": 0, "end": 984, "label": "動物ショート動画（縦長9:16、約41秒@24fps）"},
+    "shortAnimal": {"start": 0, "end": 960, "label": "動物ショート動画（縦長9:16、カット1削除済み、約40秒@24fps）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス

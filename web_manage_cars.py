@@ -41,30 +41,11 @@ def init_db():
             turning_radius INTEGER DEFAULT 0,
             acceleration_0_to_100 REAL DEFAULT 0.0,
             rotation_direction INTEGER DEFAULT 0,
-            car_type TEXT DEFAULT '',
-            mirror_offset_mm INTEGER DEFAULT 100
+            car_type TEXT DEFAULT ''
         )
     """)
-    # mirror_offset_mm 列が存在しない場合は追加（マイグレーション対応）
-    try:
-        conn.execute("ALTER TABLE cars ADD COLUMN mirror_offset_mm INTEGER DEFAULT 100")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # 列が既に存在する場合は無視
     conn.close()
 
-
-# 車種タイプ別のミラー突出量（片側 mm）
-MIRROR_OFFSET_BY_TYPE = {
-    "軽自動車": 70,
-    "スポーツカー": 90,
-    "セダン": 95,
-    "ハッチバック": 95,
-    "SUV": 100,
-    "ミニバン": 100,
-    "ピックアップ": 110,
-    "バス/トラック": 80,
-}
 
 CAR_TYPE_OPTIONS = ["SUV", "セダン", "ハッチバック", "スポーツカー", "ミニバン", "ピックアップ", "軽自動車", "バス/トラック"]
 
@@ -102,19 +83,17 @@ def get_car_by_id(car_id):
     return None
 
 
-def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset=None):
+def add_car(name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """新規車種追加"""
-    if mirror_offset is None:
-        mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
             INSERT INTO cars (name, glb_filename, length, width, height,
                              ground_clearance, turning_radius,
-                             acceleration_0_to_100, rotation_direction, car_type, mirror_offset_mm)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             acceleration_0_to_100, rotation_direction, car_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (name, glb_filename, length, width, height,
-              ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset))
+              ground_clearance, turning_radius, acceleration, rotation, car_type))
         conn.commit()
         new_id = conn.cursor().lastrowid
         conn.close()
@@ -127,22 +106,19 @@ def add_car(name, glb_filename, length, width, height, ground_clearance, turning
         return False, str(e)
 
 
-def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type, mirror_offset=None):
+def update_car(car_id, name, glb_filename, length, width, height, ground_clearance, turning_radius, acceleration, rotation, car_type):
     """車種情報更新"""
-    if mirror_offset is None:
-        mirror_offset = MIRROR_OFFSET_BY_TYPE.get(car_type, 100)
     conn = get_connection()
     try:
         conn.execute("""
             UPDATE cars SET
                 name = ?, glb_filename = ?, length = ?, width = ?, height = ?,
                 ground_clearance = ?, turning_radius = ?,
-                acceleration_0_to_100 = ?, rotation_direction = ?, car_type = ?,
-                mirror_offset_mm = ?
+                acceleration_0_to_100 = ?, rotation_direction = ?, car_type = ?
             WHERE id = ?
         """, (name, glb_filename, length, width, height,
               ground_clearance, turning_radius, acceleration, rotation, car_type,
-              mirror_offset, car_id))
+              car_id))
         conn.commit()
         conn.close()
         return True, "更新しました"
@@ -236,8 +212,8 @@ def main():
         display_df = df.copy()
         display_df.columns = ["ID", "車名", "GLBファイル", "全長(mm)", "全幅(mm)", "全高(mm)",
                               "最低地上高(mm)", "最小回転半径(mm)", "0-100km/h加速(秒)", "Z軸回転(度)",
-                              "車種タイプ", "ミラー突出量(mm)"]
-        st.dataframe(display_df, use_container_width=True, height=400)
+                              "車種タイプ"]
+        st.dataframe(display_df, width='stretch', height=400)
     else:
         st.info("データベースに車種データがありません。")
 
@@ -263,15 +239,6 @@ def main():
                     CAR_TYPE_OPTIONS,
                     index=CAR_TYPE_OPTIONS.index(edit_car["car_type"]) if edit_car.get("car_type") and edit_car["car_type"] in CAR_TYPE_OPTIONS else 0
                 )
-                # ミラー突出量を表示（タイプ選択で自動設定）
-                auto_offset = MIRROR_OFFSET_BY_TYPE.get(inp_type, 100)
-                current_offset = edit_car.get("mirror_offset_mm", 100) if edit_car else 100
-                inp_mirror_offset = st.number_input(
-                    "ミラー突出量 (mm/片側)",
-                    min_value=50, max_value=150, step=5,
-                    value=current_offset,
-                    help=f"車種タイプ「{inp_type}」の推奨値: {auto_offset}mm。3Dスケール計算時に 全幅 + (この値 × 2) を使用します。"
-                )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
                     inp_length = st.number_input("全長 (mm)", value=edit_car["length"] if edit_car else 0, step=1)
@@ -295,15 +262,6 @@ def main():
                     CAR_TYPE_OPTIONS,
                     key="new_car_type"
                 )
-                # ミラー突出量を表示（タイプ選択で自動設定）
-                auto_offset = MIRROR_OFFSET_BY_TYPE.get(inp_type, 100)
-                inp_mirror_offset = st.number_input(
-                    "ミラー突出量 (mm/片側)",
-                    min_value=50, max_value=150, step=5,
-                    value=auto_offset,
-                    key="new_mirror_offset",
-                    help=f"車種タイプ「{inp_type}」の推奨値: {auto_offset}mm。3Dスケール計算時に 全幅 + (この値 × 2) を使用します。"
-                )
                 col_dims_a, col_dims_b, col_dims_c = st.columns(3)
                 with col_dims_a:
                     inp_length = st.number_input("全長 (mm)", min_value=100, max_value=10000, step=1, key="new_length")
@@ -323,11 +281,11 @@ def main():
                 submitted = st.form_submit_button(
                     "💾 更新" if st.session_state.edit_mode else "✅ 追加",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 )
             with col_cancel:
                 if st.session_state.edit_mode:
-                    if st.form_submit_button("❌ キャンセル", use_container_width=True):
+                    if st.form_submit_button("❌ キャンセル", width='stretch'):
                         st.session_state.edit_mode = False
                         st.session_state.edit_id = None
                         st.rerun()
@@ -341,7 +299,7 @@ def main():
                             st.session_state.edit_id, inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
                             int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
-                            inp_type, int(inp_mirror_offset)
+                            inp_type
                         )
                         if success:
                             st.success(f"✓ 車種 ID {st.session_state.edit_id} を更新しました")
@@ -355,7 +313,7 @@ def main():
                             inp_name, inp_glb,
                             int(inp_length), int(inp_width), int(inp_height),
                             int(inp_gc), int(inp_tr), float(inp_acc), int(inp_rot),
-                            inp_type, int(inp_mirror_offset)
+                            inp_type
                         )
                         if success:
                             st.success(f"✓ 車種を追加しました (ID: {result})")
@@ -377,33 +335,30 @@ def main():
 
         if car_detail:
             st.markdown(f"### {car_detail['name']}")
-            mirror_offset = car_detail.get("mirror_offset_mm", 100)
-            effective_width = car_detail["width"] + (mirror_offset * 2)
+            # width列はミラー包含済みの実効幅（全幅）
             detail_df = pd.DataFrame([{
                 "ID": car_detail["id"],
                 "車名": car_detail["name"],
                 "GLBファイル": car_detail["glb_filename"],
                 "全長(mm)": car_detail["length"],
-                "全幅(mm)": car_detail["width"],
-                "全幅(ミラー包含)(mm)": effective_width,
+                "全幅(実効幅)(mm)": car_detail["width"],
                 "全高(mm)": car_detail["height"],
                 "最低地上高(mm)": car_detail["ground_clearance"],
                 "最小回転半径(mm)": car_detail["turning_radius"],
                 "0-100km/h加速(秒)": car_detail["acceleration_0_to_100"],
                 "Z軸回転(度)": car_detail["rotation_direction"],
                 "車種タイプ": car_detail.get("car_type", ""),
-                "ミラー突出量(mm/片側)": mirror_offset
             }])
-            st.dataframe(detail_df.set_index("ID"), use_container_width=True)
+            st.dataframe(detail_df.set_index("ID"), width='stretch')
 
             col_edit, col_delete = st.columns(2)
             with col_edit:
-                if st.button("✏️ 編集モードに切り替え", type="secondary", use_container_width=True):
+                if st.button("✏️ 編集モードに切り替え", type="secondary", width='stretch'):
                     st.session_state.edit_mode = True
                     st.session_state.edit_id = selected_id
                     st.rerun()
             with col_delete:
-                if st.button("🗑️ この車種を削除", type="secondary", use_container_width=True):
+                if st.button("🗑️ この車種を削除", type="secondary", width='stretch'):
                     st.session_state.confirm_delete = selected_id
 
         else:
@@ -417,7 +372,7 @@ def main():
                     st.warning(f"「{confirm_car['name']}」(ID: {st.session_state.confirm_delete}) を削除しますか？")
                     col_y, col_n = st.columns(2)
                     with col_y:
-                        if st.button("はい、削除する", type="primary", use_container_width=True):
+                        if st.button("はい、削除する", type="primary", width='stretch'):
                             success, result = delete_car(st.session_state.confirm_delete)
                             if success:
                                 st.success(f"✓ 「{result}」を削除しました")
@@ -426,7 +381,7 @@ def main():
                             else:
                                 st.error(result)
                     with col_n:
-                        if st.button("キャンセル", use_container_width=True):
+                        if st.button("キャンセル", width='stretch'):
                             del st.session_state.confirm_delete
                             st.rerun()
 
@@ -437,7 +392,7 @@ def main():
             data=export_to_csv(),
             file_name=f"cars_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
-            use_container_width=True
+            width='stretch'
         ):
             st.success("CSVエクスポート準備完了")
 

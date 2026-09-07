@@ -76,20 +76,12 @@ def load_cars_db():
         
         for row in cursor.fetchall():
             car_id = str(row["id"])
-            # Widthはミラー未包含のため、mirror_offset_mm × 2 を加算して3Dスケールに使用する
-            # mirror_offset_mm が設定されていない場合はデフォルト100mm（両側200mm）を使用
-            # ただしテキスト表示には生値を使用するため、width_rawを別途保持する
-            width_raw = row["width"]
-            try:
-                mirror_offset = row["mirror_offset_mm"]
-            except (KeyError, IndexError):
-                mirror_offset = 100  # デフォルト値
+            # width列はミラー包含済みの実効幅（全幅）とする
             cars_db[car_id] = {
                 "name": row["name"],
                 "glb_filename": row["glb_filename"],
                 "length": row["length"],
-                "width": width_raw + (mirror_offset * 2),
-                "width_raw": width_raw,
+                "width": row["width"],
                 "height": row["height"],
                 "ground_clearance": row["ground_clearance"],
                 "turning_radius": row["turning_radius"],
@@ -269,7 +261,6 @@ def load_cars_config():
                 "dimensions_mm": {
                     "length": csv_data["length"],
                     "width": csv_data["width"],
-                    "width_raw": csv_data.get("width_raw", csv_data["width"]),
                     "height": csv_data["height"],
                     "ground_clearance": csv_data["ground_clearance"],
                     "turning_radius": csv_data["turning_radius"]
@@ -1624,7 +1615,6 @@ def main():
             car_dimensions[key] = {
                 "length": dims.get("length", 0),
                 "width": dims.get("width", 0),
-                "width_raw": dims.get("width_raw", dims.get("width", 0)),
                 "height": dims.get("height", 0),
                 "ground_clearance": dims.get("ground_clearance", 0),
                 "turning_radius": dims.get("turning_radius", 0),

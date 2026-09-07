@@ -103,7 +103,7 @@ def main():
         }
         display_df = display_df.rename(columns={k: col_names_map[k] for k in available_cols})
         # テーブルを描画
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
     else:
         st.info("データベースに动物データがありません。")
 
@@ -170,11 +170,11 @@ def main():
                 submitted = st.form_submit_button(
                     "💾 更新" if st.session_state.animal_edit_mode else "✅ 追加",
                     type="primary",
-                    use_container_width=True
+                    width='stretch'
                 )
             with col_cancel:
                 if st.session_state.animal_edit_mode:
-                    if st.form_submit_button("❌ キャンセル", use_container_width=True):
+                    if st.form_submit_button("❌ キャンセル", width='stretch'):
                         st.session_state.animal_edit_mode = False
                         st.session_state.animal_edit_id = None
                         st.rerun()
@@ -230,16 +230,16 @@ def main():
                 "Z軸回転(度)": animal_detail.get("rotation_direction", 0),
                 "クレイモデルの色": animal_detail.get("color_name", "グレー"),
             }])
-            st.dataframe(detail_df.set_index("ID"), use_container_width=True)
+            st.dataframe(detail_df.set_index("ID"), width='stretch')
 
             col_edit, col_delete = st.columns(2)
             with col_edit:
-                if st.button("✏️ 編集モードに切り替え", type="secondary", use_container_width=True):
+                if st.button("✏️ 編集モードに切り替え", type="secondary", width='stretch'):
                     st.session_state.animal_edit_mode = True
                     st.session_state.animal_edit_id = selected_id
                     st.rerun()
             with col_delete:
-                if st.button("🗑️ この动物を削除", type="secondary", use_container_width=True):
+                if st.button("🗑️ この动物を削除", type="secondary", width='stretch'):
                     st.session_state.confirm_animal_delete = selected_id
 
         else:
@@ -253,7 +253,7 @@ def main():
                     st.warning(f"「{confirm_animal['name']}」(ID: {st.session_state.confirm_animal_delete}) を削除しますか？")
                     col_y, col_n = st.columns(2)
                     with col_y:
-                        if st.button("はい、削除する", type="primary", use_container_width=True):
+                        if st.button("はい、削除する", type="primary", width='stretch'):
                             success, result = delete_animal(st.session_state.confirm_animal_delete)
                             if success:
                                 st.success(f"✓ 「{result}」を削除しました")
@@ -262,7 +262,7 @@ def main():
                             else:
                                 st.error(result)
                     with col_n:
-                        if st.button("キャンセル", use_container_width=True):
+                        if st.button("キャンセル", width='stretch'):
                             del st.session_state.confirm_animal_delete
                             st.rerun()
 
@@ -273,7 +273,7 @@ def main():
             data=export_animals_to_csv(),
             file_name=f"animals_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
-            use_container_width=True
+            width='stretch'
         ):
             st.success("CSVエクスポート準備完了")
 

@@ -441,7 +441,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("📊 YouTube 統計更新")
 st.sidebar.caption("登録済みの動画URLから統計データを自動取得します")
 
-if st.button("🔄 全ペアの統計を一括更新", type="primary", use_container_width=True, key="youtube_bulk_update"):
+if st.button("🔄 全ペアの統計を一括更新", type="primary", width='stretch', key="youtube_bulk_update"):
     if not api_key:
         st.sidebar.error("✗ YouTube APIキーが設定されていません。")
     else:
@@ -698,7 +698,7 @@ else:
             
             notes = st.text_area("メモ", value=comp["notes"] if comp else "", height=80)
             
-            submitted = st.form_submit_button("💾 保存", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("💾 保存", type="primary", width='stretch')
         
         if submitted:
             # URLも同時に更新
@@ -762,7 +762,7 @@ else:
         
         st.sidebar.info("このペアはまだ登録されていません。")
         
-        if st.button("➕ 新規追加", type="primary", use_container_width=True, key="add_comparison_btn"):
+        if st.button("➕ 新規追加", type="primary", width='stretch', key="add_comparison_btn"):
             new_id = create_comparison_if_not_exists(car_a_id, car_b_id)
             if new_id:
                 st.sidebar.success("✓ 登録しました")
@@ -775,7 +775,7 @@ else:
     # 🎬 cars_configに設定ボタン（常に表示）
     st.sidebar.markdown("---")
     with st.form("set_config_form", clear_on_submit=False):
-        set_config_btn = st.form_submit_button("🎬 cars_configに設定", type="primary", use_container_width=True)
+        set_config_btn = st.form_submit_button("🎬 cars_configに設定", type="primary", width='stretch')
     
     if set_config_btn:
         success, msg = set_comparison_pair_to_config(car_a_id, car_b_id)
@@ -852,12 +852,6 @@ if car_a_row is not None and car_b_row is not None:
     st.subheader("📐 選択車種の諸元比較")
     
     # HTMLテーブルで車A一行・車B一行（項目を列に転置）
-    # mirror_offset_mm の値を取得（存在しない場合は空文字）
-    mirror_a = car_a_row.get('mirror_offset_mm', '') or ''
-    mirror_b = car_b_row.get('mirror_offset_mm', '') or ''
-    mirror_a_display = f"{int(mirror_a):,}" if mirror_a else "-"
-    mirror_b_display = f"{int(mirror_b):,}" if mirror_b else "-"
-
     specs_html = f'''
     <table style="width:100%; border-collapse:collapse; font-family:'Meiryo UI',sans-serif; font-size:13px;">
         <thead>
@@ -865,14 +859,13 @@ if car_a_row is not None and car_b_row is not None:
                 <th style="padding:8px; text-align:left; color:#aaa; width:90px;"></th>
                 <th style="padding:8px; text-align:center; color:#aaa;">GLBファイル</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">全長 (mm)</th>
-                <th style="padding:8px; text-align:center; color:#aaa;">全幅 (mm)</th>
+                <th style="padding:8px; text-align:center; color:#aaa;">全幅(実効) (mm)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">全高 (mm)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">地上高 (mm)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">回転半径 (m)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">加速 (秒)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">Z回転 (度)</th>
                 <th style="padding:8px; text-align:center; color:#aaa;">タイプ</th>
-                <th style="padding:8px; text-align:center; color:#aaa;">ミラー突出量 (mm)</th>
             </tr>
         </thead>
         <tbody>
@@ -887,7 +880,6 @@ if car_a_row is not None and car_b_row is not None:
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['acceleration_0_to_100']:.1f}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row['rotation_direction']}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_a_row.get('car_type', '')}</td>
-                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{mirror_a_display}</td>
             </tr>
             <tr style="background:#3e2a1a; border-left: 3px solid #ffb74d;">
                 <td style="padding:8px; font-weight:bold; color:#ffb74d;">🚙 {car_b_row['name']}</td>
@@ -900,7 +892,6 @@ if car_a_row is not None and car_b_row is not None:
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['acceleration_0_to_100']:.1f}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row['rotation_direction']}</td>
                 <td style="padding:6px 8px; text-align:center; color:#ccc;">{car_b_row.get('car_type', '')}</td>
-                <td style="padding:6px 8px; text-align:center; color:#fff; font-weight:bold;">{mirror_b_display}</td>
             </tr>
         </tbody>
     </table>

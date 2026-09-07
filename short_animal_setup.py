@@ -4,6 +4,8 @@
 カメラターゲット用Emptyの作成、Track To制約の設定、
 カメラレンズの変更など、アニメーション開始前の準備処理をまとめる。
 
+【2026-09-07 変更】カット1 (fr0-72) を削除し、フレーム番号を72分ずらした。
+
 使い方:
     from short_animal_setup import setup_camera_target_and_lens
     result = setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a)
@@ -147,52 +149,44 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     仕様に従って、各カットでのターゲットZ座標を変化させる。
     视点は高めに保ち、カット間で连续な过渡を行う（ジャンプ禁止）。
 
-      カット1 (fr0-72, 3秒):     斜め上20度→動物Bの最高部へ視点移動
-      カット1-2 (fr72-216, 6秒): 動物Bの最高部→max(A,B)*0.75へ視点移动（半透明フェーズ）
-      カット2 (fr216-360, 6秒):  分离スライド、max(A,B)*0.75を维持（高位化完了）
-      カット3 (fr360-960, 25秒): 円軌道1周、max(动物A,B)*0.75を向く（高位维持）
-      カット4 (fr960-1032, 3秒):  正面に戻る、max(动物A,B)*0.75を向く
+    【変更】カット1 (fr0-72) が削除されたため、fr0から直接半透明フェーズへ移行。
+
+      カット1 (fr0-144, 6秒):    動物Bの最高部→max(A,B)*0.75へ視点移动（半透明フェーズ）
+      カット2 (fr144-288, 6秒): 分离スライド、max(A,B)*0.75を维持（高位化完了）
+      カット3 (fr288-888, 25秒): 円軌道1周、max(动物A,B)*0.75を向く（高位维持）
+      カット4 (fr888-960, 3秒):  正面に戻る、max(动物A,B)*0.75を向く
     """
     print("\n  === ターゲットEmptyアニメーション設定 ===")
 
-    # フレーム定義（24fps）— 仕様に準拠
+    # フレーム定義（24fps）— 【変更】カット1削除で72フレーム分ずらし
     CUT1_START = 0
-    CUT1_END = 72
-    CUT1_2_START = 72
-    CUT1_2_END = 216
-    CUT2_START = 216
-    CUT2_END = 360
-    CUT3_START = 360
-    CUT3_END = 960
-    CUT4_START = 960
-    CUT4_END = 1032
+    CUT1_END = 144
+    CUT2_START = 144
+    CUT2_END = 288
+    CUT3_START = 288
+    CUT3_END = 888
+    CUT4_START = 888
+    CUT4_END = 960
 
     # 两动物の最大高さ（视点高めで见切れ防止）
     max_animal_z = max(animal_a_max_z, animal_b_max_z)
     high_target_z = max_animal_z * 0.75  # 高位ターゲット（max高さの75%）
 
-    # カット1: fr0-72, 斜め上20度から动物Bの最高部へ视点移动
-    # カメラ位置(1, -8, 0.5)、ターゲットXY=(0,0) → 水平距離=sqrt(1^2+8^2)=sqrt(65)≈8.06
-    # 斜め上20度: tan(20°)*水平距離 = delta_z
-    initial_target_z = 0.5 + math.tan(math.radians(20)) * math.sqrt(1**2 + 8**2)
-    _set_empty_location_keyframe(target_empty, CUT1_START, target_base[0], target_base[1], initial_target_z)
-    _set_empty_location_keyframe(target_empty, CUT1_END, target_base[0], target_base[1], animal_b_max_z)
+    # カット1: fr0-144, 動物Bの最高部からmax(A,B)*0.75へ视点移动（半透明フェーズ）
+    # カット1が削除されたため、fr0から动物Bの最高部を開始値とする
+    _set_empty_location_keyframe(target_empty, CUT1_START, target_base[0], target_base[1], animal_b_max_z)
+    _set_empty_location_keyframe(target_empty, CUT1_END, target_base[0], target_base[1], high_target_z)
 
-    # カット1-2: fr72-216, 动物Bの最高部からmax(A,B)*0.75へ视点移动（半透明フェーズ）
-    # 连续性を保つため、开始値はカット1终了値と一致
-    _set_empty_location_keyframe(target_empty, CUT1_2_START, target_base[0], target_base[1], animal_b_max_z)
-    _set_empty_location_keyframe(target_empty, CUT1_2_END, target_base[0], target_base[1], high_target_z)
-
-    # カット2: fr216-360, 分离スライド、max(A,B)*0.75を维持（高位化完了）
+    # カット2: fr144-288, 分离スライド、max(A,B)*0.75を维持（高位化完了）
     _set_empty_location_keyframe(target_empty, CUT2_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT2_END, target_base[0], target_base[1], high_target_z)
 
-    # カット3: fr360-960, 円軌道中は高位を维持（见切れ防止）
+    # カット3: fr288-888, 円軌道中は高位を维持（见切れ防止）
     _set_empty_location_keyframe(target_empty, CUT3_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT3_END, target_base[0], target_base[1], high_target_z)
 
-    # カット4: fr960-1032, 正面に戻り、高位を维持
+    # カット4: fr888-960, 正面に戻り、高位を维持
     _set_empty_location_keyframe(target_empty, CUT4_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT4_END, target_base[0], target_base[1], high_target_z)
 
-    print(f"  ターゲットZ: {initial_target_z:.2f}→{animal_b_max_z:.2f} (fr0-72), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr72-216), {high_target_z:.2f}固定 (fr216-360), {high_target_z:.2f}固定 (fr360-960), {high_target_z:.2f} (fr960-1032)")
+    print(f"  ターゲットZ: {animal_b_max_z:.2f}固定 (fr0), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr0-144), {high_target_z:.2f}固定 (fr144-288), {high_target_z:.2f}固定 (fr288-888), {high_target_z:.2f} (fr888-960)")

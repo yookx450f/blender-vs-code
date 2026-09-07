@@ -740,7 +740,6 @@ def get_all_animal_comparisons():
 
 def get_animals_db_dict():
     """SQLiteデータベースから動物マスターデータを辞書として読み込む"""
-    init_animals_table()
     animals_db = {}
     conn = get_connection()
     cursor = conn.cursor()
@@ -768,8 +767,6 @@ def get_animals_db_dict():
 
 def get_animal_comparison_by_ids(animal_a_id, animal_b_id):
     """指定ペアの情報を取得（存在しない場合はNone）"""
-    init_animals_table()
-    init_animal_comparisons_table()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -788,8 +785,6 @@ def create_animal_comparison_if_not_exists(animal_a_id, animal_b_id):
     if existing:
         return existing["id"]
     
-    init_animals_table()
-    init_animal_comparisons_table()
     conn = get_connection()
     try:
         cursor = conn.cursor()
