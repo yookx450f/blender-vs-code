@@ -10,7 +10,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py 4b           # カット4bのみ（カメラ回転カット、フレーム2256-3024）
     python run.py 5            # カット5のみ（シーン13-14、フレーム3024-3648）
     python run.py short        # ショート動画（縦長9:16、車重なりカット、フレーム0-240）
-    python run.py short2       # ショート動画v2（縦長9:16、キーフレーム半透明、フレーム0-240）
+    python run.py short2       # ショート動画v2（縦長9:16、キーフレーム半透明、フレーム0-624）
     python run.py short-s      # ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了／終端フレーム自動計算）
     python run.py shortAnimal  # 動物ショート動画（縦長9:16、背面壁面グリッド付き、フレーム0-624、約26秒@24fps）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
@@ -36,7 +36,7 @@ CUTS = {
     "4b": {"start": 2136, "end": 2904, "label": "カット4b（カメラ回転カット）"},
     "5": {"start": 2904, "end": 3528, "label": "カット5（シーン13-14）"},
     "short": {"start": 0, "end": 240, "label": "ショート動画（縦長9:16、車重なりカット）"},
-    "short2": {"start": 0, "end": 240, "label": "ショート動画v2（縦長9:16、キーフレーム半透明）"},
+    "short2": {"start": 0, "end": 624, "label": "ショート動画v2（縦長9:16、カット1+カット2、約26秒@24fps）"},
     # 【仕様「２．構成」】end=-1 → animation_settings_short_s.py が cars_config.json の0-100km/h加速時間から
     # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
@@ -59,16 +59,14 @@ def run_single_cut(cut_number):
     frame_end = cut_info["end"]
     cut_label = cut_info["label"]
 
-    # short2の場合、ランダム延長を追加（+0〜48フレーム = +0〜2秒）
+    # short2の場合、固定624フレーム（カット1 fr0-288 + カット2 fr289-624）
     # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
     cut5_extra_frames = 0
     if cut_number == "short2":
-        extra_frames = random.randint(0, 48)
-        frame_end = frame_start + 240 + extra_frames
+        frame_end = 624  # カット1 (fr0-288) + カット2 (fr289-624)
         print(f"\n{'='*60}")
         print(f"=== カット{cut_number}実行: {cut_label} ===")
-        print(f"ランダム延長: +{extra_frames}フレーム (+{extra_frames/24:.1f}秒)")
         print(f"フレーム範囲: {frame_start}-{frame_end} ({(frame_end - frame_start)/24:.1f}秒)")
         print(f"{'='*60}")
     elif cut_number == "5":
@@ -191,20 +189,19 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     frame_end = cut_info["end"]
     cut_label = cut_info["label"]
 
-    # short2の場合、ランダム延長を追加（+0〜48フレーム = +0〜2秒）
+    # short2の場合、固定624フレーム（カット1 fr0-288 + カット2 fr289-624）
     # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
     cut5_extra_frames = 0
     if cut_number == "short2":
-        extra_frames = random.randint(0, 48)
-        frame_end = frame_start + 240 + extra_frames
+        frame_end = 624  # カット1 (fr0-288) + カット2 (fr289-624)
     elif cut_number == "5":
         cut5_extra_frames = random.randint(-48, 48)
         frame_end = frame_start + 624 + cut5_extra_frames
 
     print(f"=== カット選択: {cut_label} ===")
     if cut_number == "short2":
-        print(f"ランダム延長: +{extra_frames}フレーム (+{extra_frames/24:.1f}秒)")
+        print(f"フレーム範囲: カット1(fr0-288) + カット2(fr289-624) = 約26秒")
     elif cut_number == "5":
         print(f"ランダム延長: {cut5_extra_frames:+d}フレーム ({cut5_extra_frames/24:+.1f}秒)")
     print(f"フレーム範囲: {frame_start}-{frame_end}")

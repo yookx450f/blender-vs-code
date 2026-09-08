@@ -386,6 +386,294 @@ def _setup_transparency_keyframe_animation(car_object, start_frame, end_frame, s
     print(f"  Alphaアニメーション(Mix Shader Fac): {car_object.name} フレーム{start_frame}-{end_frame} ({start_alpha}→{end_alpha})")
 
 
+def _add_transparency_keyframe_existing(car_object, frame, alpha_value, interpolation='CONSTANT'):
+    """既存のMix Shaderノードにキーフレームを追加する（nodes.clear()しない）
+    
+    既に_setup_transparency_keyframe_animationでMix Shaderが設定されているマテリアルに、
+    新しいキーフレームだけを추가します。
+    
+    Blender 5.x対応: keyframe_insertの戻り値パースを行わず、
+    fcurveをdata_pathで直接検索して interpolation を設定する。
+    
+    Parameters:
+        car_object: 対象の車オブジェクト
+        frame: キーフレームを追加するフレーム
+        alpha_value: Fac値 (1.0=完全不透明, 0.0=完全透明)
+        interpolation: 補間モード (デフォルト 'CONSTANT')
+    """
+    if car_object is None:
+        return
+    
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+    
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
+
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None or not material.use_nodes:
+                continue
+            
+            nodes = material.node_tree.nodes
+            
+            # Mix Shaderノードを探す
+            mix_shader = None
+            for node in nodes:
+                if node.type == 'MIX_SHADER':
+                    mix_shader = node
+                    break
+            
+            if mix_shader is None:
+                continue
+            
+            fac_input = mix_shader.inputs['Fac']
+            
+            # フレームを設定してキーフレームを追加
+            bpy.context.scene.frame_set(frame)
+            fac_input.default_value = alpha_value
+            fac_input.keyframe_insert(data_path="default_value", frame=frame)
+            
+            # キーフレームの補間モードを直接fcurveから設定（Blender 5.x対応）
+            _set_fac_interpolation(material.node_tree, interpolation)
+    
+    # シーンをフレーム0に戻す
+    bpy.context.scene.frame_set(0)
+
+
+def _set_fac_interpolation(node_tree, interpolation):
+    """Mix ShaderのFac fcurveの最新キーフレームの補間モードを設定する
+    
+    Blender 5.xのレイヤー化アクションシステムにも対応する。
+    
+    Parameters:
+        node_tree: bpy.types.NodeTree (マテリアルのノードツリー)
+        interpolation: 'CONSTANT', 'LINEAR', 'BEZIER'
+    """
+    try:
+        if not hasattr(node_tree, 'animation_data') or node_tree.animation_data is None:
+            return
+        action = node_tree.animation_data.action
+        if action is None:
+            return
+        # Blender 4.x 以前: fcurves直接アクセス
+        if hasattr(action, 'fcurves'):
+            for fc in action.fcurves:
+                if 'default_value' in fc.data_path:
+                    if len(fc.keyframe_points) > 0:
+                        # 最新のキーフレームのみ設定
+                        kf = fc.keyframe_points[-1]
+                        kf.interpolation = interpolation
+        # Blender 5.x: レイヤー化アクションシステム
+        elif hasattr(action, 'layers'):
+            for layer in action.layers:
+                for strip in layer.strips:
+                    if strip.type == 'KEYFRAME':
+                        for cb in strip.channelbags:
+                            for fc in cb.fcurves:
+                                if 'default_value' in fc.data_path:
+                                    if len(fc.keyframe_points) > 0:
+                                        kf = fc.keyframe_points[-1]
+                                        kf.interpolation = interpolation
+    except Exception as e:
+        print(f'    ⚠ Fac interpolation設定エラー: {e}')
+
+
+def _force_constant_interpolation_car_b_alpha(car_object):
+    """CarBのMix Shader Fac fcurveの全キーフレームをCONSTANT補間に強制設定する
+    
+    fr456→fr457 の間で滑らかに補間されないように、
+    既存の_all_キーフレームポイントのinterpolationをCONSTANTに上書きする。
+    
+    Parameters:
+        car_object: 対象の車オブジェクト（CarB）
+    """
+    if car_object is None:
+        return
+    
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+    
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
+    
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None or not material.use_nodes:
+                continue
+            
+            nodes = material.node_tree.nodes
+            
+            # Mix Shaderノードを探す
+            mix_shader = None
+            for node in nodes:
+                if node.type == 'MIX_SHADER':
+                    mix_shader = node
+                    break
+            
+            if mix_shader is None:
+                continue
+            
+            # Facのfcurveを取得し、全キーフレームをCONSTANTに設定
+            try:
+                if hasattr(material.node_tree, 'animation_data') and material.node_tree.animation_data:
+                    action = material.node_tree.animation_data.action
+                    if action is not None and hasattr(action, 'fcurves'):
+                        for fc in action.fcurves:
+                            if 'Fac' in fc.data_path:
+                                for kf in fc.keyframe_points:
+                                    kf.interpolation = 'CONSTANT'
+                                print(f"    Mix Shader Fac: 全{len(fc.keyframe_points)}キーフレームをCONSTANT補間に強制設定")
+            except Exception as e:
+                print(f"    ⚠ CONSTANT補間強制設定エラー: {e}")
+
+
+def _setup_short2_carb_transparency(car_object, end_frame=624):
+    """CarBの透明度アニメーションをshort2専用ロジックで完全に再構築する
+    
+    すべてのキーフレームをCONSTANT補間で設定し、fr457での瞬時不透明化を保証する。
+    
+    タイムライン:
+    - fr0-29: Alpha=1.0 (完全不透明)
+    - fr30-456: Alpha=0.35 (半透明) — CONSTANT補間でfr30で瞬時に半透明化
+    - fr457-end_frame: Alpha=1.0 (完全不透明) — CONSTANT補間でfr457で瞬時に不透明化
+    
+    Parameters:
+        car_object: CarBオブジェクト
+        end_frame: 終了フレーム (デフォルト624)
+    """
+    if car_object is None:
+        return
+    
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+    
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
+    
+    processed_materials = set()
+    
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None or not material.use_nodes:
+                continue
+            if id(material) in processed_materials:
+                continue
+            processed_materials.add(id(material))
+            
+            try:
+                material.blend_method = 'BLEND'
+            except AttributeError:
+                pass
+            
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+            
+            # 既存のMix Shaderを探す（ない場合は新規作成）
+            mix_shader = None
+            for node in nodes:
+                if node.type == 'MIX_SHADER':
+                    mix_shader = node
+                    break
+            
+            # Mix Shaderが存在しない場合は Mix Shader 構成を作成
+            if mix_shader is None:
+                original_color = _get_material_color(material)
+                nodes.clear()
+                links.clear()
+                
+                output_node = nodes.new(type='ShaderNodeOutputMaterial')
+                output_node.location = (600, 0)
+                
+                mix_shader = nodes.new(type='ShaderNodeMixShader')
+                mix_shader.location = (400, 0)
+                
+                transparent_bsdf = nodes.new(type='ShaderNodeBsdfTransparent')
+                transparent_bsdf.location = (200, -150)
+                
+                principled_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+                principled_bsdf.location = (200, 150)
+                principled_bsdf.inputs['Base Color'].default_value = (*original_color, 1.0)
+                principled_bsdf.inputs['Roughness'].default_value = 0.8
+                principled_bsdf.inputs['Metallic'].default_value = 0.0
+                
+                links.new(transparent_bsdf.outputs['BSDF'], mix_shader.inputs[1])
+                links.new(principled_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+                links.new(mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+            
+            fac_input = mix_shader.inputs['Fac']
+            
+            # アニメーションデータを完全にクリア
+            clear_material_animation(material.node_tree)
+            material.node_tree.animation_data_clear()
+            
+            # 再度animation_dataを設定（キーフレーム追加のため）
+            material.node_tree.animation_data_create()
+            
+            # CONSTANT補間でキーフレームを設定
+            keyframes = [
+                (0, 1.0),       # fr0: 完全不透明
+                (30, 0.35),    # fr30: 瞬時半透明化
+                (456, 0.35),   # fr456: 半透明維持
+                (457, 1.0),    # fr457: 瞬時不透明化
+                (end_frame, 1.0),  # fr624: 不透明維持
+            ]
+            
+            for frame, fac_value in keyframes:
+                bpy.context.scene.frame_set(frame)
+                fac_input.default_value = fac_value
+                fac_input.keyframe_insert(data_path="default_value", frame=frame)
+            
+            # 全キーフレームをCONSTANT補間に設定
+            _set_all_fac_keyframes_to_constant(material.node_tree)
+    
+    bpy.context.scene.frame_set(0)
+    print(f"  CarB透明度(short2専用): fr0=1.0, fr30=0.35, fr456=0.35, fr457=1.0 [CONSTANT補間]")
+
+
+def _set_all_fac_keyframes_to_constant(node_tree):
+    """Facの全キーフレームをCONSTANT補間に設定する"""
+    try:
+        if not hasattr(node_tree, 'animation_data') or node_tree.animation_data is None:
+            return
+        action = node_tree.animation_data.action
+        if action is None:
+            return
+        
+        if hasattr(action, 'fcurves'):
+            for fc in action.fcurves:
+                if 'default_value' in fc.data_path:
+                    for kf in fc.keyframe_points:
+                        kf.interpolation = 'CONSTANT'
+                    print(f"    Fac fcurve: {len(fc.keyframe_points)}キーフレームをCONSTANTに設定")
+        elif hasattr(action, 'layers'):
+            count = 0
+            for layer in action.layers:
+                for strip in layer.strips:
+                    if strip.type == 'KEYFRAME':
+                        for cb in strip.channelbags:
+                            for fc in cb.fcurves:
+                                if 'default_value' in fc.data_path:
+                                    for kf in fc.keyframe_points:
+                                        kf.interpolation = 'CONSTANT'
+                                        count += 1
+            print(f"    Fac fcurve (Blender5.x): {count}キーフレームをCONSTANTに設定")
+    except Exception as e:
+        print(f'    ⚠ CONSTANT補間設定エラー: {e}')
+
+
 def _apply_transparency_to_materials(obj, start_frame, end_frame):
     """オブジェクトの全マテリアルに半透明化キーフレームを設定"""
     if obj is None or len(obj.data.materials) == 0:
