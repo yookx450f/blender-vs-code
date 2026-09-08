@@ -659,6 +659,11 @@ def init_animals_table():
         conn.execute("ALTER TABLE animals ADD COLUMN color_name TEXT DEFAULT 'グレー'")
     except sqlite3.OperationalError:
         pass  # 既に存在する場合は無視
+    # length カラムが存在しない場合は追加（マイグレーション対応）
+    try:
+        conn.execute("ALTER TABLE animals ADD COLUMN length REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # 既に存在する場合は無視
     conn.commit()
     conn.close()
     logger.info("animals テーブルを初期化しました")
@@ -961,16 +966,16 @@ def get_animal_dashboard_stats():
     }
 
 
-def add_animal(name, glb_filename, animal_type, height, weight, rotation, color_name="グレー"):
+def add_animal(name, glb_filename, animal_type, height, length, weight, rotation, color_name="グレー"):
     """新規動物追加"""
     if color_name not in CLAY_COLOR_MAP:
         color_name = "グレー"
     conn = get_connection()
     try:
         conn.execute("""
-            INSERT INTO animals (name, glb_filename, animal_type, height, weight, rotation_direction, color_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (name, glb_filename, animal_type, float(height), float(weight), int(rotation), color_name))
+            INSERT INTO animals (name, glb_filename, animal_type, height, length, weight, rotation_direction, color_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, glb_filename, animal_type, float(height), float(length), float(weight), int(rotation), color_name))
         conn.commit()
         new_id = conn.cursor().lastrowid
         conn.close()
@@ -995,7 +1000,7 @@ def get_animal_by_id(animal_id):
     return None
 
 
-def update_animal(animal_id, name, glb_filename, animal_type, height, weight, rotation, color_name="グレー"):
+def update_animal(animal_id, name, glb_filename, animal_type, height, length, weight, rotation, color_name="グレー"):
     """動物情報更新"""
     if color_name not in CLAY_COLOR_MAP:
         color_name = "グレー"
@@ -1003,10 +1008,10 @@ def update_animal(animal_id, name, glb_filename, animal_type, height, weight, ro
     try:
         conn.execute("""
             UPDATE animals SET
-                name = ?, glb_filename = ?, animal_type = ?, height = ?, weight = ?,
+                name = ?, glb_filename = ?, animal_type = ?, height = ?, length = ?, weight = ?,
                 rotation_direction = ?, color_name = ?
             WHERE id = ?
-        """, (name, glb_filename, animal_type, float(height), float(weight), int(rotation), color_name, animal_id))
+        """, (name, glb_filename, animal_type, float(height), float(length), float(weight), int(rotation), color_name, animal_id))
         conn.commit()
         conn.close()
         return True, "更新しました"

@@ -129,6 +129,7 @@ def load_animals_db():
                 "glb_filename": row["glb_filename"],
                 "animal_type": row["animal_type"],
                 "height": row["height"],
+                "length": row["length"],
                 "weight": row["weight"],
                 "rotation_direction": row["rotation_direction"],
                 "color_name": row["color_name"]
@@ -189,6 +190,7 @@ def load_animals_config():
                 "position": tuple(animal_cfg.get("position", [0.0, 0.0, 0])),
                 "color": tuple(animal_cfg.get("color", [0.5, 0.5, 0.5])),
                 "dimensions_mm": {
+                    "length": db_data["length"],
                     "height": db_data["height"],
                     "weight": db_data["weight"],
                 },
@@ -201,7 +203,11 @@ def load_animals_config():
             src_key = "animalA" if key == "carA" else "animalB"
             print(f"  - {key}: {animal_data['name']} (ID: {config[src_key].get('id', '?')})")
             print(f"    GLBパス: {animal_data['glb_path']}")
-            print(f"    寸法: 全高{dims.get('height', '?')}mm, 体重{dims.get('weight', '?')}kg")
+            length_val = dims.get('length', '?')
+            if length_val != '?' and length_val > 0:
+                print(f"    寸法: 全長{length_val}mm x 全高{dims.get('height', '?')}mm, 体重{dims.get('weight', '?')}kg")
+            else:
+                print(f"    寸法: 全高{dims.get('height', '?')}mm, 体重{dims.get('weight', '?')}kg")
         
         return merged
     
@@ -791,8 +797,9 @@ def create_human_figure(location=(-2.8, 0.0, 0.0), height_m=1.7, rotation_z_degr
 def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_height_mm):
     """オブジェクトを指定した寸法（mm）にスケールする
     
-    length または width が None の場合、height のみを基準に等倍スケールを適用し、
-    元のモデルの縦横比率を維持する（動物モデル用）。
+    3軸モード: length + width + height → 各軸 independently スケール（車用）
+    2軸モード: length + height のみ（width=None）→ Y軸=全長、Z軸=全高、X軸は比率維持（動物用）
+    等倍モード: height のみ → 高さ基準で等倍スケール（フォールバック）
     """
     # 現在のサイズを取得（Blender単位: メートル）
     current_x = abs(obj.dimensions.x)
@@ -802,8 +809,30 @@ def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_he
     # mmをBlender単位（メートル）に変換
     target_height_m = target_height_mm / 1000.0
     
-    # length/width が None の場合 → 高さだけで等倍スケール（比率維持）
-    if target_length_mm is None or target_width_mm is None:
+    # 3軸モード: length と width の両方が指定されている場合（車用）
+    if target_length_mm is not None and target_width_mm is not None:
+        target_length_m = target_length_mm / 1000.0
+        target_width_m = target_width_mm / 1000.0
+        
+        scale_x = (target_width_m / current_x) if current_x > 0 else 1.0
+        scale_y = (target_length_m / current_y) if current_y > 0 else 1.0
+        scale_z = (target_height_m / current_z) if current_z > 0 else 1.0
+        print(f"3軸スケール適用: {obj.name}")
+    # 2軸モード: length はあるが width が None（動物用）
+    elif target_length_mm is not None and target_width_mm is None:
+        target_length_m = target_length_mm / 1000.0
+        
+        scale_y = (target_length_m / current_y) if current_y > 0 else 1.0
+        scale_z = (target_height_m / current_z) if current_z > 0 else 1.0
+        # X軸は元のモデルの X:Y 比率を維持
+        if current_y > 0:
+            original_xy_ratio = current_x / current_y
+            scale_x = scale_y
+        else:
+            scale_x = scale_z
+        print(f"2軸スケール適用（全長+全高）: {obj.name}")
+    # 等倍モード: length も width も None → 高さだけで等倍スケール
+    else:
         if current_z > 0:
             uniform_scale = target_height_m / current_z
         else:
@@ -812,26 +841,6 @@ def scale_object_to_dimensions(obj, target_length_mm, target_width_mm, target_he
         scale_y = uniform_scale
         scale_z = uniform_scale
         print(f"等倍スケール適用（高さ基準）: {obj.name} -> {uniform_scale:.4f}")
-    else:
-        # mmをBlender単位（メートル）に変換
-        target_length_m = target_length_mm / 1000.0
-        target_width_m = target_width_mm / 1000.0
-        
-        # スケール係数を計算（全長→Y軸、全幅→X軸、全高→Z軸）
-        if current_x > 0:
-            scale_x = target_width_m / current_x   # 全幅をX軸に適用
-        else:
-            scale_x = 1.0
-        
-        if current_y > 0:
-            scale_y = target_length_m / current_y  # 全長をY軸に適用
-        else:
-            scale_y = 1.0
-        
-        if current_z > 0:
-            scale_z = target_height_m / current_z  # 全高をZ軸に適用
-        else:
-            scale_z = 1.0
     
     # スケールを適用
     obj.scale = (scale_x, scale_y, scale_z)
@@ -1548,9 +1557,8 @@ def main():
         setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     elif CUT_NUMBER == "short2":
         from animation_settings_short2 import setup_short2_animations
-        total_frames_short2 = 240 + SHORT2_EXTRA_FRAMES
-        print(f"  short2: total_frames={total_frames_short2} (延長+{SHORT2_EXTRA_FRAMES}フレーム)")
-        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, total_frames=total_frames_short2)
+        print(f"  short2: total_frames=624 (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
+        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     elif CUT_NUMBER == "short-s":
         from animation_settings_short_s import setup_short_s_animations
         # 車の寸法情報を抽出（加速時間用）

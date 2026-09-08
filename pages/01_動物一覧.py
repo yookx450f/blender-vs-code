@@ -92,12 +92,12 @@ def main():
     st.subheader("📋 動物一覧")
     if not df.empty:
         # DBスキーマ変更に対応：存在する列だけを選択
-        expected_cols = ["id", "name", "glb_filename", "animal_type", "height", "weight", "rotation_direction", "color_name"]
+        expected_cols = ["id", "name", "glb_filename", "animal_type", "height", "length", "weight", "rotation_direction", "color_name"]
         available_cols = [c for c in expected_cols if c in df.columns]
         display_df = df[available_cols].copy()
         col_names_map = {
             "id": "ID", "name": "動物名", "glb_filename": "GLBファイル",
-            "animal_type": "動物タイプ", "height": "全高(mm)",
+            "animal_type": "動物タイプ", "height": "全高(mm)", "length": "全長(mm)",
             "weight": "体重(kg)", "rotation_direction": "Z軸回転(度)",
             "color_name": "クレイモデルの色"
         }
@@ -133,6 +133,7 @@ def main():
                 col_dims_a, col_dims_b = st.columns(2)
                 with col_dims_a:
                     inp_height = st.number_input("全高 (mm)", value=float(edit_animal_data.get("height", 0)) if edit_animal_data else 0.0, step=1.0)
+                    inp_length = st.number_input("全長 (mm)", value=float(edit_animal_data.get("length", 0)) if edit_animal_data else 0.0, step=1.0)
                     inp_weight = st.number_input("体重 (kg)", value=float(edit_animal_data.get("weight", 0)) if edit_animal_data else 0.0, step=1.0)
                 with col_dims_b:
                     inp_rot = st.number_input("Z軸回転角度 (度)", value=float(edit_animal_data.get("rotation_direction", 0)) if edit_animal_data else 0.0, step=1.0)
@@ -155,6 +156,7 @@ def main():
                 col_dims_a, col_dims_b = st.columns(2)
                 with col_dims_a:
                     inp_height = st.number_input("全高 (mm)", min_value=1.0, max_value=10000.0, step=1.0, key="new_animal_height")
+                    inp_length = st.number_input("全長 (mm)", min_value=0.0, max_value=10000.0, step=1.0, key="new_animal_length")
                     inp_weight = st.number_input("体重 (kg)", min_value=0.1, max_value=100000.0, step=0.1, key="new_animal_weight")
                 with col_dims_b:
                     inp_rot = st.number_input("Z軸回転角度 (度)", min_value=0.0, max_value=360.0, step=1.0, key="new_animal_rot")
@@ -186,7 +188,7 @@ def main():
                     if st.session_state.animal_edit_mode and st.session_state.animal_edit_id:
                         success, msg = update_animal(
                             st.session_state.animal_edit_id, inp_name, inp_glb,
-                            inp_type, int(inp_height), float(inp_weight), int(inp_rot), inp_color
+                            inp_type, int(inp_height), int(inp_length), float(inp_weight), int(inp_rot), inp_color
                         )
                         if success:
                             st.success(f"✓ 动物 ID {st.session_state.animal_edit_id} を更新しました")
@@ -198,7 +200,7 @@ def main():
                     else:
                         success, result = add_animal(
                             inp_name, inp_glb,
-                            inp_type, int(inp_height), float(inp_weight), int(inp_rot), inp_color
+                            inp_type, int(inp_height), int(inp_length), float(inp_weight), int(inp_rot), inp_color
                         )
                         if success:
                             st.success(f"✓ 动物を追加しました (ID: {result})")
@@ -226,6 +228,7 @@ def main():
                 "GLBファイル": animal_detail.get("glb_filename", ""),
                 "動物タイプ": animal_detail.get("animal_type", ""),
                 "全高(mm)": animal_detail.get("height", 0),
+                "全長(mm)": animal_detail.get("length", 0),
                 "体重(kg)": animal_detail.get("weight", 0),
                 "Z軸回転(度)": animal_detail.get("rotation_direction", 0),
                 "クレイモデルの色": animal_detail.get("color_name", "グレー"),
