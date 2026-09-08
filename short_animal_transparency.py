@@ -5,6 +5,7 @@
 瞬時切り替え式（グラデーション遷移禁止）を使用。
 
 【2026-09-07 変更】カット1 (fr0-72) を削除し、フレーム番号を72分ずらした。
+【2026-09-08 変更】カット4を削除し、カット3を27秒・1.1周に拡張。
 
 使い方:
     from short_animal_transparency import setup_carb_transparency, setup_human_transparency
@@ -24,7 +25,7 @@ def setup_carb_transparency(car_b):
       【変更】カット1削除でフレーム番号を72分ずらした
       fr0-144 (カット1):     半透明 (alpha=0.35、動画開始時から)
       fr144-288 (カット2):   半透明 (alpha=0.35维持)
-      fr288-960 (カット3-4): 不透明 (alpha=1.0、瞬時切り替え)
+      fr288-936 (カット3):   不透明 (alpha=1.0、瞬時切り替え)
 
     Parameters:
         car_b: 动物Bのルートオブジェクト
@@ -59,7 +60,7 @@ def setup_human_transparency(human_figure):
       【変更】カット1削除でフレーム番号を72分ずらした
       fr0-144 (カット1):     半透明 (alpha=0.35、動画開始時から)
       fr144-288 (カット2):   半透明 (alpha=0.35维持)
-      fr288-960 (カット3-4): 不透明 (alpha=1.0、瞬時切り替え)
+      fr288-936 (カット3):   不透明 (alpha=1.0、瞬時切り替え)
 
     Parameters:
         human_figure: HumanFigure のルートオブジェクト

@@ -5,6 +5,7 @@
 カメラレンズの変更など、アニメーション開始前の準備処理をまとめる。
 
 【2026-09-07 変更】カット1 (fr0-72) を削除し、フレーム番号を72分ずらした。
+【2026-09-08 変更】カット4を削除し、カット3を27秒・1.1周に拡張。
 
 使い方:
     from short_animal_setup import setup_camera_target_and_lens
@@ -150,23 +151,21 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     视点は高めに保ち、カット間で连续な过渡を行う（ジャンプ禁止）。
 
     【変更】カット1 (fr0-72) が削除されたため、fr0から直接半透明フェーズへ移行。
+    【変更】カット4を削除し、カット3を27秒・1.1周に拡張。
 
-      カット1 (fr0-144, 6秒):    動物Bの最高部→max(A,B)*0.75へ視点移动（半透明フェーズ）
+      カット1 (fr0-144, 6秒):    動物Bの最高部→max(A,B)*0.75へ视点移动（半透明フェーズ）
       カット2 (fr144-288, 6秒): 分离スライド、max(A,B)*0.75を维持（高位化完了）
-      カット3 (fr288-888, 25秒): 円軌道1周、max(动物A,B)*0.75を向く（高位维持）
-      カット4 (fr888-960, 3秒):  正面に戻る、max(动物A,B)*0.75を向く
+      カット3 (fr288-936, 27秒): 円軌道1.1周、max(动物A,B)*0.75を向く（高位维持）
     """
     print("\n  === ターゲットEmptyアニメーション設定 ===")
 
-    # フレーム定義（24fps）— 【変更】カット1削除で72フレーム分ずらし
+    # フレーム定義（24fps）— 【変更】カット1削除で72フレーム分ずらし、カット4削除
     CUT1_START = 0
     CUT1_END = 144
     CUT2_START = 144
     CUT2_END = 288
     CUT3_START = 288
-    CUT3_END = 888
-    CUT4_START = 888
-    CUT4_END = 960
+    CUT3_END = 936
 
     # 两动物の最大高さ（视点高めで见切れ防止）
     max_animal_z = max(animal_a_max_z, animal_b_max_z)
@@ -181,12 +180,8 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     _set_empty_location_keyframe(target_empty, CUT2_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT2_END, target_base[0], target_base[1], high_target_z)
 
-    # カット3: fr288-888, 円軌道中は高位を维持（见切れ防止）
+    # カット3: fr288-936, 円軌道中は高位を维持（见切れ防止）
     _set_empty_location_keyframe(target_empty, CUT3_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT3_END, target_base[0], target_base[1], high_target_z)
 
-    # カット4: fr888-960, 正面に戻り、高位を维持
-    _set_empty_location_keyframe(target_empty, CUT4_START, target_base[0], target_base[1], high_target_z)
-    _set_empty_location_keyframe(target_empty, CUT4_END, target_base[0], target_base[1], high_target_z)
-
-    print(f"  ターゲットZ: {animal_b_max_z:.2f}固定 (fr0), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr0-144), {high_target_z:.2f}固定 (fr144-288), {high_target_z:.2f}固定 (fr288-888), {high_target_z:.2f} (fr888-960)")
+    print(f"  ターゲットZ: {animal_b_max_z:.2f}固定 (fr0), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr0-144), {high_target_z:.2f}固定 (fr144-288), {high_target_z:.2f}固定 (fr288-936)")
