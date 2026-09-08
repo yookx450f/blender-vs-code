@@ -39,28 +39,34 @@ CUT2B_START = 457
 CUT2B_END = 624  # 7秒 (168フレーム)
 
 
-def _ease_in_out_cubic(t):
+def _get_easing_func(strategy_config=None):
     """
-    Ease in-out cubic イージング関数。
-    t: 0.0〜1.0 の進行度
-    return: イージング後の進行度 (0.0〜1.0)
-    
-    開始と終了で緩やかに加減速し、頂点付近の急激な動きを抑制する。
+    strategy_config からイージング関数を取得。
+    未設定時はデフォルトの cubic を返す。
     """
-    if t < 0.5:
-        return 4.0 * t * t * t
-    else:
-        return 1.0 - (-2.0 * t + 2.0)**3 / 2.0
+    if strategy_config and "easing_function" in strategy_config:
+        try:
+            from short2_variations import get_easing_function
+            return get_easing_function(strategy_config["easing_function"])
+        except Exception:
+            pass
+    # デフォルト: cubic
+    def _ease_in_out_cubic(t):
+        if t < 0.5:
+            return 4.0 * t * t * t
+        else:
+            return 1.0 - (-2.0 * t + 2.0)**3 / 2.0
+    return _ease_in_out_cubic
 
 
-def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end):
+def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None):
     """
     カット1 (fr0-288, 約12秒): 車が中央へスライド + 円弧パンニング。
 
     CarA: (-1.25, rear_offset_y) → 中央集合位置
     CarB: (1.25, 0.0) → 中央集合位置
-    カメラ: (-3,-6,3.5) から右へ円弧パンニング (-0.85ラジアン * 延長係数)
-    
+    カメラ: バリエーション設定に基づく円弧パンニング
+     
     Returns:
         dict: カット1終了時の状態情報 (camera_loc, camera_rot)
     """
@@ -90,12 +96,20 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         _set_location_keyframe(car_a, CUT1_END, car_a_end[0], car_a_end[1], car_a_end[2])
         _set_location_keyframe(car_b, CUT1_END, car_b_end[0], car_b_end[1], car_b_end[2])
 
-    # --- カメラ円弧パンニング ---
-    cam_start = (-3.0, -6.0, 3.5)
+    # --- カメラ円弧パンニング（バリエーション設定適用） ---
+    if strategy_config and "camera_pattern" in strategy_config:
+        cam_pattern = strategy_config["camera_pattern"]
+        cam_start = tuple(cam_pattern["start_position"])
+        total_rotation = cam_pattern["total_rotation"]
+        print(f"  カメラパターン: {cam_pattern['name']} (start={cam_start})")
+    else:
+        cam_start = (-3.0, -6.0, 3.5)
+        total_rotation = -0.85
+
     arc_radius = math.sqrt(cam_start[0]**2 + cam_start[1]**2)
     arc_height = cam_start[2]
     start_angle = math.atan2(cam_start[0], cam_start[1])
-    total_rotation = -0.85 * (CUT1_END / 144)
+    total_rotation = total_rotation * (CUT1_END / 144)
 
     def get_cam_on_arc(angle):
         x = arc_radius * math.sin(angle)
@@ -124,9 +138,38 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
     set_camera_look_at(camera, final_cam, target)
     final_rot = camera.rotation_euler.copy()
 
+    # ============================================================
+    # A案: カット1終盤にカメラズームインを追加（fr264-fr288）
+    # 視聴者が「止まった」と感じないよう、緩やかな動きを追加
+    # ============================================================
+    zoom_start_frame = 264
+    zoom_end_frame = CUT1_END  # 288
+    zoom_frames = list(range(zoom_start_frame, zoom_end_frame + 1, 12))  # 0.5秒ごと
+    if zoom_frames[-1] != zoom_end_frame:
+        zoom_frames.append(zoom_end_frame)
+    
+    # カメラを徐々に近づける（半径を80%まで縮小）
+    for i, frame in enumerate(zoom_frames):
+        progress = i / (len(zoom_frames) - 1) if len(zoom_frames) > 1 else 0
+        current_radius = arc_radius * (1.0 - 0.2 * progress)  # 100% → 80%
+        angle_at_frame = start_angle + total_rotation * ((frame - CUT1_START) / CUT1_END)
+        x = current_radius * math.sin(angle_at_frame)
+        y = current_radius * math.cos(angle_at_frame)
+        cam_pos_zoom = (x, y, arc_height * (1.0 - 0.15 * progress))  # 높이는 100% → 85%
+        set_camera_look_at(camera, cam_pos_zoom, target)
+        rot_zoom = camera.rotation_euler.copy()
+        _set_camera_location_keyframe(camera, frame, cam_pos_zoom)
+        _set_rotation_keyframe(camera, frame, rot_zoom)
+    
+    # fr288에서도 최종 위치 업데이트
+    final_cam_zoomed = zoom_frames and (zoom_frames[-1] == zoom_end_frame) and cam_pos_zoom or final_cam
+    if zoom_frames:
+        final_cam = zoom_frames and cam_pos_zoom or final_cam
+    
+    print(f"  [fr{zoom_start_frame}-{zoom_end_frame}] 카메라 줌인 추가 (반경 100%→80%)")
     print(f"  [fr{CUT1_START}-{CUT1_END}] carA: {car_a_start} → {car_a_end}")
     print(f"  [fr{CUT1_START}-{CUT1_END}] carB: {car_b_start} → {car_b_end}")
-    print(f"  [fr{CUT1_END}] カメラパンニング完了: 右方向に{math.degrees(total_rotation):.1f}°回転")
+    print(f"  [fr{CUT1_END}] カメラパンニング完了: {math.degrees(total_rotation):.1f}°回転")
 
     return {
         'camera_loc': final_cam,
@@ -142,11 +185,11 @@ def _interpolate_car_position(start_pos, end_pos, progress):
     return (x, y, z)
 
 
-def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, cut1_final_cam):
+def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, cut1_final_cam, strategy_config=None):
     """
     カット2 フェーズA (fr289-456, 7秒): トップダウンビューへ移動 + 車は中央で静止。
 
-    カメラ: カット1終了位置 → (0, 0, 8) へスムーズ移動（イージング適用）
+    カメラ: カット1終了位置 → バリエーション設定に基づくトップダウン位置
     車: 中央集合位置で静止（フェーズBでスライド開始）
     
     Parameters:
@@ -154,13 +197,23 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
         car_a_end: CarAの中央集合位置（現在の位置）
         car_b_start: CarBのカット1開始位置（戻す先）
         car_b_end: CarBの中央集合位置（現在の位置）
+        strategy_config: バリエーション設定辞書（オプション）
 
     Returns:
         dict: フェーズA終了時のカメラ情報
     """
     print("\n  === カット2 フェーズA: トップダウンビューへ移動 + 車中央静止 (fr289-456, イージング) ===")
 
-    top_down_pos = (0.0, 0.0, 8.0)
+    # バリエーション設定からトップダウン位置を取得
+    if strategy_config and "topdown_variation" in strategy_config:
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → {top_down_pos}")
+    else:
+        top_down_pos = (0.0, 0.0, 8.0)
+
+    # イージング関数の取得
+    ease_func = _get_easing_func(strategy_config)
+
     target = (0.0, 0.0, 1.0)
     keyframe_interval = 24
 
@@ -173,7 +226,7 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     for i, frame in enumerate(phase_a_frames):
         # カメラの補間（イージング適用）
         raw_progress = i / num_segments if num_segments > 0 else 0
-        cam_progress = _ease_in_out_cubic(raw_progress)
+        cam_progress = ease_func(raw_progress)
         cam_x = cut1_final_cam[0] + (top_down_pos[0] - cut1_final_cam[0]) * cam_progress
         cam_y = cut1_final_cam[1] + (top_down_pos[1] - cut1_final_cam[1]) * cam_progress
         cam_z = cut1_final_cam[2] + (top_down_pos[2] - cut1_final_cam[2]) * cam_progress
@@ -193,11 +246,11 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     return {'camera_loc': top_down_pos}
 
 
-def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end):
+def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None):
     """
     カット2 フェーズB (fr457-624, 7秒): カメラ開始位置へ復帰 + CarB不透明化 + 車スライド。
 
-    カメラ: (0, 0, 8) → (-3.0, -6.0, 3.5) へスムーズ移動（イージング適用）
+    カメラ: トップダウン位置 → バリエーション設定に基づく復帰位置
     車: 中央集合位置からカット1開始位置へスライド開始 → fr624で到達
     
     Parameters:
@@ -205,15 +258,30 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         car_a_end: CarAの中央集合位置（現在の位置）
         car_b_start: CarBのカット1開始位置（戻す先）
         car_b_end: CarBの中央集合位置（現在の位置）
+        strategy_config: バリエーション設定辞書（オプション）
     
     Returns:
         dict: フェーズB終了時のカメラ情報
     """
     print("\n  === カット2 フェーズB: カメラ開始位置へ復帰 + 車スライド (fr457-624, イージング) ===")
 
-    cam_return_pos = (-3.0, -6.0, 3.5)
+    # バリエーション設定から復帰カメラ位置を取得
+    if strategy_config and "camera_pattern" in strategy_config:
+        cam_return_pos = tuple(strategy_config["camera_pattern"]["start_position"])
+        print(f"  カメラ復帰先: {cam_return_pos}")
+    else:
+        cam_return_pos = (-3.0, -6.0, 3.5)
+
+    # トップダウン位置もバリエーションから取得
+    if strategy_config and "topdown_variation" in strategy_config:
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+    else:
+        top_down_pos = (0.0, 0.0, 8.0)
+
+    # イージング関数の取得
+    ease_func = _get_easing_func(strategy_config)
+
     target = (0.0, 0.0, 1.0)
-    top_down_pos = (0.0, 0.0, 8.0)
     keyframe_interval = 24
 
     # 車のスライドはフェーズBのみで進行 (fr457-fr624 = 168フレーム = 7秒)
@@ -227,7 +295,7 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
     for i, frame in enumerate(phase_b_frames):
         # カメラの補間（イージング適用）
         raw_progress = i / num_segments if num_segments > 0 else 0
-        cam_progress = _ease_in_out_cubic(raw_progress)
+        cam_progress = ease_func(raw_progress)
         cam_x = top_down_pos[0] + (cam_return_pos[0] - top_down_pos[0]) * cam_progress
         cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
         cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
@@ -239,7 +307,7 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
 
         # 車のスライド進行度 (フェーズB fr457-fr624 に対する位置)（イージング適用）
         raw_car_progress = (frame - CUT2B_START) / total_slide_frames
-        car_progress = _ease_in_out_cubic(raw_car_progress)
+        car_progress = ease_func(raw_car_progress)
         
         car_a_pos = _interpolate_car_position(car_a_end, car_a_start, car_progress)
         car_b_pos = _interpolate_car_position(car_b_end, car_b_start, car_progress)

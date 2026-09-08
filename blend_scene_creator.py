@@ -17,6 +17,12 @@ import time
 import sqlite3
 from mathutils import Vector, Matrix
 
+# ★重要: BlenderのPythonパスにスクリプトディレクトリを追加
+# これにより short2_apply_variations などのローカルモジュールをインポート可能にする
+_script_dir_ = os.path.dirname(os.path.abspath(__file__))
+if _script_dir_ not in sys.path:
+    sys.path.insert(0, _script_dir_)
+
 # ============================================================
 # グローバル変数（内部用 - 通常は変更不要）
 # ============================================================
@@ -1404,6 +1410,23 @@ def main():
     grid = create_grid_floor(x_half_width=grid_x_half, y_half_length=grid_y_half)
     print(f"グリッド床面を作成しました: {grid.name} (X方向±{grid_x_half:.0f}m / Y方向±{grid_y_half:.0f}m)")
     
+    # short2 モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
+    SHORT2_CONFIG = None
+    if CUT_NUMBER == "short2":
+        try:
+            strategy_seed = os.environ.get("STRATEGY_SEED", "")
+            print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
+            from short2_apply_variations import load_config_from_env, apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            SHORT2_CONFIG = load_config_from_env()
+            print(f"  [DEBUG] SHORT2_CONFIG loaded: {SHORT2_CONFIG is not None}")
+            # グリッド色のみの即時適用（グリッド床面は既に作成済み）
+            if SHORT2_CONFIG and "grid_color" in SHORT2_CONFIG:
+                apply_grid_color(SHORT2_CONFIG["grid_color"])
+        except Exception as e:
+            import traceback
+            print(f"  ❌ バリエーション設定エラー: {e}")
+            traceback.print_exc()
+    
     # 背面壁面グリッド（一旦無効化 - 縦グリッドが浮く問題のため）
     # if CUT_NUMBER == "shortAnimal":
     #     back_wall = create_back_grid_wall(x_half_width=10.0, height=8.0)
@@ -1462,6 +1485,10 @@ def main():
         imported_cars[key] = imported_object
         print(f"成功: '{imported_object.name}' をインポートしました")
         print(f"  - 位置: {imported_object.location}")
+    
+    # short2 モード: クレイ色の変更を車のインポート後に適用（ルール1: 車ごとに異なる色）
+    if CUT_NUMBER == "short2" and SHORT2_CONFIG and "clay_color_a" in SHORT2_CONFIG and "clay_color_b" in SHORT2_CONFIG:
+        apply_clay_colors_per_car(SHORT2_CONFIG["clay_color_a"], SHORT2_CONFIG["clay_color_b"])
     
     # ============================================================
     # 新しい演出：後端を揃えて全長差を可視化（左右配置版）
@@ -1557,8 +1584,15 @@ def main():
         setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     elif CUT_NUMBER == "short2":
         from animation_settings_short2 import setup_short2_animations
+        # ルール2: 半透明対象を全高が大きい車に設定
+        if SHORT2_CONFIG:
+            height_a = CARS.get("carA", {}).get("dimensions_mm", {}).get("height", 0)
+            height_b = CARS.get("carB", {}).get("dimensions_mm", {}).get("height", 0)
+            transparency_target = "carB" if height_b > height_a else "carA"
+            SHORT2_CONFIG["transparency_target"] = transparency_target
+            print(f"  ルール2: 半透明対象={transparency_target} (全高比較: carA={height_a}mm, carB={height_b}mm)")
         print(f"  short2: total_frames=624 (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
-        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT2_CONFIG)
     elif CUT_NUMBER == "short-s":
         from animation_settings_short_s import setup_short_s_animations
         # 車の寸法情報を抽出（加速時間用）
@@ -1670,9 +1704,19 @@ def main():
         if not car_obj:
             continue
         
-        # JSONから車種名と色を取得
+        # JSONから車種名を取得
         text_content = car_data["name"]
-        color_rgb = car_data["color"]
+        
+        # short2 モード: テキストの色を車のクレイ色に合わせる
+        if CUT_NUMBER == "short2" and SHORT2_CONFIG:
+            if key == "carA" and "clay_color_a" in SHORT2_CONFIG:
+                color_rgb = SHORT2_CONFIG["clay_color_a"]["color"]
+            elif key == "carB" and "clay_color_b" in SHORT2_CONFIG:
+                color_rgb = SHORT2_CONFIG["clay_color_b"]["color"]
+            else:
+                color_rgb = car_data["color"]
+        else:
+            color_rgb = car_data["color"]
         
         # 発光テキストを作成（ペアレント設定含む）
         if CUT_NUMBER == "short2":
@@ -1681,6 +1725,22 @@ def main():
             create_glowing_text_label(key, car_obj, text_content, color_rgb, shared_rear_y=shared_rear_y)
     
 
+    # short2 モード: テキストエフェクト + 背景発光をテキストラベル作成後に適用
+    if CUT_NUMBER == "short2" and SHORT2_CONFIG:
+        # テキスト出現エフェクトの適用
+        if "label_effect" in SHORT2_CONFIG:
+            text_objects = [obj for obj in bpy.data.objects if obj.type == 'FONT']
+            if text_objects:
+                apply_label_appear_effect(text_objects, SHORT2_CONFIG["label_effect"])
+        
+        # 背景発光の変更（setup_world_background() の黒設定を上書き）
+        if "bg_glow" in SHORT2_CONFIG:
+            apply_background_glow(SHORT2_CONFIG["bg_glow"])
+        
+        # グリッドパルスエフェクトの適用
+        if "grid_pulse" in SHORT2_CONFIG and SHORT2_CONFIG["grid_pulse"]:
+            apply_grid_pulse_effect()
+    
     print("3Dテキストラベル設定完了")
     
     # =============================================

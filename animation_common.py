@@ -536,20 +536,23 @@ def _force_constant_interpolation_car_b_alpha(car_object):
                 print(f"    ⚠ CONSTANT補間強制設定エラー: {e}")
 
 
-def _setup_short2_carb_transparency(car_object, end_frame=624):
-    """CarBの透明度アニメーションをshort2専用ロジックで完全に再構築する
+def _setup_short2_carb_transparency(car_object, end_frame=624, restore_frame=None):
+    """Carの透明度アニメーションをshort2専用ロジックで完全に再構築する
     
-    すべてのキーフレームをCONSTANT補間で設定し、fr457での瞬時不透明化を保証する。
+    すべてのキーフレームをCONSTANT補間で設定し、restore_frameでの瞬時不透明化を保証する。
     
     タイムライン:
     - fr0-29: Alpha=1.0 (完全不透明)
-    - fr30-456: Alpha=0.35 (半透明) — CONSTANT補間でfr30で瞬時に半透明化
-    - fr457-end_frame: Alpha=1.0 (完全不透明) — CONSTANT補間でfr457で瞬時に不透明化
+    - fr30-restore_frame-1: Alpha=0.35 (半透明) — CONSTANT補間でfr30で瞬時に半透明化
+    - restore_frame-end_frame: Alpha=1.0 (完全不透明) — CONSTANT補間でrestore_frameで瞬時に不透明化
     
     Parameters:
-        car_object: CarBオブジェクト
+        car_object: 対象車のオブジェクト
         end_frame: 終了フレーム (デフォルト624)
+        restore_frame: 不透明化開始フレーム (None時はデフォルト457)
     """
+    if restore_frame is None:
+        restore_frame = 457
     if car_object is None:
         return
     
@@ -622,13 +625,13 @@ def _setup_short2_carb_transparency(car_object, end_frame=624):
             # 再度animation_dataを設定（キーフレーム追加のため）
             material.node_tree.animation_data_create()
             
-            # CONSTANT補間でキーフレームを設定
+            # CONSTANT補間でキーフレームを設定（restore_frameで動的計算）
             keyframes = [
-                (0, 1.0),       # fr0: 完全不透明
-                (30, 0.35),    # fr30: 瞬時半透明化
-                (456, 0.35),   # fr456: 半透明維持
-                (457, 1.0),    # fr457: 瞬時不透明化
-                (end_frame, 1.0),  # fr624: 不透明維持
+                (0, 1.0),              # fr0: 完全不透明
+                (30, 0.35),           # fr30: 瞬時半透明化
+                (restore_frame - 1, 0.35),  # restore_frame-1: 半透明維持
+                (restore_frame, 1.0),       # restore_frame: 瞬時不透明化
+                (end_frame, 1.0),          # end_frame: 不透明維持
             ]
             
             for frame, fac_value in keyframes:
@@ -640,7 +643,7 @@ def _setup_short2_carb_transparency(car_object, end_frame=624):
             _set_all_fac_keyframes_to_constant(material.node_tree)
     
     bpy.context.scene.frame_set(0)
-    print(f"  CarB透明度(short2専用): fr0=1.0, fr30=0.35, fr456=0.35, fr457=1.0 [CONSTANT補間]")
+    print(f"  Car透明度(short2専用): fr0=1.0, fr30=0.35, fr{restore_frame-1}=0.35, fr{restore_frame}=1.0 [CONSTANT補間]")
 
 
 def _set_all_fac_keyframes_to_constant(node_tree):

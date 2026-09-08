@@ -160,8 +160,12 @@ def run_all_cuts_independent():
     return all_success
 
 
-def run_blender(scene_script=None, render_only=False, cut_number="all"):
-    """Blenderをコマンドラインから起動してスクリプトを実行する"""
+def run_blender(scene_script=None, render_only=False, cut_number="all", seed=None):
+    """Blenderをコマンドラインから起動してスクリプトを実行する
+    
+    Parameters:
+        seed: Short2バリエーションのランダムシード (None=自動生成)
+    """
 
     if scene_script is None:
         scene_script = MAIN_SCRIPT
@@ -207,6 +211,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     print(f"フレーム範囲: {frame_start}-{frame_end}")
 
     # glTFアドオンを有効にするために、--addonsフラグで明示的に有効化
+    # Blenderの--pythonpathは5.2でサポートされていないので環境変数経由に切り替え
     cmd = [BLENDER_PATH, "--addons", "io_scene_gltf2"]
 
     if render_only:
@@ -232,6 +237,19 @@ def run_blender(scene_script=None, render_only=False, cut_number="all"):
     env["FRAME_END"] = str(frame_end)
     env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
     env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
+    
+    # Short2バリエーションのシード値を渡す
+    if cut_number == "short2":
+        if seed is None:
+            seed = random.randint(1, 999999)
+        env["STRATEGY_SEED"] = str(seed)
+        print(f"Short2 バリエーションシード: {seed}")
+    
+    # BlenderのPythonパスにスクリプトディレクトリを追加
+    # これにより short2_apply_variations などのローカルモジュールをインポート可能にする
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    if SCRIPT_DIR not in existing_pythonpath:
+        env["PYTHONPATH"] = SCRIPT_DIR + os.pathsep + existing_pythonpath
 
     print(f"Blenderを起動します...")
     print(f"コマンド: {' '.join(cmd)}")
@@ -274,6 +292,8 @@ def main():
     parser.add_argument("--script", type=str, help="実行するPythonスクリプトのパス")
     parser.add_argument("--render", action="store_true",
                         help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Short2バリエーションのランダムシード (指定すると再現可能)")
 
     args = parser.parse_args()
 
@@ -286,7 +306,8 @@ def main():
     success = run_blender(
         scene_script=args.script,
         render_only=args.render,
-        cut_number=args.cut
+        cut_number=args.cut,
+        seed=args.seed
     )
 
     sys.exit(0 if success else 1)
