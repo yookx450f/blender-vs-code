@@ -36,7 +36,7 @@ CUTS = {
     "4b": {"start": 2136, "end": 2904, "label": "カット4b（カメラ回転カット）"},
     "5": {"start": 2904, "end": 3528, "label": "カット5（シーン13-14）"},
     "short": {"start": 0, "end": 240, "label": "ショート動画（縦長9:16、車重なりカット）"},
-    "short2": {"start": 0, "end": 624, "label": "ショート動画v2（縦長9:16、カット1+カット2、約26秒@24fps）"},
+    "short2": {"start": 0, "end": -1, "label": "ショート動画v2（縦長9:16、総フレーム数動的計算@24fps）"},
     # 【仕様「２．構成」】end=-1 → animation_settings_short_s.py が cars_config.json の0-100km/h加速時間から
     # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
@@ -59,17 +59,10 @@ def run_single_cut(cut_number):
     frame_end = cut_info["end"]
     cut_label = cut_info["label"]
 
-    # short2の場合、固定624フレーム（カット1 fr0-288 + カット2 fr289-624）
     # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
     cut5_extra_frames = 0
-    if cut_number == "short2":
-        frame_end = 624  # カット1 (fr0-288) + カット2 (fr289-624)
-        print(f"\n{'='*60}")
-        print(f"=== カット{cut_number}実行: {cut_label} ===")
-        print(f"フレーム範囲: {frame_start}-{frame_end} ({(frame_end - frame_start)/24:.1f}秒)")
-        print(f"{'='*60}")
-    elif cut_number == "5":
+    if cut_number == "5":
         cut5_extra_frames = random.randint(-48, 48)
         frame_end = frame_start + 624 + cut5_extra_frames
         print(f"\n{'='*60}")
@@ -102,7 +95,9 @@ def run_single_cut(cut_number):
     env["CUT_NUMBER"] = cut_number
     env["FRAME_START"] = str(frame_start)
     env["FRAME_END"] = str(frame_end)
-    env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
+    # short2 の場合、FRAME_END を -1 に設定してアニメーション側が動的に決めた値を使う
+    if cut_number == "short2":
+        env["FRAME_END"] = "-1"
     env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
 
     print(f"Blenderを起動します...")
@@ -193,22 +188,20 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     frame_end = cut_info["end"]
     cut_label = cut_info["label"]
 
-    # short2の場合、固定624フレーム（カット1 fr0-288 + カット2 fr289-624）
     # cut5の場合、ランダム延長を追加（±48フレーム = ±2秒）
     extra_frames = 0
     cut5_extra_frames = 0
-    if cut_number == "short2":
-        frame_end = 624  # カット1 (fr0-288) + カット2 (fr289-624)
-    elif cut_number == "5":
+    if cut_number == "5":
         cut5_extra_frames = random.randint(-48, 48)
         frame_end = frame_start + 624 + cut5_extra_frames
 
     print(f"=== カット選択: {cut_label} ===")
-    if cut_number == "short2":
-        print(f"フレーム範囲: カット1(fr0-288) + カット2(fr289-624) = 約26秒")
-    elif cut_number == "5":
+    if cut_number == "5":
         print(f"ランダム延長: {cut5_extra_frames:+d}フレーム ({cut5_extra_frames/24:+.1f}秒)")
-    print(f"フレーム範囲: {frame_start}-{frame_end}")
+    if frame_end < 0:
+        print(f"フレーム範囲: {frame_start}-AUTO（総フレーム数動的計算）")
+    else:
+        print(f"フレーム範囲: {frame_start}-{frame_end}")
 
     # glTFアドオンを有効にするために、--addonsフラグで明示的に有効化
     # Blenderの--pythonpathは5.2でサポートされていないので環境変数経由に切り替え

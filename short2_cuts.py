@@ -127,58 +127,45 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
 
     target = (0.0, 0.0, 1.0)
 
-    cut1_keyframes = list(range(cut1_start, cut1_end + 1, keyframe_interval))
-    if cut1_keyframes[-1] != cut1_end:
-        cut1_keyframes.append(cut1_end)
-    num_segments = len(cut1_keyframes) - 1
+    # ============================================================
+    # 統合カメラキーフレーム生成（angleはフレーム位置ベースで計算）
+    # ============================================================
+    zoom_start_frame = cut1_start + int(cut1_length * 0.85)
+    zoom_end_frame = cut1_end
 
-    for i, frame in enumerate(cut1_keyframes):
-        progress = i / num_segments if num_segments > 0 else 0
-        angle = start_angle + total_rotation_scaled * progress
-        cam_pos = get_cam_on_arc(angle)
+    # すべてのキーフレームを24フレームごとに一様に配置
+    all_keyframes = list(range(cut1_start, cut1_end + 1, keyframe_interval))
+    if all_keyframes[-1] != cut1_end:
+        all_keyframes.append(cut1_end)
+
+    final_cam_pos = None
+    final_rot = None
+
+    for frame in all_keyframes:
+        # 角度: フレーム位置ベースで計算（index順序に依存せずスムーズ）
+        frame_progress = (frame - cut1_start) / cut1_length if cut1_length > 0 else 0
+        angle = start_angle + total_rotation_scaled * frame_progress
+
+        # ズーム区間内か判定
+        if zoom_start_frame <= frame <= zoom_end_frame:
+            zoom_progress = (frame - zoom_start_frame) / (zoom_end_frame - zoom_start_frame + 1)
+            current_radius = arc_radius * (1.0 - 0.2 * zoom_progress)
+            current_height = arc_height * (1.0 - 0.15 * zoom_progress)
+            x = current_radius * math.sin(angle)
+            y = current_radius * math.cos(angle)
+            cam_pos = (x, y, current_height)
+        else:
+            cam_pos = get_cam_on_arc(angle)
+
         set_camera_look_at(camera, cam_pos, target)
         rot = camera.rotation_euler.copy()
         _set_camera_location_keyframe(camera, frame, cam_pos)
         _set_rotation_keyframe(camera, frame, rot)
 
-    # 最終カメラ位置を計算（ズームイン前）
-    final_angle = start_angle + total_rotation_scaled
-    final_cam_no_zoom = get_cam_on_arc(final_angle)
-    set_camera_look_at(camera, final_cam_no_zoom, target)
-    final_rot_no_zoom = camera.rotation_euler.copy()
+        final_cam_pos = cam_pos
+        final_rot = rot
 
-    # ============================================================
-    # カット1終盤にカメラズームインを追加
-    # 視聴者が「止まった」と感じないよう、緩やかな動きを追加
-    # ============================================================
-    # ズームイン開始フレームを cut1_end の約85%地点に設定
-    zoom_start_frame = cut1_start + int(cut1_length * 0.85)
-    zoom_end_frame = cut1_end
-    zoom_frames = list(range(zoom_start_frame, zoom_end_frame + 1, 12))  # 0.5秒ごと
-    if zoom_frames and zoom_frames[-1] != zoom_end_frame:
-        zoom_frames.append(zoom_end_frame)
-
-    final_cam_pos = final_cam_no_zoom  # デフォルトはズームなしの位置
-    final_rot = final_rot_no_zoom
-
-    if zoom_frames:
-        # カメラを徐々に近づける（半径を80%まで縮小）
-        for i, frame in enumerate(zoom_frames):
-            progress = i / (len(zoom_frames) - 1) if len(zoom_frames) > 1 else 0
-            current_radius = arc_radius * (1.0 - 0.2 * progress)  # 100% → 80%
-            angle_at_frame = start_angle + total_rotation_scaled * ((frame - cut1_start) / cut1_length)
-            x = current_radius * math.sin(angle_at_frame)
-            y = current_radius * math.cos(angle_at_frame)
-            cam_pos_zoom = (x, y, arc_height * (1.0 - 0.15 * progress))  # 高さも 100% → 85%
-            set_camera_look_at(camera, cam_pos_zoom, target)
-            rot_zoom = camera.rotation_euler.copy()
-            _set_camera_location_keyframe(camera, frame, cam_pos_zoom)
-            _set_rotation_keyframe(camera, frame, rot_zoom)
-
-        # 最終位置を更新（最後のズームフレームの位置を使用）
-        final_cam_pos = cam_pos_zoom
-        final_rot = rot_zoom
-
+    if zoom_start_frame <= cut1_end:
         print(f"  [fr{zoom_start_frame}-{zoom_end_frame}] カメラズームイン追加 (半径100%→80%)")
 
     print(f"  [fr{cut1_start}-{cut1_end}] carA: {car_a_start} → {car_a_end}")
@@ -231,6 +218,12 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
 
     target = (0.0, 0.0, 1.0)
     keyframe_interval = 24
+
+    # cut2a_startで明確なカメラキーフレームを設定（前回の残骸とのgapを防止）
+    set_camera_look_at(camera, cut1_final_cam, target)
+    rot_start = camera.rotation_euler.copy()
+    _set_camera_location_keyframe(camera, cut2a_start, cut1_final_cam)
+    _set_rotation_keyframe(camera, cut2a_start, rot_start)
 
     # カメラのキーフレーム
     phase_a_frames = list(range(cut2a_start, cut2a_end + 1, keyframe_interval))

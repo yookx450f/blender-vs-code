@@ -19,7 +19,7 @@ short2 の違い:
 
 import bpy
 from animation_common import _setup_transparency_keyframe_animation, _add_transparency_keyframe_existing, _force_constant_interpolation_car_b_alpha, _setup_short2_carb_transparency
-from short2_utils import get_car_visual_center_offset
+from short2_utils import get_car_visual_center_offset, clear_animation_data
 from short2_cuts import (
     setup_cut1_overlap,
     setup_cut2_phase_a_topdown,
@@ -93,6 +93,10 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
         if constraint.type == 'TRACK_TO':
             constraint.mute = True
             print(f"  Track To コンストレイント '{constraint.name}' を無効化")
+
+    # アニメーションデータを完全にクリア（前回実行の残骸を削除）
+    print("  アニメーションデータのクリーンアップ...")
+    clear_animation_data([camera, car_a, car_b])
 
     # レンズ設定
     original_lens = camera.data.lens

@@ -10,6 +10,7 @@ Short2 共通ユーティリティモジュール
         _set_rotation_keyframe,
         _set_camera_location_keyframe,
         get_car_visual_center_offset,
+        clear_animation_data,
     )
 """
 
@@ -97,6 +98,58 @@ def _set_camera_location_keyframe(obj, frame, loc):
     obj.keyframe_insert(data_path="location", index=-1)
     _ensure_linear_interpolation_for_object(obj, frame)
     bpy.context.scene.frame_set(current_frame)
+
+
+def _get_action_name_for_object(obj):
+    """オブジェクトの名前から推測されるアクション名を返す"""
+    # Blender 5.x ではデフォルトで "{object.name}アクション" という名前になる
+    return f"{obj.name}アクション"
+
+
+def _clear_old_actions_for_object(obj):
+    """bpy.data.actions からこのオブジェクト関連の旧アクションを削除"""
+    base_name = _get_action_name_for_object(obj)
+    removed = []
+    # 現在のアニメーションデータが参照しているアクションは削除しない
+    current_action_name = None
+    if obj.animation_data and obj.animation_data.action:
+        current_action_name = obj.animation_data.action.name
+    
+    actions_to_check = list(bpy.data.actions.keys())
+    for action_name in actions_to_check:
+        if base_name in action_name and action_name != current_action_name:
+            # ユーザー参照数を確認（0なら安全に削除可能）
+            try:
+                action = bpy.data.actions.get(action_name)
+                if action is not None and action.users == 0:
+                    bpy.data.actions.remove(action)
+                    removed.append(action_name)
+            except ReferenceError:
+                pass
+    
+    if removed:
+        print(f"    {obj.name}: 旧アクション {removed} を削除")
+
+
+def _clear_animation_data(obj):
+    """オブジェクトのアニメーションデータを完全に消去"""
+    # まず関連する旧アクションを bpy.data.actions から削除
+    _clear_old_actions_for_object(obj)
+    
+    if obj.animation_data:
+        obj.animation_data_clear()
+        print(f"    {obj.name} のアニメーションデータをクリア")
+    else:
+        print(f"    {obj.name} にアニメーションデータなし")
+
+
+def clear_animation_data(objects):
+    """指定されたオブジェクトリストのアニメーションデータを完全に消去"""
+    if not objects:
+        return
+    for obj in objects:
+        _clear_animation_data(obj)
+    print("    アニメーションデータのクリーンアップ完了")
 
 
 def _ensure_linear_interpolation_for_object(obj, frame):
