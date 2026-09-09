@@ -28,11 +28,19 @@ GRID_COLOR_PRESETS = [
 ]
 
 CLAY_COLOR_PRESETS = [
+    # --- 原有のニュアンス系 ---
     {"name": "white_gray",   "color": (0.85, 0.85, 0.87)},
     {"name": "warm_gray",    "color": (0.72, 0.68, 0.64)},
     {"name": "vivid_orange", "color": (0.95, 0.55, 0.25)},
     {"name": "clay_brown",   "color": (0.75, 0.58, 0.42)},
     {"name": "ice_blue",     "color": (0.65, 0.78, 0.90)},
+    # --- 鮮やか色追加 ---
+    {"name": "vivid_red",    "color": (0.95, 0.20, 0.20)},
+    {"name": "vivid_green",  "color": (0.20, 0.85, 0.30)},
+    {"name": "vivid_blue",   "color": (0.20, 0.40, 1.00)},
+    {"name": "vivid_yellow", "color": (0.95, 0.85, 0.10)},
+    {"name": "hot_pink",     "color": (1.00, 0.30, 0.60)},
+    {"name": "electric_purple", "color": (0.70, 0.20, 1.00)},
 ]
 
 BACKGROUND_GLOW_PRESETS = [
