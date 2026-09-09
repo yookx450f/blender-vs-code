@@ -1410,8 +1410,9 @@ def main():
     grid = create_grid_floor(x_half_width=grid_x_half, y_half_length=grid_y_half)
     print(f"グリッド床面を作成しました: {grid.name} (X方向±{grid_x_half:.0f}m / Y方向±{grid_y_half:.0f}m)")
     
-    # short2 モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
+    # short2/shortAnimal モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
     SHORT2_CONFIG = None
+    SHORT_ANIMAL_CONFIG = None
     if CUT_NUMBER == "short2":
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
@@ -1422,6 +1423,20 @@ def main():
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT2_CONFIG and "grid_color" in SHORT2_CONFIG:
                 apply_grid_color(SHORT2_CONFIG["grid_color"])
+        except Exception as e:
+            import traceback
+            print(f"  ❌ バリエーション設定エラー: {e}")
+            traceback.print_exc()
+    elif CUT_NUMBER == "shortAnimal":
+        try:
+            strategy_seed = os.environ.get("STRATEGY_SEED", "")
+            print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
+            from short2_apply_variations import load_config_from_env, apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            SHORT_ANIMAL_CONFIG = load_config_from_env()
+            print(f"  [DEBUG] SHORT_ANIMAL_CONFIG loaded: {SHORT_ANIMAL_CONFIG is not None}")
+            # グリッド色のみの即時適用（グリッド床面は既に作成済み）
+            if SHORT_ANIMAL_CONFIG and "grid_color" in SHORT_ANIMAL_CONFIG:
+                apply_grid_color(SHORT_ANIMAL_CONFIG["grid_color"])
         except Exception as e:
             import traceback
             print(f"  ❌ バリエーション設定エラー: {e}")

@@ -238,12 +238,13 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
     env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
     
-    # Short2バリエーションのシード値を渡す
-    if cut_number == "short2":
+    # Short2/ShortAnimalバリエーションのシード値を渡す
+    if cut_number in ("short2", "shortAnimal"):
         if seed is None:
             seed = random.randint(1, 999999)
         env["STRATEGY_SEED"] = str(seed)
-        print(f"Short2 バリエーションシード: {seed}")
+        mode_name = "Short2" if cut_number == "short2" else "ShortAnimal"
+        print(f"{mode_name} バリエーションシード: {seed}")
     
     # BlenderのPythonパスにスクリプトディレクトリを追加
     # これにより short2_apply_variations などのローカルモジュールをインポート可能にする

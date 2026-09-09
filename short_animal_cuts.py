@@ -28,6 +28,18 @@ from short_animal_utils import (
     _set_camera_location_keyframe_with_easing,
 )
 
+# イージング関数（短形動画v2のバリエーションモジュールから取得、失敗時はデフォルト使用）
+try:
+    from short_animal_variations import get_easing_function
+except ImportError:
+    def _ease_cubic(t):
+        if t < 0.5:
+            return 4.0 * t * t * t
+        else:
+            return 1.0 - (-2.0 * t + 2.0)**3 / 2.0
+    def get_easing_function(name):
+        return _ease_cubic
+
 
 # ============================================================
 # フレーム定義（24fps）— 全カットで共通
