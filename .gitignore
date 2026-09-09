@@ -61,3 +61,7 @@ $null
 
 # 環境変数ファイル（APIキーなど機密情報）
 .env
+
+# テスト出力ファイル
+test_*.txt
+blender_output.txt
