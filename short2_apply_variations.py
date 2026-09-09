@@ -218,7 +218,8 @@ def apply_grid_pulse_effect(grid_mat_name="NeonGridMaterial", duration_frames=62
     wave_tex.location = (-400, -300)
     wave_tex.inputs['Scale'].default_value = 2.0
     wave_tex.inputs['Detail'].default_value = 0.5
-    wave_tex.inputs['Distortion Scale'].default_value = 3.0
+    if 'Distortion Scale' in wave_tex.inputs:
+        wave_tex.inputs['Distortion Scale'].default_value = 3.0
     
     # マッピングノードを追加（アニメーション用）
     mapping_pulse = nodes.new(type='ShaderNodeMapping')
