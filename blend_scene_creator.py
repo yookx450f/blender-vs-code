@@ -1431,8 +1431,9 @@ def main():
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
-            from short2_apply_variations import load_config_from_env, apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
-            SHORT_ANIMAL_CONFIG = load_config_from_env()
+            from short_animal_variations import load_config_from_env as load_animal_config_from_env
+            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            SHORT_ANIMAL_CONFIG = load_animal_config_from_env()
             print(f"  [DEBUG] SHORT_ANIMAL_CONFIG loaded: {SHORT_ANIMAL_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT_ANIMAL_CONFIG and "grid_color" in SHORT_ANIMAL_CONFIG:
@@ -1504,6 +1505,10 @@ def main():
     # short2 モード: クレイ色の変更を車のインポート後に適用（ルール1: 車ごとに異なる色）
     if CUT_NUMBER == "short2" and SHORT2_CONFIG and "clay_color_a" in SHORT2_CONFIG and "clay_color_b" in SHORT2_CONFIG:
         apply_clay_colors_per_car(SHORT2_CONFIG["clay_color_a"], SHORT2_CONFIG["clay_color_b"])
+    
+    # shortAnimalモード: クレイ色の変更を動物のインポート後に適用
+    if CUT_NUMBER == "shortAnimal" and SHORT_ANIMAL_CONFIG and "clay_color_a" in SHORT_ANIMAL_CONFIG and "clay_color_b" in SHORT_ANIMAL_CONFIG:
+        apply_clay_colors_per_car(SHORT_ANIMAL_CONFIG["clay_color_a"], SHORT_ANIMAL_CONFIG["clay_color_b"])
     
     # ============================================================
     # 新しい演出：後端を揃えて全長差を可視化（左右配置版）
@@ -1599,13 +1604,15 @@ def main():
         setup_short_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
     elif CUT_NUMBER == "short2":
         from animation_settings_short2 import setup_short2_animations
-        # ルール2: 半透明対象を全高が大きい車に設定
+        # ルール2: 半透明対象を体積（全長×全幅×全高）が大きい車に設定
         if SHORT2_CONFIG:
-            height_a = CARS.get("carA", {}).get("dimensions_mm", {}).get("height", 0)
-            height_b = CARS.get("carB", {}).get("dimensions_mm", {}).get("height", 0)
-            transparency_target = "carB" if height_b > height_a else "carA"
+            dims_a = CARS.get("carA", {}).get("dimensions_mm", {})
+            dims_b = CARS.get("carB", {}).get("dimensions_mm", {})
+            volume_a = dims_a.get("length", 0) * dims_a.get("width", 0) * dims_a.get("height", 0)
+            volume_b = dims_b.get("length", 0) * dims_b.get("width", 0) * dims_b.get("height", 0)
+            transparency_target = "carB" if volume_b > volume_a else "carA"
             SHORT2_CONFIG["transparency_target"] = transparency_target
-            print(f"  ルール2: 半透明対象={transparency_target} (全高比較: carA={height_a}mm, carB={height_b}mm)")
+            print(f"  ルール2: 半透明対象={transparency_target} (体積比較: carA={volume_a/1e6:.1f}m³, carB={volume_b/1e6:.1f}m³)")
         print(f"  short2: total_frames=624 (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
         setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT2_CONFIG)
     elif CUT_NUMBER == "short-s":

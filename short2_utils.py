@@ -19,6 +19,11 @@ import math
 from mathutils import Vector
 
 
+# カメラ位置の制限範囲（メートル）
+# short2ではカメラがtop-downへ移動するため、適度な制限が必要
+CAMERA_LOCATION_MAX = 15.0
+
+
 def get_car_visual_center_offset(car_obj):
     """車のジオメトリから視覚的な中心のオフセットを取得
     
@@ -57,20 +62,48 @@ def get_car_visual_center_offset(car_obj):
     return (offset_x, offset_y)
 
 
+def _clamp_camera_location(x, y, z):
+    """カメラの位置を安全な範囲内に制限する
+    
+    各座標軸を ±CAMERA_LOCATION_MAX 以内にクランプし、
+    Z座標は常に正（地面より上）を保証する。
+    """
+    cx = max(-CAMERA_LOCATION_MAX, min(CAMERA_LOCATION_MAX, x))
+    cy = max(-CAMERA_LOCATION_MAX, min(CAMERA_LOCATION_MAX, y))
+    cz = max(0.1, min(CAMERA_LOCATION_MAX, z))  # Zは常に0.1以上
+    
+    # クランプした値が元の値と大きく異なれば警告（問題の特定用）
+    if abs(cx - x) > 1.0 or abs(cy - y) > 1.0 or abs(cz - z) > 1.0:
+        print(f"    ⚠ カメラ位置クランプ: ({x:.2f}, {y:.2f}, {z:.2f}) → ({cx:.2f}, {cy:.2f}, {cz:.2f})")
+    
+    return (cx, cy, cz)
+
+
 def _set_location_keyframe(obj, frame, x, y, z):
-    """車の位置キーフレームを設定"""
+    """車の位置キーフレームを設定
+    
+    index=-1（全インデックス）を使用せず、各軸を明示的に指定して
+    Blender 5.x のアクションレイヤーシステムとの混同を防ぐ。
+    """
     current_frame = bpy.context.scene.frame_current
     bpy.context.scene.frame_set(frame)
     obj.location = (x, y, z)
     if obj.animation_data is None:
         obj.animation_data_create()
-    obj.keyframe_insert(data_path="location", index=-1)
+    
+    # 各軸を明示的に指定（index=-1はlocationとrotationが混同される原因）
+    for i in range(3):
+        obj.keyframe_insert(data_path="location", index=i)
+    
     _ensure_linear_interpolation_for_object(obj, frame)
     bpy.context.scene.frame_set(current_frame)
 
 
 def _set_rotation_keyframe(obj, frame, rot):
-    """回転キーフレームを設定"""
+    """回転キーフレームを設定
+    
+    各軸を明示的に指定して location との混同を防ぐ。
+    """
     if hasattr(rot, 'x'):
         rx, ry, rz = rot.x, rot.y, rot.z
     else:
@@ -81,47 +114,62 @@ def _set_rotation_keyframe(obj, frame, rot):
     obj.rotation_euler = (rx, ry, rz)
     if obj.animation_data is None:
         obj.animation_data_create()
-    obj.keyframe_insert(data_path="rotation_euler", index=-1)
+    
+    # 各軸を明示的に指定
+    for i in range(3):
+        obj.keyframe_insert(data_path="rotation_euler", index=i)
+    
     _ensure_linear_interpolation_for_object(obj, frame)
     bpy.context.scene.frame_set(current_frame)
 
 
 def _set_camera_location_keyframe(obj, frame, loc):
-    """カメラの位置キーフレームを設定"""
+    """カメラの位置キーフレームを設定（位置制限付き）
+    
+    カメラの位置が ±CAMERA_LOCATION_MAX 範囲内に収まるようクランプし、
+    Blender 5.x のアクションレイヤーシステムによる異常値の拡散を防止する。
+    """
     x, y, z = loc if isinstance(loc, tuple) else (loc.x, loc.y, loc.z)
+    
+    # 位置を安全な範囲にクランプ
+    x, y, z = _clamp_camera_location(x, y, z)
     
     current_frame = bpy.context.scene.frame_current
     bpy.context.scene.frame_set(frame)
     obj.location = (x, y, z)
     if obj.animation_data is None:
         obj.animation_data_create()
-    obj.keyframe_insert(data_path="location", index=-1)
+    
+    # locationのみをキーフレームとして挿入（rotationは含めない）
+    for i in range(3):
+        obj.keyframe_insert(data_path="location", index=i)
+    
     _ensure_linear_interpolation_for_object(obj, frame)
+    
+    # キーフレーム挿入後に位置が維持されているか確認・修正
+    if abs(obj.location.x - x) > 0.01 or abs(obj.location.y - y) > 0.01 or abs(obj.location.z - z) > 0.01:
+        obj.location = (x, y, z)
+    
     bpy.context.scene.frame_set(current_frame)
 
 
 def _get_action_name_for_object(obj):
     """オブジェクトの名前から推測されるアクション名を返す"""
-    # Blender 5.x ではデフォルトで "{object.name}アクション" という名前になる
     return f"{obj.name}アクション"
 
 
 def _clear_old_actions_for_object(obj):
-    """bpy.data.actions からこのオブジェクト関連の旧アクションを削除"""
+    """bpy.data.actions からこのオブジェクト関連の旧アクションを全て削除（包含的）"""
     base_name = _get_action_name_for_object(obj)
     removed = []
-    # 現在のアニメーションデータが参照しているアクションは削除しない
-    current_action_name = None
-    if obj.animation_data and obj.animation_data.action:
-        current_action_name = obj.animation_data.action.name
     
     actions_to_check = list(bpy.data.actions.keys())
     for action_name in actions_to_check:
-        if base_name in action_name and action_name != current_action_name:
-            # ユーザー参照数を確認（0なら安全に削除可能）
+        # 全ての関連アクションを削除（現在のものも含む。後で再作成するため問題なし）
+        if base_name in action_name or obj.name.replace('_', '').replace(' ', '') in action_name.replace('_', '').replace(' ', ''):
             try:
                 action = bpy.data.actions.get(action_name)
-                if action is not None and action.users == 0:
+                if action is not None and action.users <= 1:
                     bpy.data.actions.remove(action)
                     removed.append(action_name)
             except ReferenceError:
@@ -133,7 +181,6 @@ def _clear_old_actions_for_object(obj):
 
 def _clear_animation_data(obj):
     """オブジェクトのアニメーションデータを完全に消去"""
-    # まず関連する旧アクションを bpy.data.actions から削除
     _clear_old_actions_for_object(obj)
     
     if obj.animation_data:

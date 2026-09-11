@@ -93,11 +93,30 @@ class CutState:
 
 
 def set_camera_look_at(cam, loc, tgt):
-    """カメラを指定位置に配置し、ターゲット方向に向ける"""
+    """カメラを指定位置に配置し、ターゲット方向に向ける
+    
+    Blender 5.x のジンバルロック問題を回避するため、以下の対策を追加:
+    1. カメラが真上(top-down)にいる場合、X回転を0に固定（垂直下向き）
+    2. X軸回転に安全制限を追加（±1.4ラジアン以内）
+    """
     cam.location = loc
     direction = Vector(tgt) - Vector(loc)
+    
+    # top-down 位置では方向ベクトルが-Zと完全に一致するため、
+    # ジンバルロックを防止するために特別処理を行う
+    if abs(direction.x) < 0.01 and abs(direction.y) < 0.01:
+        # 真上または真下の場合: 垂直に向く回転を直接設定
+        cam.rotation_euler = (math.pi / 2, 0.0, 0.0) if direction.z < 0 else (0.0, 0.0, 0.0)
+        return
+    
     rot_quat = direction.to_track_quat('-Z', 'Y')  # カメラの-Z軸をターゲット方向へ
-    cam.rotation_euler = rot_quat.to_euler()
+    euler = rot_quat.to_euler()
+    
+    # X軸回転に安全制限（ジンバルロック防止）
+    max_x_rot = 1.4  # 約80度
+    if abs(euler.x) > max_x_rot:
+        euler.x = max_x_rot if euler.x > 0 else -max_x_rot
+    cam.rotation_euler = euler
 
 
 def create_emission_material(color_rgb, strength):
