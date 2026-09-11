@@ -87,17 +87,12 @@ def select_distinct_clay_colors(rng, presets, min_distance=0.35):
 # ============================================================
 
 CAMERA_PATTERNS = [
+    # --- 左→右 パターン ---
     {
         "name": "standard_arc_lr",       # 標準: 左→右円弧パン
         "pan_direction": 1,              # 1=左から右, -1=右から左
         "start_position": (-3.0, -6.0, 3.5),
         "total_rotation": -0.85,
-    },
-    {
-        "name": "reverse_arc_rl",        # 逆方向: 右→左円弧パン
-        "pan_direction": -1,
-        "start_position": (3.0, -6.0, 3.5),
-        "total_rotation": 0.85,
     },
     {
         "name": "wide_arc_lr",           # ワイド: より大きな円弧
@@ -110,6 +105,25 @@ CAMERA_PATTERNS = [
         "pan_direction": 1,
         "start_position": (-2.0, -4.5, 2.8),
         "total_rotation": -0.65,
+    },
+    # --- 右→左 パターン ---
+    {
+        "name": "reverse_arc_rl",        # 逆方向: 右→左円弧パン
+        "pan_direction": -1,
+        "start_position": (3.0, -6.0, 3.5),
+        "total_rotation": 0.85,
+    },
+    {
+        "name": "wide_reverse_arc_rl",   # ワイド: より大きな円弧（右側）
+        "pan_direction": -1,
+        "start_position": (4.0, -7.0, 4.0),
+        "total_rotation": 1.1,
+    },
+    {
+        "name": "close_reverse_arc_rl",  # クローズ: より近い位置からのパン（右側）
+        "pan_direction": -1,
+        "start_position": (2.0, -4.5, 2.8),
+        "total_rotation": 0.65,
     },
 ]
 
