@@ -308,6 +308,14 @@ def clear_scene():
         if obj.name not in objects_to_keep:
             bpy.data.objects.remove(obj, do_unlink=True)
     
+    # ComparisonCamera の状態もリセット（前回のキーフレーム/回転が引き継がれないように）
+    if "ComparisonCamera" in bpy.data.objects:
+        camera = bpy.data.objects["ComparisonCamera"]
+        camera.location = (0.0, 0.0, 5.0)
+        camera.rotation_euler = (0.0, 0.0, 0.0)
+        if camera.animation_data:
+            camera.animation_data_clear()
+    
     # 不要なマテリアルもクリーンアップ
     for mat in list(bpy.data.materials):
         if "clay_" in mat.name or "emission_label" in mat.name or "NeonGrid" in mat.name:

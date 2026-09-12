@@ -10,7 +10,7 @@ animation_settings.py からインポートして使用。
 
 import bpy
 import math
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 
 
@@ -92,31 +92,137 @@ class CutState:
                 f"camera_loc={self.camera_loc}, camera_rot={self.camera_rot})")
 
 
+# カメラターゲットEmptyのグローバル参照（複数回呼び出し時に再利用）
+_camera_target_empty = None
+
+
+def _get_or_create_camera_target():
+    """カメラが追従するターゲットEmptyを取得・作成する
+    
+    rotation_eulerによるジンバルロックを完全回避するために、
+    Track To constraint方式を使用する。Emptyは名前「CameraTarget」として作成。
+    """
+    global _camera_target_empty
+    if _camera_target_empty is not None:
+        if _camera_target_empty.name in bpy.data.objects:
+            return _camera_target_empty
+    
+    # 既存のEmptyを探す
+    name = "CameraTarget"
+    if name in bpy.data.objects:
+        _camera_target_empty = bpy.data.objects[name]
+        return _camera_target_empty
+    
+    # Emptyを作成
+    empty = bpy.data.objects.new(name, None)
+    empty.empty_display_type = 'SPHERE'
+    empty.empty_display_size = 0.5
+    bpy.context.collection.objects.link(empty)
+    _camera_target_empty = empty
+    return empty
+
+
+def _ensure_camera_tracks_target(cam, target):
+    """カメラにTrack To constraintを設定（ターゲットを追従するように）"""
+    # 既存のTRACK_TO制約を探す
+    track_constraint = None
+    for c in cam.constraints:
+        if c.type == 'TRACK_TO':
+            track_constraint = c
+            break
+    
+    if track_constraint is None:
+        # 新しいTrack To制約を追加
+        track_constraint = cam.constraints.new(type='TRACK_TO')
+        track_constraint.name = 'TrackTarget'
+    
+    track_constraint.target = target
+    track_constraint.track_axis = 'TRACK_NEGATIVE_Z'
+    track_constraint.up_axis = 'UP_Y'
+    track_constraint.mute = False
+
+
 def set_camera_look_at(cam, loc, tgt):
     """カメラを指定位置に配置し、ターゲット方向に向ける
     
-    Blender 5.x のジンバルロック問題を回避するため、以下の対策を追加:
-    1. カメラが真上(top-down)にいる場合、X回転を0に固定（垂直下向き）
-    2. X軸回転に安全制限を追加（±1.4ラジアン以内）
+    Track To constraint方式を使用し、ジンバルロックを完全に回避する。
     """
-    cam.location = loc
-    direction = Vector(tgt) - Vector(loc)
+    target = _get_or_create_camera_target()
+    target.location = Vector(tgt)
+    cam.location = Vector(loc)
+    _ensure_camera_tracks_target(cam, target)
+
+
+def _set_camera_keyframe(cam, frame, loc, tgt):
+    """カメラの位置キーフレームを記録し、ターゲットEmptyに注視点のキーフレームを設定する
     
-    # top-down 位置では方向ベクトルが-Zと完全に一致するため、
-    # ジンバルロックを防止するために特別処理を行う
-    if abs(direction.x) < 0.01 and abs(direction.y) < 0.01:
-        # 真上または真下の場合: 垂直に向く回転を直接設定
-        cam.rotation_euler = (math.pi / 2, 0.0, 0.0) if direction.z < 0 else (0.0, 0.0, 0.0)
+    rotation_eulerを使用せず、Track To constraintで方向制御を行うため、
+    ジンバルロックが発生しない。
+    
+    Parameters:
+        cam: カメラオブジェクト
+        frame: キーフレームを設定するフレーム番号
+        loc: カメラの位置 (Vector または tuple)
+        tgt: 注視点の位置 (Vector または tuple)
+    """
+    target = _get_or_create_camera_target()
+    
+    current_frame = bpy.context.scene.frame_current
+    bpy.context.scene.frame_set(frame)
+    
+    # animation_dataを確保
+    if cam.animation_data is None:
+        cam.animation_data_create()
+    if target.animation_data is None:
+        target.animation_data_create()
+    
+    # カメラの位置を設定してキーフレーム
+    x, y, z = loc[0], loc[1], loc[2]
+    cam.location = (x, y, z)
+    for i in range(3):
+        cam.keyframe_insert(data_path="location", index=i)
+    
+    # ターゲットEmptyの位置を設定してキーフレーム（カメラがこれを追従する）
+    tx, ty, tz = tgt[0], tgt[1], tgt[2]
+    target.location = (tx, ty, tz)
+    for i in range(3):
+        target.keyframe_insert(data_path="location", index=i)
+    
+    # Track To constraintを有効化
+    _ensure_camera_tracks_target(cam, target)
+    
+    # location F-CurveのみをLINEARに設定（ターゲットも）
+    _ensure_linear_interpolation_for_object_location(cam, frame)
+    _ensure_linear_interpolation_for_object_location(target, frame)
+    
+    bpy.context.scene.frame_set(current_frame)
+
+
+def _ensure_linear_interpolation_for_object_location(obj, frame):
+    """オブジェクトのlocation F-CurveキーフレームのみをLINEARに設定"""
+    if not obj.animation_data or not obj.animation_data.action:
         return
     
-    rot_quat = direction.to_track_quat('-Z', 'Y')  # カメラの-Z軸をターゲット方向へ
-    euler = rot_quat.to_euler()
+    action = obj.animation_data.action
     
-    # X軸回転に安全制限（ジンバルロック防止）
-    max_x_rot = 1.4  # 約80度
-    if abs(euler.x) > max_x_rot:
-        euler.x = max_x_rot if euler.x > 0 else -max_x_rot
-    cam.rotation_euler = euler
+    if hasattr(action, 'fcurves'):
+        for fc in action.fcurves:
+            if 'location' in fc.data_path:
+                for kf in fc.keyframe_points:
+                    if abs(kf.co.x - frame) < 0.1:
+                        kf.interpolation = 'LINEAR'
+        return
+    
+    if hasattr(action, 'layers'):
+        for layer in action.layers:
+            for strip in layer.strips:
+                if strip.type == 'KEYFRAME':
+                    for cb in strip.channelbags:
+                        for fc in cb.fcurves:
+                            if 'location' in fc.data_path:
+                                for kf in fc.keyframe_points:
+                                    if abs(kf.co.x - frame) < 0.1:
+                                        kf.interpolation = 'LINEAR'
 
 
 def create_emission_material(color_rgb, strength):

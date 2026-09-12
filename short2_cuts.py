@@ -18,7 +18,7 @@ Short2 - カット1・カット2 の位置アニメーションモジュール
 """
 
 import math
-from animation_common import set_camera_look_at
+from animation_common import set_camera_look_at, _set_camera_keyframe
 from short2_utils import (
     _set_location_keyframe,
     _set_rotation_keyframe,
@@ -157,13 +157,11 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         else:
             cam_pos = get_cam_on_arc(angle)
 
-        set_camera_look_at(camera, cam_pos, target)
-        rot = camera.rotation_euler.copy()
-        _set_camera_location_keyframe(camera, frame, cam_pos)
-        _set_rotation_keyframe(camera, frame, rot)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
         final_cam_pos = cam_pos
-        final_rot = rot
+        final_rot = camera.rotation_quaternion.copy()
 
     if zoom_start_frame <= cut1_end:
         print(f"  [fr{zoom_start_frame}-{zoom_end_frame}] カメラズームイン追加 (半径100%→80%)")
@@ -174,7 +172,7 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
 
     return {
         'camera_loc': final_cam_pos,
-        'camera_rot': (final_rot.x, final_rot.y, final_rot.z),
+        'camera_rot': camera.rotation_euler.copy(),
     }
 
 
@@ -220,10 +218,7 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     keyframe_interval = 24
 
     # cut2a_startで明確なカメラキーフレームを設定（前回の残骸とのgapを防止）
-    set_camera_look_at(camera, cut1_final_cam, target)
-    rot_start = camera.rotation_euler.copy()
-    _set_camera_location_keyframe(camera, cut2a_start, cut1_final_cam)
-    _set_rotation_keyframe(camera, cut2a_start, rot_start)
+    _set_camera_keyframe(camera, cut2a_start, cut1_final_cam, target)
 
     # カメラのキーフレーム
     phase_a_frames = list(range(cut2a_start, cut2a_end + 1, keyframe_interval))
@@ -239,10 +234,8 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
         cam_y = cut1_final_cam[1] + (top_down_pos[1] - cut1_final_cam[1]) * cam_progress
         cam_z = cut1_final_cam[2] + (top_down_pos[2] - cut1_final_cam[2]) * cam_progress
         cam_pos = (cam_x, cam_y, cam_z)
-        set_camera_look_at(camera, cam_pos, target)
-        rot = camera.rotation_euler.copy()
-        _set_camera_location_keyframe(camera, frame, cam_pos)
-        _set_rotation_keyframe(camera, frame, rot)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
         # 車は中央集合位置で静止（重なったまま）
         _set_location_keyframe(car_a, frame, car_a_end[0], car_a_end[1], car_a_end[2])
@@ -309,10 +302,8 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
         cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
         cam_pos = (cam_x, cam_y, cam_z)
-        set_camera_look_at(camera, cam_pos, target)
-        rot = camera.rotation_euler.copy()
-        _set_camera_location_keyframe(camera, frame, cam_pos)
-        _set_rotation_keyframe(camera, frame, rot)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
         # 車のスライド進行度（イージング適用）
         raw_car_progress = (frame - cut2b_start) / total_slide_frames
@@ -328,14 +319,13 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
     _set_location_keyframe(car_a, cut2b_end, car_a_start[0], car_a_start[1], car_a_start[2])
     _set_location_keyframe(car_b, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
 
-    # 最終カメラ位置を設定
+    # 最終カメラ位置を設定（キーフレームはループで設定済み）
     set_camera_look_at(camera, cam_return_pos, target)
-    final_rot = camera.rotation_euler.copy()
 
     print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {top_down_pos} → {cam_return_pos}")
     print(f"  車: スライド完了 → carA={car_a_start}, carB={car_b_start}")
 
     return {
         'camera_loc': cam_return_pos,
-        'camera_rot': (final_rot.x, final_rot.y, final_rot.z),
+        'camera_rot': camera.rotation_euler.copy(),
     }
