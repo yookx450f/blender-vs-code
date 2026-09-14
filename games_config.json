@@ -1,7 +1,7 @@
 {
-  "glb_dir": "C:\\\\3d\\\\Modly\\\\animal_glb",
-  "animalA": {
-    "id": "8",
+  "glb_dir": "C:\\3d\\Modly\\glb_game",
+  "gameA": {
+    "id": "1",
     "color": [
       0.5,
       0.5,
@@ -13,7 +13,7 @@
       0
     ]
   },
-  "animalB": {
+  "gameB": {
     "id": "2",
     "color": [
       0.0,

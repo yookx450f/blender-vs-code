@@ -226,6 +226,81 @@ def load_animals_config():
 
 
 
+def load_games_config():
+    """games_config.json + cars.db(gamesテーブル) を結合してゲームキャラクターの設定辞書を返す
+    
+    JSONでは gameA/gameB に id, color, position のみを指定し、
+    寸法データは DBからidで自動的に取得・結合する。
+    戻り値のキーは carA/carB に変換（アニメーション設定との互換性）。
+    """
+    config_path = os.path.join(SCRIPT_DIR, "games_config.json")
+    
+    if not os.path.exists(config_path):
+        print(f"エラー: 設定ファイルが見つかりません - {config_path}")
+        print("games_config.json を作成してください。")
+        sys.exit(1)
+    
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        
+        # DBからゲームキャラクターマスターデータを取得
+        games_db = load_games_db()
+        
+        # GLBディレクトリの取得（JSONのグローバル設定）
+        glb_dir = config.get("glb_dir", "")
+        
+        # gameA/gameB ごとにDBデータを結合し、carA/carB キーに変換
+        key_mapping = {"gameA": "carA", "gameB": "carB"}
+        merged = {}
+        for src_key, dst_key in key_mapping.items():
+            if src_key not in config:
+                continue
+            
+            game_cfg = config[src_key]
+            game_id = game_cfg.get("id", "")
+            
+            if game_id not in games_db:
+                print(f"エラー: DBにキャラクターID '{game_id}' が見つかりません")
+                print(f"  利用可能なID: {', '.join(games_db.keys())}")
+                sys.exit(1)
+            
+            db_data = games_db[game_id]
+            merged[dst_key] = {
+                "name": db_data["name"],
+                "glb_path": os.path.join(glb_dir, db_data["glb_filename"]),
+                "position": tuple(game_cfg.get("position", [0.0, 0.0, 0])),
+                "color": tuple(game_cfg.get("color", [0.5, 0.5, 0.5])),
+                "dimensions_mm": {
+                    "length": db_data["length"],
+                    "height": db_data["height"],
+                },
+                "rotation_z_degrees": db_data["rotation_direction"]
+            }
+        
+        print(f"ゲームキャラクター設定ファイルを読み込みました: {config_path}")
+        for key, game_data in merged.items():
+            dims = game_data.get("dimensions_mm", {})
+            src_key = "gameA" if key == "carA" else "gameB"
+            print(f"  - {key}: {game_data['name']} (ID: {config[src_key].get('id', '?')})")
+            print(f"    GLBパス: {game_data['glb_path']}")
+            length_val = dims.get('length', '?')
+            height_val = dims.get('height', '?')
+            if length_val != '?' and height_val != '?':
+                print(f"    寸法: 全長{length_val}mm x 全高{height_val}mm")
+            else:
+                print(f"    寸法: 全高{height_val}mm")
+        
+        return merged
+    
+    except json.JSONDecodeError as e:
+        print(f"エラー: games_config.json の形式が正しくありません - {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"エラー: ゲームキャラクター設定ファイルの読み込みに失敗しました - {e}")
+        sys.exit(1)
+
+
 def load_cars_config():
     """cars_config.json + cars.db を結合して車の設定辞書を返す
     
@@ -1402,6 +1477,8 @@ def main():
     # shortAnimal モードは animals_config.json を使用
     if CUT_NUMBER == "shortAnimal":
         CARS = load_animals_config()
+    elif CUT_NUMBER == "shortGame":
+        CARS = load_games_config()
     else:
         CARS = load_cars_config()
     
@@ -1421,6 +1498,7 @@ def main():
     # short2/shortAnimal モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
     SHORT2_CONFIG = None
     SHORT_ANIMAL_CONFIG = None
+    SHORT_GAME_CONFIG = None
     if CUT_NUMBER == "short2":
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
@@ -1446,6 +1524,20 @@ def main():
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT_ANIMAL_CONFIG and "grid_color" in SHORT_ANIMAL_CONFIG:
                 apply_grid_color(SHORT_ANIMAL_CONFIG["grid_color"])
+        except Exception as e:
+            import traceback
+            print(f"  ❌ バリエーション設定エラー: {e}")
+            traceback.print_exc()
+    elif CUT_NUMBER == "shortGame":
+        try:
+            strategy_seed = os.environ.get("STRATEGY_SEED", "")
+            print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
+            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            SHORT_GAME_CONFIG = {"grid_color": [0.0, 0.8, 1.0], "clay_color_a": {"color": (0.5, 0.5, 0.5)}, "clay_color_b": {"color": (0.0, 0.7, 1.0)}}
+            print(f"  [DEBUG] SHORT_GAME_CONFIG loaded: {SHORT_GAME_CONFIG is not None}")
+            # グリッド色のみの即時適用（グリッド床面は既に作成済み）
+            if SHORT_GAME_CONFIG and "grid_color" in SHORT_GAME_CONFIG:
+                apply_grid_color(SHORT_GAME_CONFIG["grid_color"])
         except Exception as e:
             import traceback
             print(f"  ❌ バリエーション設定エラー: {e}")
@@ -1517,6 +1609,10 @@ def main():
     # shortAnimalモード: クレイ色の変更を動物のインポート後に適用
     if CUT_NUMBER == "shortAnimal" and SHORT_ANIMAL_CONFIG and "clay_color_a" in SHORT_ANIMAL_CONFIG and "clay_color_b" in SHORT_ANIMAL_CONFIG:
         apply_clay_colors_per_car(SHORT_ANIMAL_CONFIG["clay_color_a"], SHORT_ANIMAL_CONFIG["clay_color_b"])
+
+    # shortGameモード: クレイ色の変更をキャラクターのインポート後に適用
+    if CUT_NUMBER == "shortGame" and SHORT_GAME_CONFIG and "clay_color_a" in SHORT_GAME_CONFIG and "clay_color_b" in SHORT_GAME_CONFIG:
+        apply_clay_colors_per_car(SHORT_GAME_CONFIG["clay_color_a"], SHORT_GAME_CONFIG["clay_color_b"])
     
     # ============================================================
     # 新しい演出：後端を揃えて全長差を可視化（左右配置版）
@@ -1677,6 +1773,13 @@ def main():
         # Human も半透明化（CarB と同期）
         from short_animal_transparency import setup_human_transparency
         setup_human_transparency(human_figure)
+    elif CUT_NUMBER == "shortGame":
+        from animation_settings_shortGame import setup_shortGame_animations
+        SHORT_GAME_TOTAL_FRAMES = 624  # Short2と同じ総フレーム数（約26秒@24fps）
+        print(f"  shortGame: total_frames={SHORT_GAME_TOTAL_FRAMES} (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
+        setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+        scene.frame_end = SHORT_GAME_TOTAL_FRAMES
+        print(f"  shortGame: scene.frame_end={SHORT_GAME_TOTAL_FRAMES} (約{SHORT_GAME_TOTAL_FRAMES/24:.1f}秒)")
     else:
         from animation_settings import setup_all_animations
         
@@ -1795,6 +1898,8 @@ def main():
         output_filename = "short-s_overlap.mp4"
     elif CUT_NUMBER == "shortAnimal":
         output_filename = "shortAnimal_overlap.mp4"
+    elif CUT_NUMBER == "shortGame":
+        output_filename = "shortGame_overlap.mp4"
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         output_filename = f"cut{CUT_NUMBER}.mp4"
     else:
@@ -1818,7 +1923,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16）
-    if CUT_NUMBER in ("short", "short2", "short-s", "shortAnimal"):
+    if CUT_NUMBER in ("short", "short2", "short-s", "shortAnimal", "shortGame"):
         scene.render.resolution_x = 1080
         scene.render.resolution_y = 1920
         scene.render.resolution_percentage = 100
@@ -1858,6 +1963,8 @@ def main():
         blend_output_path = os.path.join(SCRIPT_DIR, "short_s_scene.blend")
     elif CUT_NUMBER == "shortAnimal":
         blend_output_path = os.path.join(SCRIPT_DIR, "shortAnimal_scene.blend")
+    elif CUT_NUMBER == "shortGame":
+        blend_output_path = os.path.join(SCRIPT_DIR, "shortGame_scene.blend")
     elif CUT_NUMBER in ("1", "2", "3", "4", "4b", "5"):
         blend_output_path = os.path.join(SCRIPT_DIR, f"cut{CUT_NUMBER}_scene.blend")
     else:

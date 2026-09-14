@@ -1,0 +1,93 @@
+{
+  "glb_dir": "C:\\3d\\Modly\\glb",
+  "gallery": {
+    "grid_length": 100,
+    "car_spacing": 15,
+    "aisle_width": 5,
+    "camera_height": 1.7,
+    "start_z": -52.5,
+    "end_z": 52.5
+  },
+  "cars": [
+    {
+      "id": "2",
+      "name": "ランドクルーザー250",
+      "glb_filename": "landCluser250-8.5-20000.glb",
+      "side": "left",
+      "index": 0,
+      "rotation_z": 90
+    },
+    {
+      "id": "18",
+      "name": "LFA",
+      "glb_filename": "lfa.glb",
+      "side": "right",
+      "index": 0,
+      "rotation_z": 0
+    },
+    {
+      "id": "14",
+      "name": "TESLA MODEL Y",
+      "glb_filename": "modely.glb",
+      "side": "left",
+      "index": 1,
+      "rotation_z": 90
+    },
+    {
+      "id": "11",
+      "name": "アルファード 2023",
+      "glb_filename": "alphard.glb",
+      "side": "right",
+      "index": 1,
+      "rotation_z": 0
+    },
+    {
+      "id": "29",
+      "name": "ルーミー",
+      "glb_filename": "roomy.glb",
+      "side": "left",
+      "index": 2,
+      "rotation_z": 90
+    },
+    {
+      "id": "21",
+      "name": "ラングラー4ドア",
+      "glb_filename": "wrangler.glb",
+      "side": "right",
+      "index": 2,
+      "rotation_z": 0
+    },
+    {
+      "id": "28",
+      "name": "フェアレディZ32",
+      "glb_filename": "fairladyz32.glb",
+      "side": "left",
+      "index": 3,
+      "rotation_z": 90
+    },
+    {
+      "id": "20",
+      "name": "タコマ SR5",
+      "glb_filename": "tacoma.glb",
+      "side": "right",
+      "index": 3,
+      "rotation_z": 0
+    },
+    {
+      "id": "12",
+      "name": "エルグランド 2026",
+      "glb_filename": "elgland.glb",
+      "side": "left",
+      "index": 4,
+      "rotation_z": 90
+    },
+    {
+      "id": "4",
+      "name": "マツダ CX-5 2026",
+      "glb_filename": "mazdaCx5-2026.glb",
+      "side": "right",
+      "index": 4,
+      "rotation_z": 0
+    }
+  ]
+}

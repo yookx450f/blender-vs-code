@@ -1055,3 +1055,377 @@ def export_animals_to_csv():
     """CSVデータを生成"""
     df = get_all_animals()
     return df.to_csv(index=False, encoding="utf-8-sig")
+
+
+
+# ============================================================
+# ゲームキャラクター用関数群
+# ============================================================
+
+def init_games_table():
+    """gamesテーブルを作成（存在しない場合）"""
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS games (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            glb_filename TEXT DEFAULT '',
+            game_name TEXT DEFAULT '',
+            height REAL DEFAULT 0,
+            length REAL DEFAULT 0,
+            rotation_direction INTEGER DEFAULT 0,
+            color_name TEXT DEFAULT 'グレー'
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info("games テーブルを初期化しました")
+
+
+def init_game_comparisons_table():
+    """game_comparisonsテーブルを作成（存在しない場合）"""
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS game_comparisons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_a_id INTEGER NOT NULL,
+            game_b_id INTEGER NOT NULL,
+            short_status INTEGER DEFAULT 0,
+            long_status INTEGER DEFAULT 0,
+            short_video_url TEXT DEFAULT '',
+            long_video_url TEXT DEFAULT '',
+            short_views INTEGER DEFAULT 0,
+            long_views INTEGER DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (game_a_id) REFERENCES games(id),
+            FOREIGN KEY (game_b_id) REFERENCES games(id),
+            UNIQUE(game_a_id, game_b_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info("game_comparisons テーブルを初期化しました")
+
+
+def get_all_games():
+    """全ゲームキャラクターデータをDataFrameとして取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM games ORDER BY id")
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
+
+
+def get_all_game_comparisons():
+    """全ゲーム比較ペアを取得（キャラクター名付き）"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            c.id, c.game_a_id, c.game_b_id,
+            ga.name AS game_a_name, gb.name AS game_b_name,
+            c.short_status, c.long_status,
+            c.short_video_url, c.long_video_url,
+            c.short_views, c.long_views,
+            c.notes, c.created_at, c.updated_at
+        FROM game_comparisons c
+        LEFT JOIN games ga ON c.game_a_id = ga.id
+        LEFT JOIN games gb ON c.game_b_id = gb.id
+        ORDER BY c.id
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return pd.DataFrame()
+    data = [dict(row) for row in rows]
+    return pd.DataFrame(data)
+
+
+def get_games_db_dict():
+    """gamesテーブルを{id: row_dict}形式で取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM games")
+    rows = cursor.fetchall()
+    conn.close()
+    result = {}
+    for row in rows:
+        rd = dict(row)
+        result[str(rd["id"])] = rd
+    return result
+
+
+def get_game_comparison_by_ids(game_a_id, game_b_id):
+    """IDペアで比較データを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM game_comparisons WHERE (game_a_id=? AND game_b_id=?) OR (game_a_id=? AND game_b_id=?)",
+        (game_a_id, game_b_id, game_b_id, game_a_id)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+
+def create_game_comparison_if_not_exists(game_a_id, game_b_id):
+    """ペアが存在しない場合は自動作成し、IDを返す"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    existing = get_game_comparison_by_ids(game_a_id, game_b_id)
+    if existing:
+        conn.close()
+        return existing["id"]
+    try:
+        cursor.execute(
+            "INSERT INTO game_comparisons (game_a_id, game_b_id) VALUES (?, ?)",
+            (game_a_id, game_b_id)
+        )
+        conn.commit()
+        comp_id = cursor.lastrowid
+        conn.close()
+        return comp_id
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        existing = get_game_comparison_by_ids(game_a_id, game_b_id)
+        conn.close()
+        return existing["id"] if existing else None
+    except Exception:
+        conn.rollback()
+        conn.close()
+        return None
+
+
+def update_game_comparison_full(comp_id, short_status, long_status, short_views, long_views, notes):
+    """ゲーム比較ペアの全情報を一括更新"""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            UPDATE game_comparisons SET
+                short_status=?, long_status=?, short_views=?, long_views=?, notes=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        """, (int(short_status), int(long_status), int(short_views), int(long_views), str(notes), int(comp_id)))
+        conn.commit()
+        conn.close()
+        return True, "更新しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def update_game_comparison_url(comp_id, video_type, url):
+    """YouTube URLを登録 (video_type: 'short' or 'long')"""
+    conn = get_connection()
+    try:
+        if video_type == "short":
+            conn.execute("UPDATE game_comparisons SET short_video_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (url, int(comp_id)))
+        else:
+            conn.execute("UPDATE game_comparisons SET long_video_url=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (url, int(comp_id)))
+        conn.commit()
+        conn.close()
+        return True, "URLを登録しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def delete_game_comparison(comp_id):
+    """ゲーム比較ペアを削除"""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT gc.id, ga.name, gb.name FROM game_comparisons gc LEFT JOIN games ga ON gc.game_a_id=ga.id LEFT JOIN games gb ON gc.game_b_id=gb.id WHERE gc.id=?", (int(comp_id),))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return False, "指定されたIDの比較ペアが見つかりません"
+        cursor.execute("DELETE FROM game_comparisons WHERE id=?", (int(comp_id),))
+        conn.commit()
+        conn.close()
+        ga_name = row.get("game_a_name", "?") or "?"
+        gb_name = row.get("game_b_name", "?") or "?"
+        return True, f"{ga_name} vs {gb_name}"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def set_game_comparison_pair_to_config(game_a_id, game_b_id):
+    """games_config.json に比較ペアを設定（色もDBから取得）"""
+    import json as _json
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "games_config.json")
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM games WHERE id IN (?, ?)", (int(game_a_id), int(game_b_id)))
+        rows = cursor.fetchall()
+        if len(rows) < 2:
+            conn.close()
+            return False, "指定されたキャラクターが見つかりません"
+        data_map = {dict(r)["id"]: dict(r) for r in rows}
+        color_a = CLAY_COLOR_MAP.get(data_map[int(game_a_id)].get("color_name", "グレー"), [0.5, 0.5, 0.5])
+        color_b = CLAY_COLOR_MAP.get(data_map[int(game_b_id)].get("color_name", "グレー"), [0.5, 0.5, 0.5])
+        glb_dir_base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "glb_game")
+        config_data = {
+            "glb_dir": os.path.abspath(glb_dir_base).replace("\\", "/"),
+            "gameA": {"id": str(game_a_id), "color": color_a, "position": [2.0, 0.0, 0]},
+            "gameB": {"id": str(game_b_id), "color": color_b, "position": [-2.0, 0.0, 0]}
+        }
+        with open(config_path, "w", encoding="utf-8") as f:
+            _json.dump(config_data, f, indent=2, ensure_ascii=False)
+        conn.close()
+        name_a = data_map[int(game_a_id)]["name"]
+        name_b = data_map[int(game_b_id)]["name"]
+        return True, f"{name_a} vs {name_b}"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def is_invalid_game_pair(game_a_id, game_b_id):
+    """無効なペア（自己比較）を判定"""
+    if game_a_id == game_b_id:
+        return True
+    return get_game_comparison_by_ids(game_a_id, game_b_id) is not None
+
+
+def get_game_matrix_data():
+    """比較マトリクス用のデータを取得"""
+    games = get_all_games()
+    comparisons = get_all_game_comparisons()
+    status_map = {}
+    if not comparisons.empty:
+        for _, row in comparisons.iterrows():
+            key = (int(row["game_a_id"]), int(row["game_b_id"]))
+            status_map[key] = {
+                "short_status": int(row["short_status"]),
+                "long_status": int(row["long_status"]),
+                "short_views": int(row.get("short_views", 0)),
+                "long_views": int(row.get("long_views", 0)),
+                "short_url": row.get("short_video_url", ""),
+                "long_url": row.get("long_video_url", ""),
+                "notes": row.get("notes", ""),
+            }
+    return games, status_map
+
+
+def get_game_dashboard_stats():
+    """ダッシュボード用の集計データを返す"""
+    comparisons = get_all_game_comparisons()
+    if comparisons.empty:
+        return {"total": 0, "short_done": 0, "long_done": 0, "both_done": 0, "total_short_views": 0, "total_long_views": 0}
+    total = len(comparisons)
+    short_col = "short_status" in comparisons.columns
+    long_col = "long_status" in comparisons.columns
+    sv_col = "short_views" in comparisons.columns
+    lv_col = "long_views" in comparisons.columns
+    short_done = int(((comparisons["short_status"]) >= 2).sum()) if short_col else 0
+    long_done = int(((comparisons["long_status"]) >= 3).sum()) if long_col else 0
+    both_done = short_done + long_done
+    total_short_views = int(comparisons["short_views"].sum()) if sv_col else 0
+    total_long_views = int(comparisons["long_views"].sum()) if lv_col else 0
+    return {
+        "total": total, "short_done": short_done, "long_done": long_done,
+        "both_done": both_done, "total_short_views": total_short_views,
+        "total_long_views": total_long_views,
+    }
+
+
+def add_game(name, glb_filename, game_name, height, length, rotation, color_name="グレー"):
+    """新規ゲームキャラクター追加"""
+    if color_name not in CLAY_COLOR_MAP:
+        color_name = "グレー"
+    conn = get_connection()
+    try:
+        conn.execute("""
+            INSERT INTO games (name, glb_filename, game_name, height, length, rotation_direction, color_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, glb_filename, game_name, float(height), float(length), int(rotation), color_name))
+        conn.commit()
+        new_id = conn.cursor().lastrowid
+        conn.close()
+        return True, new_id
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "キャラクター名の登録に失敗しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def get_game_by_id(game_id):
+    """IDでゲームキャラクターデータを取得"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM games WHERE id = ?", (game_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+
+def update_game(game_id, name, glb_filename, game_name, height, length, rotation, color_name="グレー"):
+    """ゲームキャラクター情報更新"""
+    if color_name not in CLAY_COLOR_MAP:
+        color_name = "グレー"
+    conn = get_connection()
+    try:
+        conn.execute("""
+            UPDATE games SET
+                name = ?, glb_filename = ?, game_name = ?, height = ?, length = ?,
+                rotation_direction = ?, color_name = ?
+            WHERE id = ?
+        """, (name, glb_filename, game_name, float(height), float(length), int(rotation), color_name, game_id))
+        conn.commit()
+        conn.close()
+        return True, "更新しました"
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "キャラクター名の登録に失敗しました"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+
+def delete_game(game_id):
+    """ゲームキャラクターを削除"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM games WHERE id = ?", (game_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False, "指定されたIDのキャラクターが見つかりません"
+    game_name_val = row["name"]
+    cursor.execute("DELETE FROM games WHERE id = ?", (game_id,))
+    conn.commit()
+    conn.close()
+    return True, game_name_val
+
+
+def search_games(query):
+    """キャラクター名で部分一致検索"""
+    conn = get_connection_raw()
+    df = pd.read_sql_query(
+        "SELECT * FROM games WHERE name LIKE ? ORDER BY id",
+        (f"%{query}%",),
+        conn
+    )
+    conn.close()
+    return df
+
+
+def export_games_to_csv():
+    """CSVデータを生成"""
+    df = get_all_games()
+    return df.to_csv(index=False, encoding="utf-8-sig")

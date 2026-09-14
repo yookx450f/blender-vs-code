@@ -13,6 +13,7 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py short2       # ショート動画v2（縦長9:16、キーフレーム半透明、フレーム0-624）
     python run.py short-s      # ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了／終端フレーム自動計算）
     python run.py shortAnimal  # 動物ショート動画（縦長9:16、背面壁面グリッド付き、フレーム0-624、約26秒@24fps）
+    python run.py shortGame    # ゲームキャラクターショート動画（縦長9:16、Short2構造、約26秒@24fps）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -41,6 +42,7 @@ CUTS = {
     # 「両車GOAL到達+ゴール後3秒」を自動計算して終了フレームとする（定加速度モデル）
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
     "shortAnimal": {"start": 0, "end": 960, "label": "動物ショート動画（縦長9:16、カット1削除済み、約40秒@24fps）"},
+    "shortGame": {"start": 0, "end": 624, "label": "ゲームキャラクターショート動画（縦長9:16、Short2構造、約26秒@24fps）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -159,7 +161,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     """Blenderをコマンドラインから起動してスクリプトを実行する
     
     Parameters:
-        seed: Short2バリエーションのランダムシード (None=自動生成)
+        seed: Short2/ShortGameバリエーションのランダムシード (None=自動生成)
     """
 
     if scene_script is None:
@@ -181,7 +183,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     # 単一カット実行
     cut_info = CUTS.get(cut_number)
     if not cut_info:
-        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal")
+        print(f"エラー: 無効なカット番号 '{cut_number}' です。使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal, shortGame")
         return False
 
     frame_start = cut_info["start"]
@@ -231,12 +233,17 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     env["SHORT2_EXTRA_FRAMES"] = str(extra_frames)
     env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
     
-    # Short2/ShortAnimalバリエーションのシード値を渡す
-    if cut_number in ("short2", "shortAnimal"):
+    # Short2/ShortAnimal/ShortGameバリエーションのシード値を渡す
+    if cut_number in ("short2", "shortAnimal", "shortGame"):
         if seed is None:
             seed = random.randint(1, 999999)
         env["STRATEGY_SEED"] = str(seed)
-        mode_name = "Short2" if cut_number == "short2" else "ShortAnimal"
+        if cut_number == "short2":
+            mode_name = "Short2"
+        elif cut_number == "shortGame":
+            mode_name = "ShortGame"
+        else:
+            mode_name = "ShortAnimal"
         print(f"{mode_name} バリエーションシード: {seed}")
     
     # BlenderのPythonパスにスクリプトディレクトリを追加
@@ -287,14 +294,14 @@ def main():
     parser.add_argument("--render", action="store_true",
                         help="アニメーションレンダリングを実行（EEVEE、FFMPEGで直接MP4出力）")
     parser.add_argument("--seed", type=int, default=None,
-                        help="Short2バリエーションのランダムシード (指定すると再現可能)")
+                        help="Short2/ShortGameバリエーションのランダムシード (指定すると再現可能)")
 
     args = parser.parse_args()
 
     # カット番号の検証
     if args.cut not in CUTS:
         print(f"エラー: 無効なカット番号 '{args.cut}' です。")
-        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal")
+        print(f"使用可能な値: all, 1, 2, 3, 4, 4b, 5, short, short2, short-s, shortAnimal, shortGame")
         sys.exit(1)
 
     success = run_blender(
