@@ -150,6 +150,51 @@ def load_animals_db():
     return animals_db
 
 
+def load_games_db():
+    """SQLiteデータベース (cars.db) からゲームキャラクターマスターデータを辞書として読み込む"""
+    db_path = os.path.join(SCRIPT_DIR, "cars.db")
+    
+    if not os.path.exists(db_path):
+        print(f"エラー: データベースが見つかりません - {db_path}")
+        sys.exit(1)
+    
+    games_db = {}
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # gamesテーブルが存在するか確認
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='games'")
+        if not cursor.fetchone():
+            print("エラー: games テーブルが見つかりません")
+            print("pages/01_ゲームキャラ一覧.py でキャラクターデータを登録してください。")
+            conn.close()
+            sys.exit(1)
+        
+        cursor.execute("SELECT * FROM games")
+        
+        for row in cursor.fetchall():
+            game_id = str(row["id"])
+            games_db[game_id] = {
+                "name": row["name"],
+                "glb_filename": row["glb_filename"],
+                "game_name": row["game_name"],
+                "height": row["height"],
+                "length": row["length"],
+                "rotation_direction": row["rotation_direction"],
+                "color_name": row["color_name"]
+            }
+        
+        conn.close()
+        print(f"ゲームキャラクターマスターDBを読み込みました: {db_path} ({len(games_db)} 種類)")
+    except Exception as e:
+        print(f"エラー: games テーブルの読み込みに失敗しました - {e}")
+        sys.exit(1)
+    
+    return games_db
+
+
 def load_animals_config():
     """animals_config.json + cars.db(animalsテーブル) を結合して動物の設定辞書を返す
     
@@ -798,8 +843,11 @@ def create_clay_material(name, color, emission=None, emission_strength=0.0):
     
     return material
 
-def create_human_figure(location=(-2.8, 0.0, 0.0), height_m=1.7, rotation_z_degrees=0):
+def create_human_figure(location=(-2.8, 0.0, 0.0), height_m=1.7, rotation_z_degrees=0, color_rgb=(0.35, 0.35, 0.35)):
     """human.glb をインポートして人間フィギュアを作成（高さ比較用）
+
+    Parameters:
+        color_rgb: クレイマテリアルの色 (R, G, B) デフォルトは暗いグレー
     
     Parameters:
         location: 配置位置 (x, y, z) デフォルトは左側(-1.8, 0.0, 0.0)
@@ -1263,10 +1311,14 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
     text_obj.data.align_x = 'CENTER'  # 水平方向を中央揃えに設定
     text_obj.data.align_y = 'CENTER'  # 垂直方向も中央揃えに設定
     
-    # 太字フォントを指定（Windows標準のメイリオ太字）
-    bold_font_path = r"C:\Windows\Fonts\mebold.ttc"
-    if os.path.exists(bold_font_path):
-        text_obj.data.font = bpy.data.fonts.load(bold_font_path)
+    # 日本語フォントを指定（Yu Gothic Bold を優先、メイリオ太字をフォールバック）
+    jp_font_path = r"C:\Windows\Fonts\yugothlb.ttc"
+    if not os.path.exists(jp_font_path):
+        jp_font_path = r"C:\Windows\Fonts\meiryob.ttc"
+    if not os.path.exists(jp_font_path):
+        jp_font_path = r"C:\Windows\Fonts\mebold.ttc"
+    if os.path.exists(jp_font_path):
+        text_obj.data.font = bpy.data.fonts.load(jp_font_path)
     text_obj.scale = (1.0, 1.0, 1.0)
     
     car_object.update_tag()
@@ -1330,6 +1382,106 @@ def create_glowing_text_label_short2(car_key, car_object, text_content, color_rg
     
     print(f"3Dテキストラベル作成完了 (short2): {text_obj.name} -> '{text_content}' "
           f"(ワールド中心: X={world_center_x:.3f}, Y={world_center_y:.3f}, Z={text_z_world:.3f}, "
+          f"ペアレント: {car_object.name})")
+
+def create_glowing_text_label_shortGame(car_key, car_object, text_content, color_rgb):
+    """shortGame用: キャラクターの中心Xに合わせて床面に配置される発光3Dテキストラベル
+    
+    X=キャラクターのワールド中心X、Y=キャラクターの前面寄りに配置、Z=床面直上(Z≈0.02)。
+    テキストはペアレント設定でキャラクターに追従する。
+    """
+    if car_object is None:
+        print(f"エラー: {car_key} のオブジェクトがNoneです")
+        return
+    
+    bpy.ops.object.text_add(location=(0, 0, 0))
+    text_obj = bpy.context.active_object
+    text_obj.name = f"label_{car_key}"
+    
+    text_obj.data.body = text_content
+    # テキストサイズは一旦デフォルト（後でキャラクター寸法に応じて動的に調整）
+    text_obj.data.size = 0.35
+    text_obj.data.extrude = 0.025
+    text_obj.data.align_x = 'CENTER'
+    text_obj.data.align_y = 'CENTER'
+    
+    # 日本語フォントを指定（Yu Gothic Bold を優先、メイリオ太字をフォールバック）
+    jp_font_path = r"C:\Windows\Fonts\yugothlb.ttc"
+    if not os.path.exists(jp_font_path):
+        jp_font_path = r"C:\Windows\Fonts\meiryob.ttc"
+    if not os.path.exists(jp_font_path):
+        jp_font_path = r"C:\Windows\Fonts\mebold.ttc"
+    if os.path.exists(jp_font_path):
+        text_obj.data.font = bpy.data.fonts.load(jp_font_path)
+        print(f"  フォント: {jp_font_path}")
+    text_obj.scale = (1.0, 1.0, 1.0)
+    
+    car_object.update_tag()
+    bpy.context.view_layer.update()
+    
+    local_bounds = car_object.bound_box
+    if not local_bounds:
+        print(f"警告: {car_object.name} のバウンディングボックスが取得できません")
+        return
+    
+    # ワールド座標でバウンディングボックスを計算
+    corners_world = [car_object.matrix_world @ Vector(corner) for corner in local_bounds]
+    
+    world_center_x = (min(c.x for c in corners_world) + max(c.x for c in corners_world)) / 2.0
+    world_min_y = min(c.y for c in corners_world)
+    world_max_y = max(c.y for c in corners_world)
+    world_car_length_y = world_max_y - world_min_y
+    
+    # テキストサイズをキャラクターの寸法に合わせて動的に調整
+    # デフォルト0.35mをベースに、キャラ全長に応じて拡大
+    base_text_size = 0.35
+    text_scale_from_length = max(1.0, world_car_length_y / 4.0)  # 4m以上で拡大開始（成長率半分）
+    text_obj.data.size = base_text_size * text_scale_from_length
+    
+    # X位置: キャラクターの中心X
+    text_x_world = world_center_x
+    # Y位置: キャラクターの後方（カメラ寄り、Y負方向）
+    text_y_world = world_min_y - world_car_length_y * 0.15 - 0.3
+    # Z位置: 床面直上
+    text_z_world = 0.02
+    
+    # まず一時的な位置に設定（ペアレント用）
+    text_obj.location = (0, 0, 0)
+    
+    # テキストはデフォルトのXY平面（上向き）を維持（カメラ向けには回転しない）
+    text_obj.rotation_euler = (0, 0, 0)
+    
+    mat_name = f"emission_label_{car_key}"
+    if mat_name in bpy.data.materials:
+        emission_mat = bpy.data.materials[mat_name]
+    else:
+        emission_mat = bpy.data.materials.new(name=mat_name)
+        emission_mat.use_nodes = True
+        nodes = emission_mat.node_tree.nodes
+        links = emission_mat.node_tree.links
+        nodes.clear()
+        output_node = nodes.new(type='ShaderNodeOutputMaterial')
+        output_node.location = (400, 0)
+        emission_node = nodes.new(type='ShaderNodeEmission')
+        emission_node.location = (100, 0)
+        adjusted_color = color_rgb
+        if car_key == "carB" and color_rgb[2] > color_rgb[0]:
+            adjusted_color = (0.0, 0.7, 1.0)
+        emission_node.inputs['Color'].default_value = (*adjusted_color, 1.0)
+        emission_node.inputs['Strength'].default_value = 5.0
+        links.new(emission_node.outputs['Emission'], output_node.inputs['Surface'])
+    
+    text_obj.data.materials.clear()
+    text_obj.data.materials.append(emission_mat)
+    
+    # テキストをキャラクターにペアレント設定
+    text_obj.parent = car_object
+    
+    # ペアレント設定後、ワールド座標で目標位置に直接配置（回転なし）
+    text_obj.matrix_world = Matrix.Translation((text_x_world, text_y_world, text_z_world))
+    
+    print(f"3Dテキストラベル作成完了 (shortGame): {text_obj.name} -> '{text_content}' "
+          f"(ワールド中心: X={world_center_x:.3f}, Y={text_y_world:.3f}, Z={text_z_world:.3f}, "
           f"ペアレント: {car_object.name})")
 
 def create_glowing_text_label(car_key, car_object, text_content, color_rgb, shared_rear_y=None):
@@ -1533,7 +1685,15 @@ def main():
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
             from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
-            SHORT_GAME_CONFIG = {"grid_color": [0.0, 0.8, 1.0], "clay_color_a": {"color": (0.5, 0.5, 0.5)}, "clay_color_b": {"color": (0.0, 0.7, 1.0)}}
+            # ゲームキャラクターの設定からクレイ色を取得（games_config.jsonのcolor配列を使用）
+            game_color_a = CARS.get("carA", {}).get("color", (0.5, 0.5, 0.5))
+            game_color_b = CARS.get("carB", {}).get("color", (0.0, 0.7, 1.0))
+            print(f"  ゲームキャラクタークレイ色: carA={game_color_a}, carB={game_color_b}")
+            SHORT_GAME_CONFIG = {
+                "grid_color": {"name": "cyan", "color": (0.0, 0.8, 1.0), "emission": 2.0},
+                "clay_color_a": {"name": "carA_clay", "color": game_color_a},
+                "clay_color_b": {"name": "carB_clay", "color": game_color_b}
+            }
             print(f"  [DEBUG] SHORT_GAME_CONFIG loaded: {SHORT_GAME_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT_GAME_CONFIG and "grid_color" in SHORT_GAME_CONFIG:
@@ -1777,9 +1937,60 @@ def main():
         from animation_settings_shortGame import setup_shortGame_animations
         SHORT_GAME_TOTAL_FRAMES = 624  # Short2と同じ総フレーム数（約26秒@24fps）
         print(f"  shortGame: total_frames={SHORT_GAME_TOTAL_FRAMES} (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
-        setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions)
+        
+        # ゲームキャラクターの寸法情報を抽出（動的スケーリング用）
+        game_dimensions = {}
+        for key, game_data in CARS.items():
+            dims = game_data.get("dimensions_mm", {})
+            game_dimensions[key] = {
+                "length": dims.get("length", 0),
+                "height": dims.get("height", 0),
+            }
+        
+        setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, char_dimensions=game_dimensions)
         scene.frame_end = SHORT_GAME_TOTAL_FRAMES
         print(f"  shortGame: scene.frame_end={SHORT_GAME_TOTAL_FRAMES} (約{SHORT_GAME_TOTAL_FRAMES/24:.1f}秒)")
+        
+        # ゲームキャラクターショート動画に人間フィギュアを追加（高さ比較用）
+        # DB から human の rotation_direction を取得する
+        games_db_for_human = load_games_db()
+        human_rotation = 0
+        for gid, gdata in games_db_for_human.items():
+            if "human" in gdata.get("glb_filename", "").lower():
+                human_rotation = gdata.get("rotation_direction", 0)
+                break
+        
+        # キャラクターの最大寸法からヒューマンの位置を動的に決定
+        max_height_mm = 0
+        for key, dims in game_dimensions.items():
+            h = dims.get("height", 0)
+            if h > max_height_mm:
+                max_height_mm = h
+        # メートルに変換（デフォルト1.7m）
+        base_size_m = 2.0
+        human_scale_factor = (max_height_mm / 1000.0) / base_size_m if max_height_mm > 0 else 1.0
+        human_scale_factor = max(0.8, min(4.0, human_scale_factor))
+        
+        # X位置: キャラクター外側に配置（スケールに合わせて離す）
+        char_scale_local = human_scale_factor ** 0.5
+        human_x = 1.25 * char_scale_local * 2.5
+        # Y位置: カメラ寄り（約-5m程度）に配置
+        human_y = -5.0
+        
+        # Z軸回転: キャラクター中央を見るように回転（右側から見る→-90度）
+        human_z_rotation = human_rotation if human_rotation != 0 else -90
+        
+        # Humanのクレイ色: carBの色を使用（半透明キャラと同じトーンに合わせる）
+        human_color_rgb = CARS.get("carB", {}).get("color", (0.35, 0.35, 0.35))
+        
+        print(f"  ヒューマンのDB回転角度: {human_rotation}度 → 適用回転: {human_z_rotation}度")
+        print(f"  ヒューマン位置: ({human_x:.2f}, {human_y:.2f}, 0.0) スケール倍率={human_scale_factor:.2f}")
+        print(f"  ヒューマンの色: {human_color_rgb}")
+        human_figure = create_human_figure(location=(human_x, human_y, 0.0), height_m=1.7, rotation_z_degrees=human_z_rotation, color_rgb=human_color_rgb)
+        
+        # Human も半透明化（同期）
+        from short_animal_transparency import setup_human_transparency
+        setup_human_transparency(human_figure)
     else:
         from animation_settings import setup_all_animations
         
@@ -1854,6 +2065,8 @@ def main():
         # 発光テキストを作成（ペアレント設定含む）
         if CUT_NUMBER == "short2":
             create_glowing_text_label_short2(key, car_obj, text_content, color_rgb)
+        elif CUT_NUMBER == "shortGame":
+            create_glowing_text_label_shortGame(key, car_obj, text_content, color_rgb)
         else:
             create_glowing_text_label(key, car_obj, text_content, color_rgb, shared_rear_y=shared_rear_y)
     
