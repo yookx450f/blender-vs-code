@@ -1121,11 +1121,11 @@ def setup_camera_and_lighting():
     # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
     # ライトもカメラの位置に合わせて調整（より広い照明範囲に）
     # カメラ位置 (8.5, -8.5, 4.5) から見た相対位置を維持しつつ1.7倍に拡大
-    bpy.ops.object.light_add(type='AREA', location=(4.0, -8.5*0.6, 7))
+    bpy.ops.object.light_add(type='AREA', location=(4.0, -8.5*0.6, 12))
     key_light = bpy.context.active_object
     key_light.name = "KeyLight"
-    key_light.data.energy = 800  # さらに明るさを抑える
-    key_light.data.size = 3
+    key_light.data.energy = 1500  # 巨大キャラの上部まで明るく照らす
+    key_light.data.size = 5
     key_light.data.shadow_soft_size = 1.0
     # 照射距離を無限に設定（Distance=0）
     key_light.data.use_shadow = True
@@ -1135,11 +1135,11 @@ def setup_camera_and_lighting():
         key_light.data.use_custom_distance = False
     
     # SubLightもカメラに合わせて拡大
-    bpy.ops.object.light_add(type='AREA', location=(-8.5*0.6, 8.5*0.6, 6))
+    bpy.ops.object.light_add(type='AREA', location=(-8.5*0.6, 8.5*0.6, 10))
     sub_light = bpy.context.active_object
     sub_light.name = "SubLight"
-    sub_light.data.energy = 800  # さらに明るさを抑える
-    sub_light.data.size = 2
+    sub_light.data.energy = 1200  # 巨大キャラの影を柔らかく照らす
+    sub_light.data.size = 4
     sub_light.data.shadow_soft_size = 1.0
     if hasattr(sub_light.data, 'distance'):
         sub_light.data.distance = 0  # 0=無限
@@ -1147,10 +1147,10 @@ def setup_camera_and_lighting():
         sub_light.data.use_custom_distance = False
     
     # RimLightもカメラに合わせて拡大
-    bpy.ops.object.light_add(type='SPOT', location=(0, 7*1.7, 5))
+    bpy.ops.object.light_add(type='SPOT', location=(0, 7*1.7, 12))
     rim_light = bpy.context.active_object
     rim_light.name = "RimLight"
-    rim_light.data.energy = 800  # さらに明るさを抑える
+    rim_light.data.energy = 1500  # 巨大キャラのエッジ光を強化
     rim_light.data.spot_size = 1.2
     if hasattr(rim_light.data, 'distance'):
         rim_light.data.distance = 0  # 0=無限
@@ -1435,7 +1435,7 @@ def create_glowing_text_label_shortGame(car_key, car_object, text_content, color
     # テキストサイズをキャラクターの寸法に合わせて動的に調整
     # デフォルト0.35mをベースに、キャラ全長に応じて拡大
     base_text_size = 0.35
-    text_scale_from_length = max(1.0, world_car_length_y / 4.0)  # 4m以上で拡大開始（成長率半分）
+    text_scale_from_length = max(1.0, world_car_length_y / 6.25)  # 6.25m以上で拡大開始（成長率さらに0.8倍に抑える）
     text_obj.data.size = base_text_size * text_scale_from_length
     
     # X位置: キャラクターの中心X
