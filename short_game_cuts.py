@@ -7,7 +7,7 @@ ShortGame - カット1・カット2 の位置アニメーションモジュー�
 フレーム定義 (24fps):
   カット1: fr0-288 (約12秒) — キャラクターが中央へスライド + 円弧パンニング
   カット2A: fr289-456 (7秒) — トップダウンビューへ移動 (イージング) + キャラクターズスライド開始
-  カット2B: fr457-624 (7秒) — カメラ復帰 (イージング) + CarB不透明化 + キャラクターズスライド完了
+  カット2B: fr457-624 (7秒) — カメラ復帰 (イージング) + CharB不透明化 + キャラクターズスライド完了
 
 使い方:
     from short_game_cuts import (
@@ -103,14 +103,24 @@ def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_
     _set_location_keyframe(char_b, cut1_end, char_b_end[0], char_b_end[1], char_b_end[2])
 
     # --- カメラ円弧パンニング（バリエーション設定適用） ---
+    # 動的スケーリング: strategy_config からスケール情報を取得
+    scale_factor = 1.0
+    if strategy_config and "scale_factor" in strategy_config:
+        scale_factor = strategy_config["scale_factor"]
+
     if strategy_config and "camera_pattern" in strategy_config:
         cam_pattern = strategy_config["camera_pattern"]
         cam_start = tuple(cam_pattern["start_position"])
         total_rotation = cam_pattern["total_rotation"]
         print(f"  カメラパターン: {cam_pattern['name']} (start={cam_start})")
     else:
-        cam_start = (-3.0, -6.0, 3.5)
+        # スケール適用後のデフォルトカメラ位置
+        cam_start_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
+        cam_start_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
+        cam_start_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
+        cam_start = (cam_start_x, cam_start_y, cam_start_z)
         total_rotation = -0.85
+        print(f"  デフォルトカメラ位置（スケール{scale_factor:.2f}適用）: {cam_start}")
 
     arc_radius = math.sqrt(cam_start[0]**2 + cam_start[1]**2)
     arc_height = cam_start[2]
@@ -148,211 +158,191 @@ def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_
 
         # ズーム区間内か判定
         if zoom_start_frame <= frame <= zoom_end_frame:
-            zoom_t = (frame - zoom_start_frame) / max(1, zoom_end_frame - zoom_start_frame)
-            zoom_factor = 1.0 - 0.35 * zoom_t  # 最大35%ズームイン
-            adjusted_radius = arc_radius * zoom_factor
-            cam_x = adjusted_radius * math.sin(angle)
-            cam_y = adjusted_radius * math.cos(angle)
-            cam_z = arc_height * (1.0 - 0.2 * zoom_t)  # 少し下げる
+            zoom_progress = (frame - zoom_start_frame) / (zoom_end_frame - zoom_start_frame + 1)
+            current_radius = arc_radius * (1.0 - 0.2 * zoom_progress)
+            current_height = arc_height * (1.0 - 0.15 * zoom_progress)
+            x = current_radius * math.sin(angle)
+            y = current_radius * math.cos(angle)
+            cam_pos = (x, y, current_height)
         else:
-            cam_x, cam_y, cam_z = get_cam_on_arc(angle)
+            cam_pos = get_cam_on_arc(angle)
 
-        cam_pos = (cam_x, cam_y, cam_z)
-
-        # カメラの位置キーフレームを設定（制限付き）
-        _set_camera_location_keyframe(camera, frame, cam_pos)
-
-        # カメラは常にターゲットを見るように回転させる
-        set_camera_look_at(camera, target)
-        _set_rotation_keyframe(camera, frame, camera.rotation_euler)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
         final_cam_pos = cam_pos
-        final_rot = (camera.rotation_euler.x, camera.rotation_euler.y, camera.rotation_euler.z)
+        final_rot = camera.rotation_quaternion.copy()
 
-    print(f"  カット1完了: 最終カメラ位置={final_cam_pos}, ターゲット={target}")
+    if zoom_start_frame <= cut1_end:
+        print(f"  [fr{zoom_start_frame}-{zoom_end_frame}] カメラズームイン追加 (半径100%→80%)")
+
+    print(f"  [fr{cut1_start}-{cut1_end}] charA: {char_a_start} → {char_a_end}")
+    print(f"  [fr{cut1_start}-{cut1_end}] charB: {char_b_start} → {char_b_end}")
+    print(f"  [fr{cut1_end}] カメラパンニング完了: {math.degrees(total_rotation_scaled):.1f}°回転")
+
     return {
-        "camera_loc": final_cam_pos,
-        "camera_rot": final_rot,
-        "char_a_pos": char_a_end,
-        "char_b_pos": char_b_end,
+        'camera_loc': final_cam_pos,
+        'camera_rot': camera.rotation_euler.copy(),
     }
 
 
-def setup_cut2_phase_a_topdown(camera, char_a, char_b, 
-                               char_a_overlap, char_b_overlap,
-                               topdown_char_offset=0.6,
-                               strategy_config=None, cut_frames=None):
+def _interpolate_char_position(start_pos, end_pos, progress):
+    """キャラクターの位置を補間するヘルパー関数"""
+    x = start_pos[0] + (end_pos[0] - start_pos[0]) * progress
+    y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress
+    z = start_pos[2] + (end_pos[2] - start_pos[2]) * progress
+    return (x, y, z)
+
+
+def setup_cut2_phase_a_topdown(camera, char_a, char_b, char_a_start, char_a_end, char_b_start, char_b_end, cut1_final_cam, strategy_config=None, cut_frames=None):
     """
-    カット2 フェーズA: トップダウンビューへの移動（イージング適用）
+    カット2 フェーズA: トップダウンビューへ移動 + キャラクターは中央で静止。
+
+    カメラ: カット1終了位置 → バリエーション設定に基づくトップダウン位置
+    キャラクター: 中央集合位置で静止（フェーズBでスライド開始）
+
+    Parameters:
+        cut1_final_cam: カット1終了時のカメラ位置 (x, y, z)
+        cut_frames: dict with keys cut2a_start, cut2a_end (None時はデフォルト値を使用)
 
     Returns:
-        dict: フェーズA終了時の状態情報 (camera_loc, camera_rot)
+        dict: フェーズA終了時のカメラ情報
     """
+    # フレーム値を取得
     cut2a_start = cut_frames.get("cut2a_start", DEFAULT_CUT_FRAMES["cut2a_start"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2a_start"]
     cut2a_end = cut_frames.get("cut2a_end", DEFAULT_CUT_FRAMES["cut2a_end"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2a_end"]
 
-    print(f"\n  === カット2 フェーズA: トップダウンビューへ移動 (fr{cut2a_start}-{cut2a_end}) ===")
+    print(f"\n  === カット2 フェーズA: トップダウンビューへ移動 + キャラクター中央静止 (fr{cut2a_start}-{cut2a_end}, イージング) ===")
+
+    # バリエーション設定からトップダウン位置を取得
+    if strategy_config and "topdown_variation" in strategy_config:
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → {top_down_pos}")
+    else:
+        # スケール適用後のデフォルトトップダウン位置
+        td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, td_z)
 
     # イージング関数の取得
-    easing = _get_easing_func(strategy_config)
+    ease_func = _get_easing_func(strategy_config)
 
-    # --- カメラのトップダウンへの円弧移動 ---
-    start_pos = tuple(camera.location)
-    
-    # キャラクターの最高部を考慮して、より高い位置から上から見下ろす（トップダウンビュー）
-    topdown_target_height = 12.0  # トップダウン用高度
-    topdown_radius = 2.5  # ほぼ真上
-    
-    # トップダウンでの半径と角度を計算
-    start_angle_rad = math.atan2(start_pos[0], start_pos[1])
-    end_x = topdown_radius * math.sin(start_angle_rad)
-    end_y = topdown_radius * math.cos(start_angle_rad)
-    
-    # 回転: 真上を見るように（X軸で90度回転）
-    end_rot = (math.radians(90), 0, 0)
+    target = (0.0, 0.0, 1.0)
+    keyframe_interval = 8  # 24→8に狭めてカメラ回転を滑らかに
 
-    phase_a_duration = cut2a_end - cut2a_start + 1
-    
-    # --- カメラキーフレームを8フレーム間隔で設定 ---
-    for frame in range(cut2a_start, cut2a_end + 1, 8):
-        t = (frame - cut2a_start) / phase_a_duration if phase_a_duration > 0 else 0
-        eased_t = easing(t)
+    # cut2a_startで明確なカメラキーフレームを設定（前回の残骸とのgapを防止）
+    _set_camera_keyframe(camera, cut2a_start, cut1_final_cam, target)
 
-        # カメラ位置を補間
-        cx = start_pos[0] + (end_x - start_pos[0]) * eased_t
-        cy = start_pos[1] + (end_y - start_pos[1]) * eased_t
-        cz = start_pos[2] + (topdown_target_height - start_pos[2]) * eased_t
+    # カメラのキーフレーム
+    phase_a_frames = list(range(cut2a_start, cut2a_end + 1, keyframe_interval))
+    if phase_a_frames[-1] != cut2a_end:
+        phase_a_frames.append(cut2a_end)
+    num_segments = len(phase_a_frames) - 1
 
-        # カメラの位置を更新
-        _set_camera_location_keyframe(camera, frame, (cx, cy, cz))
+    for i, frame in enumerate(phase_a_frames):
+        # カメラの補間（イージング適用）
+        raw_progress = i / num_segments if num_segments > 0 else 0
+        cam_progress = ease_func(raw_progress)
+        cam_x = cut1_final_cam[0] + (top_down_pos[0] - cut1_final_cam[0]) * cam_progress
+        cam_y = cut1_final_cam[1] + (top_down_pos[1] - cut1_final_cam[1]) * cam_progress
+        cam_z = cut1_final_cam[2] + (top_down_pos[2] - cut1_final_cam[2]) * cam_progress
+        cam_pos = (cam_x, cam_y, cam_z)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
-        # 回転も補間（上を向くように）
-        rx = start_pos[0] and camera.rotation_euler.x + (end_rot[0] - camera.rotation_euler.x) * eased_t if False else end_rot[0] * eased_t
-        ry = end_rot[1] * eased_t
-        rz = end_rot[2] * eased_t
-        _set_rotation_keyframe(camera, frame, (rx, ry, rz))
+        # キャラクターは中央集合位置で静止（重なったまま）
+        _set_location_keyframe(char_a, frame, char_a_end[0], char_a_end[1], char_a_end[2])
+        _set_location_keyframe(char_b, frame, char_b_end[0], char_b_end[1], char_b_end[2])
 
-    # 最終フレームを確実に設定
-    final_cam_pos_topdown = (end_x, end_y, topdown_target_height)
-    _set_camera_location_keyframe(camera, cut2a_end, final_cam_pos_topdown)
-    _set_rotation_keyframe(camera, cut2a_end, end_rot)
+    print(f"  [fr{cut2a_start}-{cut2a_end}] カメラ: {cut1_final_cam} → {top_down_pos}")
+    print(f"  キャラクター: 中央集合位置で静止（フェーズBでスライド開始）")
 
-    # --- キャラクターはフェーズAでもスライドを開始（イージング適用）---
-    char_a_slide_start = tuple(char_a_overlap)
-    char_b_slide_start = tuple(char_b_overlap)
-
-    # トップダウンではキャラクターを中央から少し離す
-    char_a_topdown = (char_a_overlap[0] - topdown_char_offset, char_a_overlap[1], char_a_overlap[2])
-    char_b_topdown = (char_b_overlap[0] + topdown_char_offset, char_b_overlap[1], char_b_overlap[2])
-
-    for frame in range(cut2a_start, cut2a_end + 1, 8):
-        t = (frame - cut2a_start) / phase_a_duration if phase_a_duration > 0 else 0
-        eased_t = easing(t)
-
-        ax = char_a_slide_start[0] + (char_a_topdown[0] - char_a_slide_start[0]) * eased_t
-        ay = char_a_slide_start[1] + (char_a_topdown[1] - char_a_slide_start[1]) * eased_t
-        _set_location_keyframe(char_a, frame, ax, ay, char_a_overlap[2])
-
-        bx = char_b_slide_start[0] + (char_b_topdown[0] - char_b_slide_start[0]) * eased_t
-        by = char_b_slide_start[1] + (char_b_topdown[1] - char_b_slide_start[1]) * eased_t
-        _set_location_keyframe(char_b, frame, bx, by, char_b_overlap[2])
-
-    # 最終フレームを確実に設定
-    _set_location_keyframe(char_a, cut2a_end, char_a_topdown[0], char_a_topdown[1], char_a_topdown[2])
-    _set_location_keyframe(char_b, cut2a_end, char_b_topdown[0], char_b_topdown[1], char_b_topdown[2])
-
-    print(f"  フェーズA完了: カメラ→({end_x:.2f}, {end_y:.2f}, {topdown_target_height}), 回転→{end_rot}")
-    return {
-        "camera_loc": final_cam_pos_topdown,
-        "camera_rot": end_rot,
-        "char_a_pos": char_a_topdown,
-        "char_b_pos": char_b_topdown,
-    }
+    return {'camera_loc': top_down_pos}
 
 
-def setup_cut2_phase_b_camera_return(camera, char_a, char_b,
-                                     topdown_camera_pos, topdown_char_a_pos, topdown_char_b_pos,
-                                     target_camera_height=3.5, strategy_config=None, cut_frames=None):
+def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_a_end, char_b_start, char_b_end, strategy_config=None, cut_frames=None):
     """
-    カット2 フェーズB: カメラを元の位置へ復帰（イージング適用）
-                 + キャラクターのスライド復帰
-                 + CharBの不透明化
+    カット2 フェーズB: カメラ開始位置へ復帰 + CharB不透明化 + キャラクターズスライド。
+
+    カメラ: トップダウン位置 → バリエーション設定に基づく復帰位置
+    キャラクター: 中央集合位置からカット1開始位置へスライド開始 → cut2b_endで到達
+
+    Parameters:
+        strategy_config: バリエーション設定辞書（オプション）
+        cut_frames: dict with keys cut2b_start, cut2b_end (None時はデフォルト値を使用)
 
     Returns:
-        dict: フェーズB終了時の状態情報 (camera_loc, camera_rot)
+        dict: フェーズB終了時のカメラ情報
     """
+    # フレーム値を取得
     cut2b_start = cut_frames.get("cut2b_start", DEFAULT_CUT_FRAMES["cut2b_start"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2b_start"]
     cut2b_end = cut_frames.get("cut2b_end", DEFAULT_CUT_FRAMES["cut2b_end"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2b_end"]
 
-    print(f"\n  === カット2 フェーズB: カメラ復帰 + キャラクター復帰 (fr{cut2b_start}-{cut2b_end}) ===")
+    print(f"\n  === カット2 フェーズB: カメラ開始位置へ復帰 + キャラクターズスライド (fr{cut2b_start}-{cut2b_end}, イージング) ===")
+
+    # バリエーション設定から復帰カメラ位置を取得
+    if strategy_config and "camera_pattern" in strategy_config:
+        cam_return_pos = tuple(strategy_config["camera_pattern"]["start_position"])
+        print(f"  カメラ復帰先: {cam_return_pos}")
+    else:
+        # スケール適用後のデフォルトカメラ復帰位置
+        cr_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
+        cr_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
+        cr_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
+        cam_return_pos = (cr_x, cr_y, cr_z)
+
+    # トップダウン位置もバリエーションから取得
+    if strategy_config and "topdown_variation" in strategy_config:
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+    else:
+        td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, td_z)
 
     # イージング関数の取得
-    easing = _get_easing_func(strategy_config)
+    ease_func = _get_easing_func(strategy_config)
 
-    # --- カメラの元の位置への円弧復帰 ---
-    start_pos = tuple(topdown_camera_pos) if topdown_camera_pos else (0, 0, 12.0)
-    
-    end_angle_rad = math.atan2(start_pos[0], max(0.01, abs(start_pos[1]))) + math.pi  # 反対側へ戻る
-    final_radius = 6.0
-    end_x = final_radius * math.sin(end_angle_rad)
-    end_y = final_radius * math.cos(end_angle_rad)
-    end_z = target_camera_height
-    
-    end_rot = (math.radians(-30), 0, 0)  # 少し下を見る
+    target = (0.0, 0.0, 1.0)
+    keyframe_interval = 8  # 24→8に狭めてカメラ回転を滑らかに
 
-    phase_b_duration = cut2b_end - cut2b_start + 1
+    # キャラクターのスライドはフェーズBのみで進行
+    total_slide_frames = cut2b_end - cut2b_start + 1
 
-    # キャラクターの最終位置（スライド復帰 = 中央より少し離れる）
-    slide_back_x_a = -1.5
-    slide_back_x_b = 1.5
-    char_a_final = (slide_back_x_a, 0, topdown_char_a_pos[2] if topdown_char_a_pos else 0)
-    char_b_final = (slide_back_x_b, 0, topdown_char_b_pos[2] if topdown_char_b_pos else 0)
+    phase_b_frames = list(range(cut2b_start, cut2b_end + 1, keyframe_interval))
+    if phase_b_frames[-1] != cut2b_end:
+        phase_b_frames.append(cut2b_end)
+    num_segments = len(phase_b_frames) - 1
 
-    # --- カメラ復帰キーフレーム（8フレーム間隔）---
-    for frame in range(cut2b_start, cut2b_end + 1, 8):
-        t = (frame - cut2b_start) / phase_b_duration if phase_b_duration > 0 else 0
-        eased_t = easing(t)
+    for i, frame in enumerate(phase_b_frames):
+        # カメラの補間（イージング適用）
+        raw_progress = i / num_segments if num_segments > 0 else 0
+        cam_progress = ease_func(raw_progress)
+        cam_x = top_down_pos[0] + (cam_return_pos[0] - top_down_pos[0]) * cam_progress
+        cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
+        cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
+        cam_pos = (cam_x, cam_y, cam_z)
+        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
+        _set_camera_keyframe(camera, frame, cam_pos, target)
 
-        # カメラ位置の補間（円弧）
-        cx = start_pos[0] + (end_x - start_pos[0]) * eased_t
-        cy = start_pos[1] + (end_y - start_pos[1]) * eased_t
-        cz = start_pos[2] + (end_z - start_pos[2]) * eased_t
+        # キャラクターのスライド進行度（イージング適用）
+        raw_char_progress = (frame - cut2b_start) / total_slide_frames
+        char_progress = ease_func(raw_char_progress)
 
-        _set_camera_location_keyframe(camera, frame, (cx, cy, cz))
+        char_a_pos = _interpolate_char_position(char_a_end, char_a_start, char_progress)
+        char_b_pos = _interpolate_char_position(char_b_end, char_b_start, char_progress)
 
-        # 回転も補間
-        rx = math.radians(90) + (end_rot[0] - math.radians(90)) * eased_t
-        ry = end_rot[1] * eased_t
-        rz = end_rot[2] * eased_t
-        _set_rotation_keyframe(camera, frame, (rx, ry, rz))
+        _set_location_keyframe(char_a, frame, char_a_pos[0], char_a_pos[1], char_a_pos[2])
+        _set_location_keyframe(char_b, frame, char_b_pos[0], char_b_pos[1], char_b_pos[2])
 
-    # 最終フレームを確実に設定
-    final_cam_pos_return = (end_x, end_y, end_z)
-    _set_camera_location_keyframe(camera, cut2b_end, final_cam_pos_return)
-    _set_rotation_keyframe(camera, cut2b_end, end_rot)
+    # 終了フレームを確実に設定（キャラクターが完全にスタート位置に戻っていることを保証）
+    _set_location_keyframe(char_a, cut2b_end, char_a_start[0], char_a_start[1], char_a_start[2])
+    _set_location_keyframe(char_b, cut2b_end, char_b_start[0], char_b_start[1], char_b_start[2])
 
-    # --- キャラクターのスライド復帰（イージング）---
-    char_a_start = tuple(topdown_char_a_pos) if topdown_char_a_pos else (0, 0, 0)
-    char_b_start = tuple(topdown_char_b_pos) if topdown_char_b_pos else (0, 0, 0)
+    # 最終カメラ位置を設定（キーフレームはループで設定済み）
+    set_camera_look_at(camera, cam_return_pos, target)
 
-    for frame in range(cut2b_start, cut2b_end + 1, 8):
-        t = (frame - cut2b_start) / phase_b_duration if phase_b_duration > 0 else 0
-        eased_t = easing(t)
+    print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {top_down_pos} → {cam_return_pos}")
+    print(f"  キャラクター: スライド完了 → charA={char_a_start}, charB={char_b_start}")
 
-        ax = char_a_start[0] + (char_a_final[0] - char_a_start[0]) * eased_t
-        _set_location_keyframe(char_a, frame, ax, char_a_final[1], char_a_final[2])
-
-        bx = char_b_start[0] + (char_b_final[0] - char_b_start[0]) * eased_t
-        _set_location_keyframe(char_b, frame, bx, char_b_final[1], char_b_final[2])
-
-    # 最終フレームを確実に設定
-    _set_location_keyframe(char_a, cut2b_end, char_a_final[0], char_a_final[1], char_a_final[2])
-    _set_location_keyframe(char_b, cut2b_end, char_b_final[0], char_b_final[1], char_b_final[2])
-
-    print(f"  フェーズB完了: カメラ→({end_x:.2f}, {end_y:.2f}, {end_z}), キャラA→{char_a_final}, キャラB→{char_b_final}")
     return {
-        "camera_loc": final_cam_pos_return,
-        "camera_rot": end_rot,
-        "char_a_pos": char_a_final,
-        "char_b_pos": char_b_final,
+        'camera_loc': cam_return_pos,
+        'camera_rot': camera.rotation_euler.copy(),
     }

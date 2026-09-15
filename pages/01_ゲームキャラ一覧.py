@@ -145,8 +145,8 @@ def main():
                 inp_gamename = st.text_input("ゲーム名", placeholder="例: クロノトリガー")
                 col_dims_a, col_dims_b = st.columns(2)
                 with col_dims_a:
-                    inp_height = st.number_input("全高 (mm)", min_value=1.0, max_value=10000.0, step=1.0, key="new_game_height")
-                    inp_length = st.number_input("全長 (mm)", min_value=0.0, max_value=10000.0, step=1.0, key="new_game_length")
+                    inp_height = st.number_input("全高 (mm)", min_value=1.0, max_value=100000.0, step=1.0, key="new_game_height")
+                    inp_length = st.number_input("全長 (mm)", min_value=0.0, max_value=100000.0, step=1.0, key="new_game_length")
                 with col_dims_b:
                     inp_rot = st.number_input("Z軸回転角度 (度)", min_value=0.0, max_value=360.0, step=1.0, key="new_game_rot")
                     inp_color = st.selectbox(

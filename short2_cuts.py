@@ -109,7 +109,11 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         total_rotation = cam_pattern["total_rotation"]
         print(f"  カメラパターン: {cam_pattern['name']} (start={cam_start})")
     else:
-        cam_start = (-3.0, -6.0, 3.5)
+        # スケール適用済みのカメラ起始位置を使用（strategy_configから取得）
+        cam_start_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
+        cam_start_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
+        cam_start_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
+        cam_start = (cam_start_x, cam_start_y, cam_start_z)
         total_rotation = -0.85
 
     arc_radius = math.sqrt(cam_start[0]**2 + cam_start[1]**2)
@@ -209,7 +213,9 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
         top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
         print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → {top_down_pos}")
     else:
-        top_down_pos = (0.0, 0.0, 8.0)
+        # スケール適用済みのトップダウン高さを使用（strategy_configから取得）
+        topdown_height = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, topdown_height)
 
     # イージング関数の取得
     ease_func = _get_easing_func(strategy_config)
@@ -272,13 +278,19 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         cam_return_pos = tuple(strategy_config["camera_pattern"]["start_position"])
         print(f"  カメラ復帰先: {cam_return_pos}")
     else:
-        cam_return_pos = (-3.0, -6.0, 3.5)
+        # スケール適用済みのカメラ起始位置を使用（strategy_configから取得）
+        cam_start_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
+        cam_start_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
+        cam_start_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
+        cam_return_pos = (cam_start_x, cam_start_y, cam_start_z)
 
     # トップダウン位置もバリエーションから取得
     if strategy_config and "topdown_variation" in strategy_config:
         top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
     else:
-        top_down_pos = (0.0, 0.0, 8.0)
+        # スケール適用済みのトップダウン高さを使用（strategy_configから取得）
+        topdown_height = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, topdown_height)
 
     # イージング関数の取得
     ease_func = _get_easing_func(strategy_config)

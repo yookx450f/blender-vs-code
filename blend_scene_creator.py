@@ -1877,8 +1877,18 @@ def main():
             transparency_target = "carB" if volume_b > volume_a else "carA"
             SHORT2_CONFIG["transparency_target"] = transparency_target
             print(f"  ルール2: 半透明対象={transparency_target} (体積比較: carA={volume_a/1e6:.1f}m³, carB={volume_b/1e6:.1f}m³)")
+        
+        # 車の寸法情報を抽出（動的スケーリング用）
+        car_dimensions_short2 = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            car_dimensions_short2[key] = {
+                "length": dims.get("length", 0),
+                "height": dims.get("height", 0),
+            }
+        
         print(f"  short2: total_frames=624 (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
-        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT2_CONFIG)
+        setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT2_CONFIG, car_dimensions=car_dimensions_short2)
     elif CUT_NUMBER == "short-s":
         from animation_settings_short_s import setup_short_s_animations
         # 車の寸法情報を抽出（加速時間用）
