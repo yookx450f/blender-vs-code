@@ -554,7 +554,7 @@ def create_grid_floor(x_half_width=5.0, y_half_length=50.0):
         return grid
     
     grid_mat = bpy.data.materials.new(name=grid_mat_name)
-    grid_mat.use_nodes = True
+    # use_nodes はデフォルトで True なので明示的に設定しない（Blender 6.0 準備）
     nodes = grid_mat.node_tree.nodes
     links = grid_mat.node_tree.links
     
