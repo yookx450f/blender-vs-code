@@ -280,7 +280,7 @@ def setup_lighting():
     key_light_object = bpy.data.objects.new("KeyLightObject", key_light)
     key_light_object.location = (5, -5, 10)
     key_light_object.rotation_euler = (math.radians(45), 0, math.radians(45))
-    key_light.energy = 0.84  # さらに40%落として阴翳を深く（合計約58%減）
+    key_light.energy = 0.588  # さらに30%暗くして（0.84→0.588）
     bpy.context.collection.objects.link(key_light_object)
     
     # フィラーライト（補助光）- SUNライト、左側からやや弱く補う（陰を強調するため）

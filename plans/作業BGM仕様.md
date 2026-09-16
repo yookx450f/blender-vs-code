@@ -11,7 +11,7 @@
 
 | 項目 | 仕様 |
 |------|------|
-| 解像度 | 1920×1080 (フルHD / 1080p) |
+| 解像度 | 3840×2160 (4K / 2160p) |
 | アスペクト比 | 16:9 横長 |
 | フレームレート | 30 FPS |
 | 動画長さ | 60秒（1800フレーム、1台分） |
@@ -186,6 +186,9 @@ TOTAL_FRAMES = FPS * DURATION_SECONDS  # 1800
 | `FPS` | フレームレート | `30` | `24`, `60` |
 | `DURATION_SECONDS` | 動画の長さ（秒） | `60` | `30`, `90` |
 | `TOTAL_FRAMES` | 総フレーム数 (自動計算) | `FPS * DURATION_SECONDS` | 変更不要 |
+| `RESOLUTION_X` | 出力解像度 (横) | `3840` (4K) | `1920` (1080p) |
+| `RESOLUTION_Y` | 出力解像度 (縦) | `2160` (4K) | `1080` (1080p) |
+| `RESOLUTION_PERCENTAGE` | レンダリングスケーリング | `100` | 変更不要 |
 | `START_Y` | カメラスライド開始位置(Y軸) | `40.0` | `50.0` |
 | `END_Y` | カメラスライド終了位置(Y軸) | `-40.0` | `-50.0` |
 | `CAMERA_X_OFFSET` | カメラのX軸オフセット | `5.0` | `7.0` |
@@ -203,6 +206,9 @@ GLB_DIRECTORY = r"C:\3d\Modly\glb"    # GLBの場所が違う場合は変更
 FPS = 30
 DURATION_SECONDS = 60
 TOTAL_FRAMES = FPS * DURATION_SECONDS
+RESOLUTION_X = 3840    # 4K解像度 (1080p に戻す場合は 1920)
+RESOLUTION_Y = 2160    # 4K解像度 (1080p に戻す場合は 1080)
+RESOLUTION_PERCENTAGE = 100
 START_Y = 40.0
 END_Y = -40.0
 CAMERA_X_OFFSET = 5.0
@@ -256,7 +262,7 @@ python run_bgm.py --render
 **出力:**
 - ファイル: `bgm_output.mp4`
 - 場所: `~/Desktop/` (デスクトップ)
-- フォーマット: MP4 (H.264, 1920×1080, 30fps)
+- フォーマット: MP4 (H.264, 3840×2160 / 4K, 30fps)
 
 ### 12.3 実行手順（まとめ）
 

@@ -102,7 +102,7 @@ def create_name_label(car_obj, car_name):
     tobj = bpy.context.active_object
     tobj.name = 'Label_' + car_name
     tobj.data.body = car_name
-    tobj.data.size = 0.3
+    tobj.data.size = 0.39
     tobj.data.extrude = 0.005
     tobj.data.align_x = 'CENTER'
     tobj.data.align_y = 'CENTER'
@@ -120,7 +120,7 @@ def create_name_label(car_obj, car_name):
     tobj.data.materials.append(_m)
     return tobj
 
-def setup_camera(car_length_m):
+def setup_camera(car_length_m, res_x=1920, res_y=1080, res_pct=100):
     """カメラをX方向スライド用の位置に配置（Yプラス方向を常に固定で見る）"""
     for obj in bpy.data.objects:
         if obj.type == 'CAMERA': bpy.data.objects.remove(obj, do_unlink=True)
@@ -134,10 +134,12 @@ def setup_camera(car_length_m):
     camera.clip_end = 200
     
     scene = bpy.context.scene; scene.camera = cam_obj
-    scene.render.resolution_x = 1920; scene.render.resolution_y = 1080
-    scene.render.resolution_percentage = 100; scene.render.engine = 'BLENDER_EEVEE'
+    scene.render.resolution_x = res_x; scene.render.resolution_y = res_y
+    scene.render.resolution_percentage = res_pct; scene.render.engine = 'BLENDER_EEVEE'
     try: scene.eevee.use_raytracing = True
     except AttributeError: pass
+    
+    print(f"  解像度: {res_x}x{res_y} ({res_pct}%)")
     
     # カメラの初期位置: X=+5m, Y=-9.5m, Z=1.7m（固定）
     cam_obj.location.x = 5.0

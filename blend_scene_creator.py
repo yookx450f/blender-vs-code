@@ -1685,21 +1685,17 @@ def main():
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
             from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car
-            # short2_variations からカメラ/イージング/時間の変動設定を生成（色系はgames_config.json固定）
+            # short2_variations からランダムな色・カメラ/イージング/時間の変動設定を生成（Short2と同じ方式）
             from short2_variations import generate_strategy_config
             seed_val = int(strategy_seed) if strategy_seed else None
             full_variations = generate_strategy_config(seed=seed_val)
             
-            # ゲームキャラクターの設定からクレイ色を取得（games_config.jsonのcolor配列を固定使用）
-            game_color_a = CARS.get("carA", {}).get("color", (0.5, 0.5, 0.5))
-            game_color_b = CARS.get("carB", {}).get("color", (0.0, 0.7, 1.0))
-            print(f"  ゲームキャラクタークレイ色: carA={game_color_a}, carB={game_color_b}")
-            
-            # バリエーション設定: カメラ/イージング/時間の項目のみを使用（色系は固定）
+            # full_variations からランダムなクレイ色・グリッド色・背景発光を取得
             SHORT_GAME_CONFIG = {
-                "grid_color": {"name": "cyan", "color": (0.0, 0.8, 1.0), "emission": 2.0},
-                "clay_color_a": {"name": "carA_clay", "color": game_color_a},
-                "clay_color_b": {"name": "carB_clay", "color": game_color_b},
+                "grid_color": full_variations.get("grid_color"),
+                "clay_color_a": full_variations.get("clay_color_a"),
+                "clay_color_b": full_variations.get("clay_color_b"),
+                "bg_glow": full_variations.get("bg_glow"),
                 # カメラ・イージング・時間のバリエーション (short2_variations から)
                 "camera_pattern": full_variations.get("camera_pattern"),
                 "topdown_variation": full_variations.get("topdown_variation"),
@@ -1718,7 +1714,7 @@ def main():
                 total_frames = 300
             SHORT_GAME_CONFIG["total_frames"] = total_frames
             
-            print(f"  ✅ shortGame バリエーション設定完了 (camera={SHORT_GAME_CONFIG['camera_pattern']['name']}, easing={SHORT_GAME_CONFIG['easing_function']}, frames={total_frames})")
+            print(f"  ✅ shortGame バリエーション設定完了 (grid={SHORT_GAME_CONFIG['grid_color']['name']}, clayA={SHORT_GAME_CONFIG['clay_color_a']['name']}, clayB={SHORT_GAME_CONFIG['clay_color_b']['name']}, camera={SHORT_GAME_CONFIG['camera_pattern']['name']}, easing={SHORT_GAME_CONFIG['easing_function']}, frames={total_frames})")
             print(f"  [DEBUG] SHORT_GAME_CONFIG loaded: {SHORT_GAME_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT_GAME_CONFIG and "grid_color" in SHORT_GAME_CONFIG:

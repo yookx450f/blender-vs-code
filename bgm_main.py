@@ -60,13 +60,16 @@ def main():
         return
     car_obj.name = "Car_" + car_name
 
+    # ★メッシュ回転を先にする（回転後にスケーリングすると軸がずれ、shape崩れが発生する）
+    print("\n[Step 4.5] メッシュ回転")
+    apply_rotation_to_car(car_obj, rot_dir)
+
     # ★実寸法に合わせてスケールを適用 (Short2と同様)
-    print("\n[Step 4.5] スケール調整")
+    print("\n[Step 4.6] スケール調整")
     scale_car_to_dimensions(car_obj, car_info)
 
     # クレイマテリアル適用
     apply_clay_material_to_meshes(car_obj)
-    apply_rotation_to_car(car_obj, rot_dir)
     auto_ground_car(car_obj)
 
     # 車の位置を(0, 0)に固定
@@ -79,9 +82,10 @@ def main():
     car_length_m = float(car_info.get('length', 4800)) / 1000.0
     print(f"  車全長: {car_length_m}m")
 
+    from bgm_config import RESOLUTION_X, RESOLUTION_Y, RESOLUTION_PERCENTAGE
     # Step 5: カメラ設定 (車の全長を渡す)
     print("\n[Step 5] カメラ設定")
-    cam_obj = setup_camera(car_length_m)
+    cam_obj = setup_camera(car_length_m, res_x=RESOLUTION_X, res_y=RESOLUTION_Y, res_pct=RESOLUTION_PERCENTAGE)
 
     # Step 6: 車名ラベル
     print("\n[Step 6] 車名ラベル作成")

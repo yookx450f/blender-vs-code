@@ -241,7 +241,8 @@ def main():
         print(f"失敗車ID: {', '.join(failed_ids)}")
 
     # ffmpeg で結合（成功したファイルのみ）
-    if len(success_paths) >= 2 and use_render:
+    # ★ffmpeg実行を無効化している場合、下の条件の前に False and を追加
+    if False and len(success_paths) >= 2 and use_render:
         output_all = f"{desktop}/bgm_all_output.mp4"
         print(f"\nffmpeg で全ファイルを結合中... → {output_all}")
         concat_mp4_files(success_paths, output_all)
