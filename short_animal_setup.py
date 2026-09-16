@@ -7,9 +7,13 @@
 【2026-09-07 変更】カット1 (fr0-72) を削除し、フレーム番号を72分ずらした。
 【2026-09-08 変更】カット4を削除し、カット3を27秒・1.1周に拡張。
 
+【動的スケーリング】
+    動物の寸法に基づいて、カメラ距離・レンズ・分離間隔を自動調整する。
+    大きな動物ほど、カメラを遠ざけ・広角にし・間隔を広げる。
+
 使い方:
     from short_animal_setup import setup_camera_target_and_lens
-    result = setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a)
+    result = setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a, cam_scale=1.0)
 """
 
 import math
@@ -17,13 +21,22 @@ import bpy
 from short_animal_utils import _set_empty_location_keyframe, _get_animal_max_z
 
 
-def setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a):
+def setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a, cam_scale=1.0):
     """
     カメラターゲットとレンズの設定を行う。
 
     - ターゲットEmptyを作成し、動物A・Bの高さに合わせて配置
     - Track To制約を追加/更新
-    - カメラレンズを35mmに設定
+    - カメラレンズをスケール係数に応じて動的に設定（巨大動物ほど広角）
+    - カメラ高さをスケール係数で調整
+
+    Parameters:
+        scene: Blenderシーン
+        camera: カメラオブジェクト
+        car_a: 動物Aのオブジェクト
+        car_b: 動物Bのオブジェクト
+        grounded_z_a: 動物Aの接地Z座標
+        cam_scale: スケール係数（デフォルト1.0）
 
     Returns:
         dict: {
@@ -38,13 +51,15 @@ def setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a):
     """
     print("\n  === カメラターゲット・レンズ設定 ===")
 
-    # レンズ焦距設定
+    # レンズ焦距設定 — cam_scaleに応じて調整（巨大動物ほど広角）
     original_lens = camera.data.lens
-    camera.data.lens = 35
-    print(f"  カメラレンズ: {original_lens}mm → 35mm")
+    adjusted_lens = round(35 * min(cam_scale, 2.0))
+    adjusted_lens = max(24, min(85, adjusted_lens))  # 広角〜望遠の範囲に収める
+    camera.data.lens = adjusted_lens
+    print(f"  カメラレンズ: {original_lens}mm -> {adjusted_lens}mm（スケール調整）")
 
-    # カメラの高さを固定（仕様: 円軌道中は100cm）
-    CAM_HEIGHT = 1.0
+    # カメラの高さをスケール係数で動的に設定
+    CAM_HEIGHT = 1.0 * min(cam_scale, 2.0)
 
     # カメラのターゲット（動物A・Bの一番高いところ）
     animal_a_max_z = _get_animal_max_z(car_a)
@@ -53,6 +68,7 @@ def setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a):
     target_base = (0.0, 0.0, target_height)
     print(f"  カメラターゲット (動物Aの一番高いところ): {target_base}")
     print(f"  動物Bの最大Z: {animal_b_max_z}")
+    print(f"  カメラ高さ: {CAM_HEIGHT:.2f}m（スケール調整）")
 
     # --- カメラターゲット用 Empty を作成 ---
     target_empty_name = "CameraTarget"
@@ -89,9 +105,15 @@ def setup_camera_target_and_lens(scene, camera, car_a, car_b, grounded_z_a):
     }
 
 
-def setup_animal_positions(car_a, car_b, grounded_z_positions):
+def setup_animal_positions(car_a, car_b, grounded_z_positions, sep_scale=1.0):
     """
     動物の中心位置と分離位置を計算する。
+
+    Parameters:
+        car_a: 動物Aのオブジェクト
+        car_b: 動物Bのオブジェクト
+        grounded_z_positions: 接地Z座標の辞書
+        sep_scale: 分離間隔のスケーリング係数（デフォルト1.0）
 
     Returns:
         dict: {
@@ -121,17 +143,20 @@ def setup_animal_positions(car_a, car_b, grounded_z_positions):
         offset_b = get_car_visual_center_offset(car_b)
         print(f"  視覚的中心オフセット: carA=({offset_a[0]:.4f}, {offset_a[1]:.4f}), carB=({offset_b[0]:.4f}, {offset_b[1]:.4f})")
     except Exception as e:
-        print(f"  ⚠️ オフセット計算エラー: {e} → (0,0)にフォールバック")
+        print(f"  警告: オフセット計算エラー: {e} -> (0,0)にフォールバック")
 
-    # 位置定義
+    # 位置定義 — 分離間隔をスケール係数で調整
+    half_separation = 0.9 * sep_scale
+
     center_pos_a = (-offset_a[0], -offset_a[1], grounded_z_a)
     center_pos_b = (-offset_b[0], -offset_b[1], grounded_z_b)
 
-    separated_pos_a = (-1.25 - offset_a[0], -offset_a[1], grounded_z_a)
-    separated_pos_b = (1.25 - offset_b[0], -offset_b[1], grounded_z_b)
+    separated_pos_a = (-half_separation - offset_a[0], -offset_a[1], grounded_z_a)
+    separated_pos_b = (half_separation - offset_b[0], -offset_b[1], grounded_z_b)
 
     print(f"  carA: center={center_pos_a} -> separated={separated_pos_a}")
     print(f"  carB: center={center_pos_b} -> separated={separated_pos_b}")
+    print(f"  分離間隔: ±{half_separation:.2f}m（スケール調整）")
 
     return {
         'center_pos_a': center_pos_a,
@@ -184,4 +209,4 @@ def setup_target_animation(target_empty, target_base, target_height, animal_a_ma
     _set_empty_location_keyframe(target_empty, CUT3_START, target_base[0], target_base[1], high_target_z)
     _set_empty_location_keyframe(target_empty, CUT3_END, target_base[0], target_base[1], high_target_z)
 
-    print(f"  ターゲットZ: {animal_b_max_z:.2f}固定 (fr0), {animal_b_max_z:.2f}→{high_target_z:.2f} (fr0-144), {high_target_z:.2f}固定 (fr144-288), {high_target_z:.2f}固定 (fr288-936)")
+    print(f"  ターゲットZ: {animal_b_max_z:.2f}固定 (fr0), {animal_b_max_z:.2f}->{high_target_z:.2f} (fr0-144), {high_target_z:.2f}固定 (fr144-288), {high_target_z:.2f}固定 (fr288-936)")

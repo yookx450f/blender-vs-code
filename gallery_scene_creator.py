@@ -131,7 +131,7 @@ def create_clay_material(name):
     
     # Principled BSDF ノード（グレー）
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-    bsdf.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)  # グレー
+    bsdf.inputs["Base Color"].default_value = (0.65, 0.65, 0.65, 1.0)  # ミディアムグレー（博物館展示風）
     bsdf.inputs["Roughness"].default_value = 0.45
     bsdf.inputs["Metallic"].default_value = 0.0
     
@@ -146,7 +146,7 @@ def create_clay_material(name):
 def create_grid_floor(grid_length=100):
     """発光グリッド床面を作成（既存のcreate_grid_floorと同じノード構成を使用）"""
     y_half_length = grid_length / 2.0
-    x_half_width = 15.0  # 車の配置スペースを含む全体の幅
+    x_half_width = 100.0  # X方向も100m（±100m＝全長200m）に拡張
     
     plane_size = y_half_length * 2
     bpy.ops.mesh.primitive_plane_add(size=plane_size, location=(0, 0, 0))
@@ -274,32 +274,32 @@ def create_grid_floor(grid_length=100):
 
 
 def setup_lighting():
-    """3ポイントライティングを設定"""
-    # キーライト（主光）
+    """博物館展示風のソフトライティングを設定"""
+    # キーライト（主光）- SUNライト、やや強めに照射して陰影を強調
     key_light = bpy.data.lights.new(name="KeyLight", type='SUN')
     key_light_object = bpy.data.objects.new("KeyLightObject", key_light)
     key_light_object.location = (5, -5, 10)
     key_light_object.rotation_euler = (math.radians(45), 0, math.radians(45))
-    key_light.energy = 3.0
+    key_light.energy = 0.84  # さらに40%落として阴翳を深く（合計約58%減）
     bpy.context.collection.objects.link(key_light_object)
     
-    # フィラーライト（補助光）
+    # フィラーライト（補助光）- SUNライト、左側からやや弱く補う（陰を強調するため）
     fill_light = bpy.data.lights.new(name="FillLight", type='SUN')
     fill_light_object = bpy.data.objects.new("FillLightObject", fill_light)
     fill_light_object.location = (-5, 5, 8)
     fill_light_object.rotation_euler = (math.radians(60), 0, math.radians(-45))
-    fill_light.energy = 1.5
+    fill_light.energy = 0.7
     bpy.context.collection.objects.link(fill_light_object)
     
-    # バックライト（輪郭光）
+    # バックライト（輪郭光）- SUNライト、後方から縁取りを強調
     back_light = bpy.data.lights.new(name="BackLight", type='SUN')
     back_light_object = bpy.data.objects.new("BackLightObject", back_light)
     back_light_object.location = (0, 10, 5)
     back_light_object.rotation_euler = (math.radians(30), math.radians(-45), 0)
-    back_light.energy = 2.0
+    back_light.energy = 1.5
     bpy.context.collection.objects.link(back_light_object)
     
-    print("ライティング設定完了")
+    print("ライティング設定完了（博物館展示風）")
 
 
 def position_car_on_side(car_config, gallery_settings):
@@ -409,7 +409,7 @@ def create_name_label(car_config, position):
     
     text_obj.data.body = name
     text_obj.data.size = 0.3
-    text_obj.data.extrude = 0.02
+    text_obj.data.extrude = 0.005
     text_obj.data.align_x = 'CENTER'
     text_obj.data.align_y = 'CENTER'
     

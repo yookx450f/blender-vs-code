@@ -66,8 +66,8 @@ def _calculate_scale_factor(char_dimensions):
     largest_dim_m = max(max_dims_m)
     scale_factor = largest_dim_m / base_size_m
 
-    # クリップ範囲 0.8 〜 4.0
-    scale_factor = max(0.8, min(4.0, scale_factor))
+    # クリップ範囲 0.8 〜 6.0（巨大モンスターでもカメラが離れるよう上限を拡大）
+    scale_factor = max(0.8, min(6.0, scale_factor))
 
     print(f"  スケール倍率計算: 最大寸法={largest_dim_m:.2f}m / 基準={base_size_m:.1f}m → scale_factor={scale_factor:.2f}")
     return scale_factor
@@ -102,8 +102,8 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     # スケーリング適用後の基本値
     # キャラクター間隔: スケール係数の0.5乗で弱く補正（大きな変化を抑制）
     char_scale = scale_factor ** 0.5
-    # カメラ距離: スケール係数に1.5倍を掛けて強く補正（巨大キャラでも画面に収まる）
-    cam_scale = scale_factor * 1.5
+    # カメラ距離: 1.8倍でスマホ画面でも両キャラ入りつつ大きめに表示
+    cam_scale = scale_factor * 1.8
     char_start_half_dist = 2.1125 * char_scale          # キャラクター開始位置の半間隔（1.25×1.3×1.3倍）
     cam_start_x = -3.0 * cam_scale                      # カメラ起始X座標
     cam_start_y = -6.0 * cam_scale                      # カメラ起始Y座標
@@ -167,12 +167,17 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     print("  アニメーションデータのクリーンアップ...")
     clear_animation_data([camera, char_a, char_b])
 
-    # レンズ設定 — cam_scaleに応じてFOVを調整
+    # レンズ設定 — cam_scaleに応じてFOVを調整（35mm基準で拡大、広角〜標準に収める）
     original_lens = camera.data.lens
     adjusted_lens = round(35 * min(cam_scale, 2.0))
     adjusted_lens = max(24, min(85, adjusted_lens))  # 広角〜望遠の範囲に収める
     camera.data.lens = adjusted_lens
     print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（スケール調整）")
+    
+    # センサーサイズを少し拡大してキャラクターが大きく見えるように
+    # スマホ縦画面で見たときにちょうど良いサイズ感に調整
+    camera.data.sensor_height = max(camera.data.sensor_height, 22.0)
+    print(f"  カメラセンサー高: {camera.data.sensor_height}mm")
 
     # ============================================================
     # スケール情報を strategy_config に注入（カット関数へ渡すため）

@@ -1,18 +1,30 @@
-import bpy, os, math
+import bpy, os, math, sqlite3
 from mathutils import Vector
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 from gallery_scene_creator import (clear_scene, enable_gltf_addon, import_glb_file,
     apply_clay_material_to_meshes, apply_rotation_to_car, auto_ground_car, create_grid_floor, setup_lighting)
 
+DB_PATH = os.path.join(SCRIPT_DIR, "cars.db")
+
 def get_car_info(car_id):
-    csv_path = os.path.join(SCRIPT_DIR, 'cars.csv')
-    if not os.path.exists(csv_path): return None
+    """cars.db (SQLite)から車種情報を取得"""
+    if not os.path.exists(DB_PATH):
+        print(f"エラー: データベースが見つかりません - {DB_PATH}")
+        return None
     try:
-        with open(csv_path, 'r', encoding='utf-8-sig') as f:
-            for row in __import__('csv').DictReader(f):
-                if row.get('id') == str(car_id): return row
-    except Exception: pass
-    return None
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cars WHERE id = ?", (str(car_id),))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            # DictReaderと同じ形式で返す（列名→値の辞書）
+            return dict(row)
+        return None
+    except Exception as e:
+        print(f"データベース読み込みエラー: {e}")
+        return None
 
 def scale_car_to_dimensions(obj, car_info):
     """車の実寸法データ(mm)に合わせてスケールを適用する (Short2と同様)"""
@@ -83,26 +95,24 @@ def setup_black_world():
 
 def create_name_label(car_obj, car_name):
     """車名の3Dテキストを床面・車の前方に配置 (車固定なので親設定なし)"""
-    from mathutils import Matrix
     car_obj.update_tag(); bpy.context.view_layer.update()
-    _m, _n = _emission_mat('emission_bgm', (1.0, 0.95, 0.75, 1.0), 6.0)
+    _m, _n = _emission_mat('emission_bgm', (0.0, 1.0, 1.0, 1.0), 3.0)  # 明るいシアン、白飛び防止のためStrengthを下げる
     fd = _bold_font()
     bpy.ops.object.text_add(location=(0,0,0))
     tobj = bpy.context.active_object
     tobj.name = 'Label_' + car_name
     tobj.data.body = car_name
     tobj.data.size = 0.3
-    tobj.data.extrude = 0.02
+    tobj.data.extrude = 0.005
     tobj.data.align_x = 'CENTER'
     tobj.data.align_y = 'CENTER'
     if fd: tobj.data.font = fd
     
-    # X軸で90度回転して上を向く
-    rx = Matrix.Rotation(math.pi / 2, 4, 'X')
+    # 位置: 車の前方(Y-3m)、床面上(Z=0.01m)
+    tobj.location = (car_obj.location.x, car_obj.location.y - 3.0, 0.01)
     
-    # ワールド座標での配置位置: 車の前方(Y-2m)、床面上(Z=0.01m)
-    tx = Matrix.Translation((car_obj.location.x, car_obj.location.y - 2.0, 0.01))
-    tobj.matrix_world = tx @ rx
+    # 回転は設定しない（Blenderの3Dテキストデフォルト向きで正しく表示される）
+    tobj.rotation_euler = (0.0, 0.0, 0.0)
     
     # 親を設定しない（車は固定なので不要）
     
@@ -129,9 +139,9 @@ def setup_camera(car_length_m):
     try: scene.eevee.use_raytracing = True
     except AttributeError: pass
     
-    # カメラの初期位置: X=+5m, Y=-9m, Z=1.7m（固定）
+    # カメラの初期位置: X=+5m, Y=-9.5m, Z=1.7m（固定）
     cam_obj.location.x = 5.0
-    cam_obj.location.y = -9.0
+    cam_obj.location.y = -9.5
     cam_obj.location.z = 1.7
     
     # カメラ向き: まっすぐYプラス方向を見る（X軸で90度回転）
@@ -144,7 +154,7 @@ def setup_car_animation(car_obj, fps, total_frames, start_y, end_y):
     pass
 
 def setup_camera_animation(cam_obj, car_length_m, fps, total_frames, margin=3.0):
-    """カメラをX=-5m → X=+5m にスライド（Y=-9m, Z=1.7m固定、視点=Yプラス固定）"""
+    """カメラをX=-7m → X=+7m にスライド（Y=-9.5m, Z=1.7m固定、視点=Yプラス固定）"""
     start_x = -7.0
     end_x = 7.0
     speed = (end_x - start_x) / total_frames
@@ -159,7 +169,8 @@ def setup_camera_animation(cam_obj, car_length_m, fps, total_frames, margin=3.0)
 def setup_render(fps, total_frames):
     scene = bpy.context.scene
     desktop = os.path.expanduser('~').replace('\\', '/') + '/Desktop'
-    scene.render.filepath = desktop + '/bgm_output'
+    suffix = os.environ.get("BGM_OUTPUT_SUFFIX", "")
+    scene.render.filepath = desktop + f'/bgm_output{suffix}'
     scene.render.image_settings.media_type = 'VIDEO'
     scene.render.image_settings.file_format = 'FFMPEG'
     scene.render.ffmpeg.format = 'MPEG4'; scene.render.ffmpeg.codec = 'H264'

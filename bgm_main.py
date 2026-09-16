@@ -7,7 +7,16 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from bgm_config import CAR_ID, GLB_DIRECTORY, FPS, DURATION_SECONDS, TOTAL_FRAMES, START_Y, END_Y
+import os as _os
+_car_id_env = _os.environ.get("BGM_CAR_ID")
+if _car_id_env is not None:
+    print(f"環境変数 BGM_CAR_ID から車種IDを読み込み: {_car_id_env}")
+
+from bgm_config import GLB_DIRECTORY, FPS, DURATION_SECONDS, TOTAL_FRAMES, START_Y, END_Y
+
+# 環境変数が設定されていればそれを優先、そうでなければ bgm_config.py の CAR_ID を使用
+import bgm_config
+CAR_ID = _car_id_env if _car_id_env is not None else bgm_config.CAR_ID
 from bgm_core import (get_car_info, clear_scene, enable_gltf_addon, import_glb_file,
     apply_clay_material_to_meshes, apply_rotation_to_car, auto_ground_car, scale_car_to_dimensions,
     create_grid_floor, setup_lighting, setup_black_world, create_name_label,
@@ -89,6 +98,13 @@ def main():
     scene = bpy.context.scene
     print(f"  フレーム範囲: {scene.frame_start}-{scene.frame_end}")
     print(f"  出力先: {scene.render.filepath}.mp4")
+
+    # 環境変数でレンダリングモードなら実際のレンダリングを実行
+    import os as _os2
+    if _os2.environ.get("BGM_RENDER"):
+        print("\n[Step 9] レンダリング実行中...")
+        bpy.ops.render.render(animation=True)
+        print(f"  レンダリング完了 → {scene.render.filepath}.mp4")
 
     print("\n" + "=" * 60)
     print("シーン生成完了！")

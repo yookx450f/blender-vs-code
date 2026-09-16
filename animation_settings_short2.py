@@ -187,6 +187,20 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     strategy_config["cam_start_z"] = cam_start_z
     strategy_config["topdown_height"] = topdown_height
 
+    # カメラZの最低値保証（車の最大全高 + 安全マージン2.0m）
+    max_car_height_m = 2.0  # デフォルト
+    if car_dimensions:
+        heights = []
+        for dims in car_dimensions.values():
+            h = dims.get("height", 0) / 1000.0 if dims.get("height") else 0
+            if h > 0:
+                heights.append(h)
+        if heights:
+            max_car_height_m = max(heights)
+    min_camera_z = max_car_height_m + 2.0  # 車の上部から最低2m離す
+    strategy_config["min_camera_z"] = min_camera_z
+    print(f"  カメラZ最低値保証: {min_camera_z:.1f}m (車高{max_car_height_m:.1f}m + マージン2.0m)")
+
     # ============================================================
     # バリエーションプリセットの座標にもスケールを適用
     # グローバル定数を汚染しないようディープコピーしてから修正

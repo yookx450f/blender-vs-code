@@ -219,4 +219,12 @@ else:
 # フッター
 # ============================================================
 st.markdown("---")
-st.caption(f"📊 最終更新: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')} | 全車種: {len(pd.read_csv('cars.csv')) - 1}台")
+import sqlite3 as _sqlite_dash
+_db_path = os.path.join(os.path.dirname(__file__), "..", "cars.db")
+try:
+    _conn = _sqlite_dash.connect(_db_path)
+    _car_count = _conn.execute("SELECT COUNT(*) FROM cars").fetchone()[0]
+    _conn.close()
+except Exception:
+    _car_count = 0
+st.caption(f"📊 最終更新: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')} | 全車種: {_car_count}台")

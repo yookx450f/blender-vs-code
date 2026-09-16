@@ -105,14 +105,22 @@ def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_
     # --- カメラ円弧パンニング（バリエーション設定適用） ---
     # 動的スケーリング: strategy_config からスケール情報を取得
     scale_factor = 1.0
+    cam_scale_val = 1.0
     if strategy_config and "scale_factor" in strategy_config:
         scale_factor = strategy_config["scale_factor"]
+    if strategy_config and "cam_scale" in strategy_config:
+        cam_scale_val = strategy_config["cam_scale"]
 
     if strategy_config and "camera_pattern" in strategy_config:
         cam_pattern = strategy_config["camera_pattern"]
-        cam_start = tuple(cam_pattern["start_position"])
+        # raw位置にcam_scaleを適用（デフォルトパスと同じスケーリングルール）
+        raw_pos = cam_pattern["start_position"]
+        cam_start_x = raw_pos[0] * cam_scale_val
+        cam_start_y = raw_pos[1] * cam_scale_val
+        cam_start_z = raw_pos[2] * min(cam_scale_val, 2.0)  # Z軸は2.0でクリップ（デフォルトと同等）
+        cam_start = (cam_start_x, cam_start_y, cam_start_z)
         total_rotation = cam_pattern["total_rotation"]
-        print(f"  カメラパターン: {cam_pattern['name']} (start={cam_start})")
+        print(f"  カメラパターン: {cam_pattern['name']} (raw={raw_pos}, scaled={cam_start})")
     else:
         # スケール適用後のデフォルトカメラ位置
         cam_start_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
@@ -214,10 +222,13 @@ def setup_cut2_phase_a_topdown(camera, char_a, char_b, char_a_start, char_a_end,
 
     print(f"\n  === カット2 フェーズA: トップダウンビューへ移動 + キャラクター中央静止 (fr{cut2a_start}-{cut2a_end}, イージング) ===")
 
-    # バリエーション設定からトップダウン位置を取得
+    # バリエーション設定からトップダウン位置を取得（cam_scale適用）
+    cam_scale_td = strategy_config.get("cam_scale", 1.0) if strategy_config else 1.0
     if strategy_config and "topdown_variation" in strategy_config:
-        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
-        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → {top_down_pos}")
+        raw_td = strategy_config["topdown_variation"]["position"]
+        # raw位置にcam_scaleを適用
+        top_down_pos = (raw_td[0] * cam_scale_td, raw_td[1] * cam_scale_td, raw_td[2] * cam_scale_td)
+        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → raw={raw_td}, scaled={top_down_pos}")
     else:
         # スケール適用後のデフォルトトップダウン位置
         td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
@@ -279,10 +290,15 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
 
     print(f"\n  === カット2 フェーズB: カメラ開始位置へ復帰 + キャラクターズスライド (fr{cut2b_start}-{cut2b_end}, イージング) ===")
 
-    # バリエーション設定から復帰カメラ位置を取得
+    # バリエーション設定から復帰カメラ位置を取得（cam_scale適用）
+    cam_scale_b = strategy_config.get("cam_scale", 1.0) if strategy_config else 1.0
     if strategy_config and "camera_pattern" in strategy_config:
-        cam_return_pos = tuple(strategy_config["camera_pattern"]["start_position"])
-        print(f"  カメラ復帰先: {cam_return_pos}")
+        raw_return = strategy_config["camera_pattern"]["start_position"]
+        cam_return_x = raw_return[0] * cam_scale_b
+        cam_return_y = raw_return[1] * cam_scale_b
+        cam_return_z = raw_return[2] * min(cam_scale_b, 2.0)
+        cam_return_pos = (cam_return_x, cam_return_y, cam_return_z)
+        print(f"  カメラ復帰先: raw={raw_return}, scaled={cam_return_pos}")
     else:
         # スケール適用後のデフォルトカメラ復帰位置
         cr_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
@@ -290,9 +306,10 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
         cr_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
         cam_return_pos = (cr_x, cr_y, cr_z)
 
-    # トップダウン位置もバリエーションから取得
+    # トップダウン位置もバリエーションから取得（cam_scale適用）
     if strategy_config and "topdown_variation" in strategy_config:
-        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+        raw_td_b = strategy_config["topdown_variation"]["position"]
+        top_down_pos = (raw_td_b[0] * cam_scale_b, raw_td_b[1] * cam_scale_b, raw_td_b[2] * cam_scale_b)
     else:
         td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
         top_down_pos = (0.0, 0.0, td_z)

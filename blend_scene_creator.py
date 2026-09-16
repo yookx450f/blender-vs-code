@@ -1684,16 +1684,41 @@ def main():
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
-            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
-            # ゲームキャラクターの設定からクレイ色を取得（games_config.jsonのcolor配列を使用）
+            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car
+            # short2_variations からカメラ/イージング/時間の変動設定を生成（色系はgames_config.json固定）
+            from short2_variations import generate_strategy_config
+            seed_val = int(strategy_seed) if strategy_seed else None
+            full_variations = generate_strategy_config(seed=seed_val)
+            
+            # ゲームキャラクターの設定からクレイ色を取得（games_config.jsonのcolor配列を固定使用）
             game_color_a = CARS.get("carA", {}).get("color", (0.5, 0.5, 0.5))
             game_color_b = CARS.get("carB", {}).get("color", (0.0, 0.7, 1.0))
             print(f"  ゲームキャラクタークレイ色: carA={game_color_a}, carB={game_color_b}")
+            
+            # バリエーション設定: カメラ/イージング/時間の項目のみを使用（色系は固定）
             SHORT_GAME_CONFIG = {
                 "grid_color": {"name": "cyan", "color": (0.0, 0.8, 1.0), "emission": 2.0},
                 "clay_color_a": {"name": "carA_clay", "color": game_color_a},
-                "clay_color_b": {"name": "carB_clay", "color": game_color_b}
+                "clay_color_b": {"name": "carB_clay", "color": game_color_b},
+                # カメラ・イージング・時間のバリエーション (short2_variations から)
+                "camera_pattern": full_variations.get("camera_pattern"),
+                "topdown_variation": full_variations.get("topdown_variation"),
+                "easing_function": full_variations.get("easing_function", "cubic"),
+                "slide_speed": full_variations.get("slide_speed", 1.0),
+                "total_frames_multiplier": full_variations.get("total_frames_multiplier", 1.0),
+                "phase_a_duration_modifier": full_variations.get("phase_a_duration_modifier", 1.0),
             }
+            
+            # 総フレーム数を計算して追加
+            multiplier = SHORT_GAME_CONFIG["total_frames_multiplier"]
+            base_total_frames = 624
+            total_frames = round(base_total_frames * multiplier)
+            total_frames = round(total_frames / 24) * 24  # 24の倍数に丸める
+            if total_frames < 300:
+                total_frames = 300
+            SHORT_GAME_CONFIG["total_frames"] = total_frames
+            
+            print(f"  ✅ shortGame バリエーション設定完了 (camera={SHORT_GAME_CONFIG['camera_pattern']['name']}, easing={SHORT_GAME_CONFIG['easing_function']}, frames={total_frames})")
             print(f"  [DEBUG] SHORT_GAME_CONFIG loaded: {SHORT_GAME_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
             if SHORT_GAME_CONFIG and "grid_color" in SHORT_GAME_CONFIG:
@@ -1914,15 +1939,16 @@ def main():
             kl.location = (3.0, current_loc.y, current_loc.z)
             print(f"  KeyLight位置を動物用に調整: X={current_loc.x:.1f}→3.0, Y={current_loc.y:.1f}, Z={current_loc.z:.1f}")
         from animation_settings_shortAnimal import setup_shortAnimal_animations
-        # 動物用: height, weight, rotation_direction のみを渡す（他の寸法は使用しない）
+        # 動物用: height, length, weight を渡す（動的スケーリング用に length も追加）
         animal_dimensions = {}
         for key, car_data in CARS.items():
             dims = car_data.get("dimensions_mm", {})
             animal_dimensions[key] = {
                 "height": dims.get("height", 0),
+                "length": dims.get("length", 0),
                 "weight": dims.get("weight", 0),
             }
-        SHORT_ANIMAL_TOTAL_FRAMES = 888  # 仕様書に基づく総フレーム数（約37秒@24fps） - カット1(72fr)+カット1-2(72fr)+カット2(72fr)+カット3(600fr)+カット4(72fr)
+        SHORT_ANIMAL_TOTAL_FRAMES = 936  # 総フレーム数（約39秒@24fps） - カット1(144fr)+カット2(144fr)+カット3(648fr)
         setup_shortAnimal_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, car_dimensions=animal_dimensions, total_frames=SHORT_ANIMAL_TOTAL_FRAMES)
         
         # シーンの終了フレームを設定（動画が最後までレンダリングされるように）
@@ -1945,8 +1971,6 @@ def main():
         setup_human_transparency(human_figure)
     elif CUT_NUMBER == "shortGame":
         from animation_settings_shortGame import setup_shortGame_animations
-        SHORT_GAME_TOTAL_FRAMES = 624  # Short2と同じ総フレーム数（約26秒@24fps）
-        print(f"  shortGame: total_frames={SHORT_GAME_TOTAL_FRAMES} (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
         
         # ゲームキャラクターの寸法情報を抽出（動的スケーリング用）
         game_dimensions = {}
@@ -1957,7 +1981,21 @@ def main():
                 "height": dims.get("height", 0),
             }
         
-        setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, char_dimensions=game_dimensions)
+        # ルール2: 半透明対象を全長+全高の和が大きいキャラに設定
+        if SHORT_GAME_CONFIG:
+            dims_a = CARS.get("carA", {}).get("dimensions_mm", {})
+            dims_b = CARS.get("carB", {}).get("dimensions_mm", {})
+            sum_a = dims_a.get("length", 0) + dims_a.get("height", 0)
+            sum_b = dims_b.get("length", 0) + dims_b.get("height", 0)
+            transparency_target = "carB" if sum_b > sum_a else "carA"
+            SHORT_GAME_CONFIG["transparency_target"] = transparency_target
+            print(f"  ルール2: 半透明対象={transparency_target} (全長+全高比較: carA={sum_a}mm, carB={sum_b}mm)")
+        
+        # バリエーション設定があれば総フレーム数を反映
+        SHORT_GAME_TOTAL_FRAMES = SHORT_GAME_CONFIG.get("total_frames", 624) if SHORT_GAME_CONFIG else 624
+        print(f"  shortGame: total_frames={SHORT_GAME_TOTAL_FRAMES} (約{SHORT_GAME_TOTAL_FRAMES/24:.1f}秒)")
+        
+        setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT_GAME_CONFIG, char_dimensions=game_dimensions)
         scene.frame_end = SHORT_GAME_TOTAL_FRAMES
         print(f"  shortGame: scene.frame_end={SHORT_GAME_TOTAL_FRAMES} (約{SHORT_GAME_TOTAL_FRAMES/24:.1f}秒)")
         

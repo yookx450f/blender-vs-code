@@ -13,6 +13,7 @@ animation_settings_shortAnimal.py から抽出した共通ツール関数群。
         _get_animal_max_z,
         generate_easing_frames,
         _set_camera_location_keyframe_with_easing,
+        _calculate_animal_scale_factor,
     )
 """
 
@@ -296,3 +297,61 @@ def _get_animal_max_z(animal_obj):
     bounds = [Vector(b) for b in animal_obj.bound_box]
     corners_world = [animal_obj.matrix_world @ corner for corner in bounds]
     return max(c.z for c in corners_world)
+
+
+# ============================================================
+# 動的スケーリング — 動物の寸法からカメラ位置・軌道半径などを自動調整
+# Short2 (animation_settings_short2.py) の _calculate_scale_factor を参考に設計
+#
+# 【再調整】中小型動物でも寄るように基準サイズを上げて補正係数を下げる
+# ============================================================
+
+def _calculate_animal_scale_factor(animal_dimensions):
+    """
+    動物の寸法からスケール倍率を計算する。
+
+    基準サイズ(2.5m)に対して、両動物の最大寸法の大きい方を比較し、
+    スケール係数を算出。範囲は 0.5〜3.0 でクリップする。
+
+    【設計思想】
+    - 中小型動物（犬・猫・熊など ~1-2m）は補正されないor微弱に補正される
+    - 大型動物（馬・シカ ~2-3m）では適度に遠ざかる
+    - 超大型動物（キリン・象 ~4m+）で強く遠ざかる
+
+    動物には全長データがない場合もあるので、height のみを基準にし、
+    length があれば max(height, length) を使用する。
+
+    Parameters:
+        animal_dimensions: {key: {"length": mm値, "height": mm値}} の辞書 (None時はデフォルト1.0)
+
+    Returns:
+        float: スケール倍率 (デフォルト=1.0)
+    """
+    if not animal_dimensions:
+        return 1.0
+
+    base_size_m = 2.5  # 基準サイズ（中小型動物〜中型動物の境界）
+
+    # 両動物の最大寸法をメートルで取得
+    max_dims_m = []
+    for key, dims in animal_dimensions.items():
+        length_m = dims.get("length", 0) / 1000.0 if dims.get("length") else 0
+        height_m = dims.get("height", 0) / 1000.0 if dims.get("height") else 0
+        # length と height の両方があれば大きい方を、なければ height を使用
+        max_dim_m = max(length_m, height_m) if length_m > 0 else height_m
+        if max_dim_m > 0:
+            max_dims_m.append(max_dim_m)
+
+    if not max_dims_m:
+        return 1.0
+
+    # 両者のうち最大寸法の大きい方を基準に計算
+    largest_dim_m = max(max_dims_m)
+    scale_factor = largest_dim_m / base_size_m
+
+    # クリップ範囲 0.5 〜 3.0 （小型動物〜超大型動物をカバー）
+    # 中小型動物では 1.0 に近い値を保ち、カメラが寄ったままになる
+    scale_factor = max(0.5, min(3.0, scale_factor))
+
+    print(f"  スケール倍率計算: 最大寸法={largest_dim_m:.2f}m / 基準={base_size_m:.1f}m -> scale_factor={scale_factor:.2f}")
+    return scale_factor

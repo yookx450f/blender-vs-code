@@ -129,8 +129,7 @@ CAMERA_PATTERNS = [
 
 TOPDOWN_VARIATIONS = [
     {"name": "pure_topdown",     "position": (0.0, 0.0, 8.0)},   # 真上
-    {"name": "angled_topdown",   "position": (1.5, -1.5, 6.0)},  # 斜め上
-    {"name": "low_topdown",      "position": (0.0, 0.0, 5.0)},   #低い位置からの俯瞰
+    {"name": "angled_topdown",   "position": (1.5, -1.5, 8.0)},  # 斜め上（高さも8mに統一）
 ]
 
 TRANSPARENCY_TARGET = ["carB", "carA"]  # 半透明化する車をランダム選択

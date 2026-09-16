@@ -133,9 +133,8 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
 
     # ============================================================
     # 統合カメラキーフレーム生成（angleはフレーム位置ベースで計算）
+    # Zを一定に保つ（ズームイン廃止）
     # ============================================================
-    zoom_start_frame = cut1_start + int(cut1_length * 0.85)
-    zoom_end_frame = cut1_end
 
     # すべてのキーフレームを24フレームごとに一様に配置
     all_keyframes = list(range(cut1_start, cut1_end + 1, keyframe_interval))
@@ -150,25 +149,14 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         frame_progress = (frame - cut1_start) / cut1_length if cut1_length > 0 else 0
         angle = start_angle + total_rotation_scaled * frame_progress
 
-        # ズーム区間内か判定
-        if zoom_start_frame <= frame <= zoom_end_frame:
-            zoom_progress = (frame - zoom_start_frame) / (zoom_end_frame - zoom_start_frame + 1)
-            current_radius = arc_radius * (1.0 - 0.2 * zoom_progress)
-            current_height = arc_height * (1.0 - 0.15 * zoom_progress)
-            x = current_radius * math.sin(angle)
-            y = current_radius * math.cos(angle)
-            cam_pos = (x, y, current_height)
-        else:
-            cam_pos = get_cam_on_arc(angle)
+        # Zを一定に保つ（ズームイン廃止）
+        cam_pos = get_cam_on_arc(angle)
 
         # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
         _set_camera_keyframe(camera, frame, cam_pos, target)
 
         final_cam_pos = cam_pos
         final_rot = camera.rotation_quaternion.copy()
-
-    if zoom_start_frame <= cut1_end:
-        print(f"  [fr{zoom_start_frame}-{zoom_end_frame}] カメラズームイン追加 (半径100%→80%)")
 
     print(f"  [fr{cut1_start}-{cut1_end}] carA: {car_a_start} → {car_a_end}")
     print(f"  [fr{cut1_start}-{cut1_end}] carB: {car_b_start} → {car_b_end}")
@@ -178,6 +166,20 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         'camera_loc': final_cam_pos,
         'camera_rot': camera.rotation_euler.copy(),
     }
+
+
+def _clamp_camera_z(cam_z, min_z):
+    """
+    カメラのZ位置を最低値でクリップ（車との干渉防止）。
+    
+    Parameters:
+        cam_z: 補間後のカメラZ座標
+        min_z: 許可される最低Z値（車の全高 + 安全マージン）
+    
+    Returns:
+        float: クリップされたZ座標
+    """
+    return max(cam_z, min_z)
 
 
 def _interpolate_car_position(start_pos, end_pos, progress):
@@ -220,6 +222,9 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     # イージング関数の取得
     ease_func = _get_easing_func(strategy_config)
 
+    # カメラZの最低値保証（車の全高 + 安全マージン）
+    min_camera_z = strategy_config.get("min_camera_z", 4.0) if strategy_config else 4.0
+
     target = (0.0, 0.0, 1.0)
     keyframe_interval = 24
 
@@ -239,6 +244,8 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
         cam_x = cut1_final_cam[0] + (top_down_pos[0] - cut1_final_cam[0]) * cam_progress
         cam_y = cut1_final_cam[1] + (top_down_pos[1] - cut1_final_cam[1]) * cam_progress
         cam_z = cut1_final_cam[2] + (top_down_pos[2] - cut1_final_cam[2]) * cam_progress
+        # Zの最低値を保証（車との干渉防止）
+        cam_z = _clamp_camera_z(cam_z, min_camera_z)
         cam_pos = (cam_x, cam_y, cam_z)
         # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
         _set_camera_keyframe(camera, frame, cam_pos, target)
@@ -295,6 +302,9 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
     # イージング関数の取得
     ease_func = _get_easing_func(strategy_config)
 
+    # カメラZの最低値保証（車の全高 + 安全マージン）
+    min_camera_z = strategy_config.get("min_camera_z", 4.0) if strategy_config else 4.0
+
     target = (0.0, 0.0, 1.0)
     keyframe_interval = 24
 
@@ -313,6 +323,8 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         cam_x = top_down_pos[0] + (cam_return_pos[0] - top_down_pos[0]) * cam_progress
         cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
         cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
+        # Zの最低値を保証（車との干渉防止）
+        cam_z = _clamp_camera_z(cam_z, min_camera_z)
         cam_pos = (cam_x, cam_y, cam_z)
         # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
         _set_camera_keyframe(camera, frame, cam_pos, target)

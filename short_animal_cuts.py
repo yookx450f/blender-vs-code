@@ -13,6 +13,9 @@
 
 【2026-09-08 変更】カット4を削除し、カット3を27秒・1.1周に拡張。
 
+【動的スケーリング】
+    動物の寸法に基づいて、カメラY位置・円軌道半径・Z高度を自動調整する。
+
 使い方:
     from short_animal_cuts import (
         setup_cut1_transparency_start,
@@ -58,15 +61,41 @@ CUT3_START = 288
 CUT3_END = 936  # 27秒 = 648フレーム (旧: 888, カット4削除で延長)
 
 
-def setup_cut1_transparency_start(camera, car_a, car_b, center_pos_a, center_pos_b, separated_pos_a, separated_pos_b, cam_fixed):
+def setup_cut1_transparency_start(camera, car_a, car_b, center_pos_a, center_pos_b, separated_pos_a, separated_pos_b, cam_fixed, scale_params=None):
     """
     カット1 (fr0-144, 6秒): 半透明化 + 动物重叠状態維持。
 
     動物Bが半透明(瞬時0.35)になり、动物は重叠したまま不动。
-    カメラ位置: X=1m固定、Y=-11固定、Z:0.5→7渐变（中間点経由）。
-    3段階キーフレーム: (1,-11,0.5) → (1,-11,2.75) → (1,-11,7)
+    カメラ位置: X=1m固定、Yをスケール係数で調整、Zをスケール係数で調整。
+    3段階キーフレームで平滑移動。
+
+    Parameters:
+        camera: カメラオブジェクト
+        car_a: 動物Aのオブジェクト
+        car_b: 動物Bのオブジェクト
+        center_pos_a: 動物Aの中心位置
+        center_pos_b: 動物Bの中心位置
+        separated_pos_a: 動物Aの分離位置
+        separated_pos_b: 動物Bの分離位置
+        cam_fixed: 固定カメラ位置 (X, Y_base, Z_ref) の参照値
+        scale_params: スケールパラメータ辞書 (オプション)
+            - cam_scale: カメラ距離用スケール係数
+            - min_camera_z: カメラZの最低値保証
     """
-    print("\n  === カット1: 半透明化 + Y=-11固定, Z:0.5→7渐变 (AUTO_CLAMPED) ===")
+    print("\n  === カット1: 半透明化 + Y=-11固定, Z:0.5->7渐变 (AUTO_CLAMPED) ===")
+
+    if scale_params is None:
+        scale_params = {}
+    cam_scale = scale_params.get("cam_scale", 1.0)
+    char_scale = scale_params.get("char_scale", 1.0)
+
+    # スケーリング適用後のカメラY位置（デフォルト -11.0 * cam_scale）
+    base_cam_y = -7.5 * cam_scale
+
+    # Z座標もスケールで調整
+    cam_z_start = max(0.5, 0.5 * min(cam_scale, 2.0))
+    cam_z_end = max(7.0, 7.0 * char_scale)
+    cam_z_middle = (cam_z_start + cam_z_end) / 2.0
 
     # 动物は重叠位置を维持（fr0-fr144で不动）
     _set_location_keyframe(car_a, CUT1_START, center_pos_a[0], center_pos_a[1], center_pos_a[2])
@@ -74,11 +103,11 @@ def setup_cut1_transparency_start(camera, car_a, car_b, center_pos_a, center_pos
     _set_location_keyframe(car_a, CUT1_END, center_pos_a[0], center_pos_a[1], center_pos_a[2])
     _set_location_keyframe(car_b, CUT1_END, center_pos_b[0], center_pos_b[1], center_pos_b[2])
 
-    # カメラ位置: X=1固定、Y=-11固定、Z:0.5→7渐变（AUTO_CLAMPEDが自動イージング）
+    # カメラ位置: X固定、Yをスケール適用、Z渐变（AUTO_CLAMPEDが自動イージング）
     # 3段階キーフレーム設定
-    cam_start = (cam_fixed[0], -11.0, 0.5)              # fr0: (1, -11, 0.5)
-    cam_middle = (cam_fixed[0], -11.0, 2.75)            # fr72: (1, -11, 2.75) - 中間点
-    cam_end = (cam_fixed[0], -11.0, 7.0)                # fr144: (1, -11, 7.0)
+    cam_start = (cam_fixed[0], base_cam_y, cam_z_start)
+    cam_middle = (cam_fixed[0], base_cam_y, cam_z_middle)
+    cam_end = (cam_fixed[0], base_cam_y, cam_z_end)
 
     middle_frame = int((CUT1_START + CUT1_END) / 2)     # fr72
 
@@ -87,20 +116,39 @@ def setup_cut1_transparency_start(camera, car_a, car_b, center_pos_a, center_pos
     _set_camera_location_keyframe(camera, CUT1_END, cam_end)
 
     print(f"  [フレーム {CUT1_START}] carA={center_pos_a}, carB={center_pos_b} (重叠)")
-    print(f"  [フレーム {CUT1_START}-{CUT1_END}] カメラ: (1,-11,0.5)→(1,-11,2.75)→(1,-11,7) (AUTO_CLAMPED自動イージング)")
+    print(f"  [フレーム {CUT1_START}-{CUT1_END}] カメラ: ({cam_fixed[0]},{base_cam_y:.1f},{cam_z_start:.1f})->({cam_fixed[0]},{base_cam_y:.1f},{cam_z_middle:.1f})->({cam_fixed[0]},{base_cam_y:.1f},{cam_z_end:.1f}) (AUTO_CLAMPED自動イージング)")
     print(f"  [フレーム {CUT1_END}] carA={center_pos_a}, carB={center_pos_b} (重叠維持)")
 
 
-def setup_cut2_separation(camera, car_a, car_b, center_pos_a, center_pos_b, separated_pos_a, separated_pos_b, cam_fixed, cam_height):
+def setup_cut2_separation(camera, car_a, car_b, center_pos_a, center_pos_b, separated_pos_a, separated_pos_b, cam_fixed, cam_height, scale_params=None):
     """
     カット2 (fr144-288, 6秒): 动物が横へスライドして2体が並ぶ。
 
     动物はfr144で重叠（center位置）→ fr288で分離位置に渐变スライド。
-    カメラ: X=1m固定、Y=-11固定、Z=7→1.0渐变（AUTO_CLAMPEDで自動イージング）。
-    
-    fr288終了時、カメラ位置は (1, -11, 1.0) でカット3（円軌道）へ接続。
+    カメラ: X固定、Yをスケール適用、Zをスケール係数で調整。
+
+    fr288終了時、カメラ位置は (X, scaled_Y, 1.0) でカット3（円軌道）へ接続。
+
+    Parameters:
+        camera: カメラオブジェクト
+        car_a: 動物Aのオブジェクト
+        car_b: 動物Bのオブジェクト
+        center_pos_a: 動物Aの中心位置
+        center_pos_b: 動物Bの中心位置
+        separated_pos_a: 動物Aの分離位置
+        separated_pos_b: 動物Bの分離位置
+        cam_fixed: 固定カメラ位置 (X, Y_base, Z_ref) の参照値
+        cam_height: カメラ高さ（スケール適用済み）
+        scale_params: スケールパラメータ辞書 (オプション)
     """
-    print("\n  === カット2: 动物横スライド分离 + カメラZ:7→1.0渐变 (AUTO_CLAMPED) ===")
+    print("\n  === カット2: 动物横スライド分离 + カメラZ渐变 (AUTO_CLAMPED) ===")
+
+    if scale_params is None:
+        scale_params = {}
+    cam_scale = scale_params.get("cam_scale", 1.0)
+
+    # スケーリング適用後のカメラY位置
+    base_cam_y = -7.5 * cam_scale
 
     # 动物はfr144-288で中心位置→分離位置に渐变スライド（既存のease-in-out維持）
     frames_list = list(range(CUT2_START, CUT2_END + 1, 4))
@@ -117,21 +165,22 @@ def setup_cut2_separation(camera, car_a, car_b, center_pos_a, center_pos_b, sepa
         b_y = center_pos_b[1] + (separated_pos_b[1] - center_pos_b[1]) * ease
         _set_location_keyframe(car_b, sf, b_x, b_y, center_pos_b[2])
 
-    # カメラ: X=1固定、Y=-11固定、Z=7→1.0渐变（AUTO_CLAMPEDが自動イージング）
-    cam_start = (1.0, -11.0, 7.0)
-    cam_end = (1.0, -11.0, 1.0)
+    # カメラ: X固定、Yをスケール適用、Z渐变（AUTO_CLAMPEDが自動イージング）
+    cam_start = (cam_fixed[0], base_cam_y, 7.0 * min(cam_scale, 2.0))
+    cam_end = (cam_fixed[0], base_cam_y, cam_height)
+
     _set_camera_location_keyframe(camera, CUT2_START, cam_start)
     _set_camera_location_keyframe(camera, CUT2_END, cam_end)
 
     # fr288終了時、X=1のままで円軌道へ接続（X=0に戻さない）
-    final_cam_cut2 = (1.0, -11.0, 1.0)
+    final_cam_cut2 = (cam_fixed[0], base_cam_y, cam_height)
     _set_camera_location_keyframe(camera, CUT2_END, final_cam_cut2)
 
     print(f"  [フレーム {CUT2_START}] carA={center_pos_a}, carB={center_pos_b} (重叠)")
-    print(f"  [フレーム {CUT2_END}] carA={separated_pos_a}, carB={separated_pos_b} (スライド分离完了) | カメラZ: 7→1.0, X=1维持, Y=-11固定")
+    print(f"  [フレーム {CUT2_END}] carA={separated_pos_a}, carB={separated_pos_b} (スライド分离完了) | カメラZ: {cam_start[2]:.1f}->{cam_height:.1f}, X={cam_fixed[0]}维持, Y={base_cam_y:.1f}固定")
 
 
-def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam_height):
+def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam_height, scale_params=None):
     """
     カット3 (fr288-936, 27秒): 円軌道カメラで1.1周。
 
@@ -139,23 +188,42 @@ def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam
     动物は分离位置を维持。
 
     軌道パラメータ:
-      - 半径: 11m（2026-09-08変更）
-      - fr288: カット2終了位置 (1, -11, 1.0) から开始
-      - 開始角度: atan2(-11, 1) ≈ -84.8° （X=1で円軌道へ接続）
-      - 半径補間: fr288→fr304 で √(1²+11²)≈11.045 から 11 へ渐变移行
+      - 半径: スケール係数に応じて動的に決定（デフォルト 11m）
+      - fr288: カット2終了位置から开始
+      - 開始角度: カット2終了位置に合わせて计算
+      - 半径補間: 平滑に移行
       - カメラの向き: ターゲットEmptyが高位（max高さ*0.75）を向く。
+
+    Parameters:
+        camera: カメラオブジェクト
+        car_a: 動物Aのオブジェクト
+        car_b: 動物Bのオブジェクト
+        separated_pos_a: 動物Aの分離位置
+        separated_pos_b: 動物Bの分離位置
+        cam_height: カメラ高さ（スケール適用済み）
+        scale_params: スケールパラメータ辞書 (オプション)
+            - cam_scale: カメラ距離用スケール係数
     """
-    print("\n  === カット3: 円軌道1.1周（半径11m、27秒、両方視界に）===")
+    print("\n  === カット3: 円軌道1.1周（27秒、両方視界に）===")
+
+    if scale_params is None:
+        scale_params = {}
+    cam_scale = scale_params.get("cam_scale", 1.0)
+    char_scale = scale_params.get("char_scale", 1.0)
 
     ORBIT_CENTER = (0.0, 0.0)
-    ORBIT_RADIUS = 11.0  # 半径11m（2026-09-08変更）
-    
-    # 開始角度を再計算 - カット2終了位置 (1, -11) から円軌道へ接続
-    orbit_start_angle = math.atan2(-11.0, 1.0)  # ≈ -84.8°
-    initial_radius = math.sqrt(1.0**2 + 11.0**2)  # ≈ 11.045
-    
-    # fr288: カット2終了位置から直接接続（X=1維持）
-    _set_camera_location_keyframe(camera, CUT3_START, (1.0, -11.0, 1.0))
+    ORBIT_RADIUS = 7.5 * cam_scale  # スケール係数で動的に半径調整
+    print(f"  円軌道半径: {ORBIT_RADIUS:.1f}m（スケール調整）")
+
+    # カット2終了時のカメラY位置をスケール適用
+    base_cam_y = -7.5 * cam_scale
+
+    # 開始角度を再计算 - カット2終了位置 (X=1, Y=scaled_base) から円軌道へ接続
+    orbit_start_angle = math.atan2(base_cam_y, 1.0)
+    initial_radius = math.sqrt(1.0**2 + base_cam_y**2)
+
+    # fr288: カット2終了位置から直接接続（X=1维持）
+    _set_camera_location_keyframe(camera, CUT3_START, (1.0, base_cam_y, cam_height))
 
     # 軌道移行フェーズ: fr288→fr304 で半径を initial_radius → ORBIT_RADIUS へ渐变
     transition_frames = [288, 296, 304]
@@ -166,7 +234,7 @@ def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam
         radius = initial_radius + (ORBIT_RADIUS - initial_radius) * t
         cam_x = ORBIT_CENTER[0] + radius * math.cos(orbit_start_angle)
         cam_y = ORBIT_CENTER[1] + radius * math.sin(orbit_start_angle)
-        _set_camera_location_keyframe(camera, sf, (cam_x, cam_y, 1.0))
+        _set_camera_location_keyframe(camera, sf, (cam_x, cam_y, cam_height))
 
     # 通常の軌道キーフレーム（8フレーム間隔、fr304から继续）
     orbit_keyframe_interval = 8
@@ -182,7 +250,7 @@ def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam
 
         cam_x = ORBIT_CENTER[0] + ORBIT_RADIUS * math.cos(angle)
         cam_y = ORBIT_CENTER[1] + ORBIT_RADIUS * math.sin(angle)
-        cam_pos = (cam_x, cam_y, 1.0)
+        cam_pos = (cam_x, cam_y, cam_height)
 
         _set_camera_location_keyframe(camera, frame, cam_pos)
 
@@ -195,13 +263,13 @@ def setup_cut3_orbit(camera, car_a, car_b, separated_pos_a, separated_pos_b, cam
     _set_location_keyframe(car_a, CUT3_END, separated_pos_a[0], separated_pos_a[1], separated_pos_a[2])
     _set_location_keyframe(car_b, CUT3_END, separated_pos_b[0], separated_pos_b[1], separated_pos_b[2])
 
-    # 円軌道の最終位置を計算
+    # 円軌道の最終位置を计算
     final_orbit_angle = orbit_start_angle + 2.2 * math.pi  # 1.1周
     final_cam_x = ORBIT_CENTER[0] + ORBIT_RADIUS * math.cos(final_orbit_angle)
     final_cam_y = ORBIT_CENTER[1] + ORBIT_RADIUS * math.sin(final_orbit_angle)
-    final_cam_cut3 = (final_cam_x, final_cam_y, 1.0)
+    final_cam_cut3 = (final_cam_x, final_cam_y, cam_height)
 
-    print(f"  [フレーム {CUT3_END}] 円軌道1.1周完了（半径11m）")
-    print(f"  軌道始点: (1, -11, 1.0), 開始角度={math.degrees(orbit_start_angle):.1f}°")
+    print(f"  [フレーム {CUT3_END}] 円軌道1.1周完了（半径{ORBIT_RADIUS:.1f}m）")
+    print(f"  軌道始点: (1, {base_cam_y:.1f}, {cam_height:.1f}), 開始角度={math.degrees(orbit_start_angle):.1f}°")
 
     return {'final_cam_cut3': final_cam_cut3}
