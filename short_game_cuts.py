@@ -17,6 +17,7 @@ ShortGame - カット1・カット2 の位置アニメーションモジュー�
     )
 """
 
+import bpy
 import math
 from animation_common import set_camera_look_at, _set_camera_keyframe
 from short_game_utils import (
@@ -50,13 +51,10 @@ def _get_easing_func(strategy_config=None):
             return get_easing_function(strategy_config["easing_function"])
         except Exception:
             pass
-    # デフォルト: cubic
-    def _ease_in_out_cubic(t):
-        if t < 0.5:
-            return 4.0 * t * t * t
-        else:
-            return 1.0 - (-2.0 * t + 2.0)**3 / 2.0
-    return _ease_in_out_cubic
+    # デフォルト: sine（最も滑らかな加減速）
+    def _ease_in_out_sine(t):
+        return (1.0 - math.cos(math.pi * t)) / 2.0
+    return _ease_in_out_sine
 
 
 def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_start, char_b_end, strategy_config=None, cut_frames=None):
@@ -175,8 +173,8 @@ def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_
         else:
             cam_pos = get_cam_on_arc(angle)
 
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # カメラの位置+回転を直接キーフレーム記録（LookAt計算方式）
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         final_cam_pos = cam_pos
         final_rot = camera.rotation_quaternion.copy()
@@ -192,6 +190,38 @@ def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_
         'camera_loc': final_cam_pos,
         'camera_rot': camera.rotation_euler.copy(),
     }
+
+
+def _set_camera_position_and_rotation_keyframe(cam, target_name, frame, cam_pos, tgt_pos):
+    """LookAt計算でカメラの向きを直接設定してキーフレーム記録する"""
+    from mathutils import Vector
+
+    current_frame = bpy.context.scene.frame_current
+    bpy.context.scene.frame_set(frame)
+    
+    if target_name in bpy.data.objects:
+        tgt = bpy.data.objects[target_name]
+        tgt.location = (tgt_pos[0], tgt_pos[1], tgt_pos[2])
+    
+    cam.location = Vector(cam_pos)
+    
+    camera_loc = Vector(cam_pos)
+    target_loc = Vector(tgt_pos)
+    direction = target_loc - camera_loc
+    
+    if direction.length >= 0.001:
+        track_quat = direction.normalized().to_track_quat('-Z', 'Y')
+        cam.rotation_euler = track_quat.to_euler()
+    
+    if cam.animation_data is None:
+        cam.animation_data_create()
+    
+    for i in range(3):
+        cam.keyframe_insert(data_path="location", index=i)
+    for i in range(3):
+        cam.keyframe_insert(data_path="rotation_euler", index=i)
+    
+    bpy.context.scene.frame_set(current_frame)
 
 
 def _interpolate_char_position(start_pos, end_pos, progress):
@@ -238,10 +268,10 @@ def setup_cut2_phase_a_topdown(camera, char_a, char_b, char_a_start, char_a_end,
     ease_func = _get_easing_func(strategy_config)
 
     target = (0.0, 0.0, 1.0)
-    keyframe_interval = 8  # 24→8に狭めてカメラ回転を滑らかに
+    keyframe_interval = 24  # short2と同様の間隔で滑らかに>>>>>>> REPLACE
 
-    # cut2a_startで明確なカメラキーフレームを設定（前回の残骸とのgapを防止）
-    _set_camera_keyframe(camera, cut2a_start, cut1_final_cam, target)
+    # cut2a_startで明確なカメラキーフレームを設定
+    _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", cut2a_start, cut1_final_cam, target)
 
     # カメラのキーフレーム
     phase_a_frames = list(range(cut2a_start, cut2a_end + 1, keyframe_interval))
@@ -257,8 +287,8 @@ def setup_cut2_phase_a_topdown(camera, char_a, char_b, char_a_start, char_a_end,
         cam_y = cut1_final_cam[1] + (top_down_pos[1] - cut1_final_cam[1]) * cam_progress
         cam_z = cut1_final_cam[2] + (top_down_pos[2] - cut1_final_cam[2]) * cam_progress
         cam_pos = (cam_x, cam_y, cam_z)
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # LookAt計算方式で位置+回転を直接キーフレーム記録
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         # キャラクターは中央集合位置で静止（重なったまま）
         _set_location_keyframe(char_a, frame, char_a_end[0], char_a_end[1], char_a_end[2])
@@ -318,7 +348,7 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
     ease_func = _get_easing_func(strategy_config)
 
     target = (0.0, 0.0, 1.0)
-    keyframe_interval = 8  # 24→8に狭めてカメラ回転を滑らかに
+    keyframe_interval = 24  # short2と同様の間隔で滑らかに>>>>>>> REPLACE
 
     # キャラクターのスライドはフェーズBのみで進行
     total_slide_frames = cut2b_end - cut2b_start + 1
@@ -336,8 +366,8 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
         cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
         cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
         cam_pos = (cam_x, cam_y, cam_z)
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # LookAt計算方式で位置+回転を直接キーフレーム記録
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         # キャラクターのスライド進行度（イージング適用）
         raw_char_progress = (frame - cut2b_start) / total_slide_frames
@@ -353,8 +383,8 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
     _set_location_keyframe(char_a, cut2b_end, char_a_start[0], char_a_start[1], char_a_start[2])
     _set_location_keyframe(char_b, cut2b_end, char_b_start[0], char_b_start[1], char_b_start[2])
 
-    # 最終カメラ位置を設定（キーフレームはループで設定済み）
-    set_camera_look_at(camera, cam_return_pos, target)
+    # 最終カメラ位置を設定
+    camera.location = (cam_return_pos[0], cam_return_pos[1], cam_return_pos[2])
 
     print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {top_down_pos} → {cam_return_pos}")
     print(f"  キャラクター: スライド完了 → charA={char_a_start}, charB={char_b_start}")
