@@ -17,6 +17,7 @@ Short2 - カット1・カット2 の位置アニメーションモジュール
     )
 """
 
+import bpy
 import math
 from animation_common import set_camera_look_at, _set_camera_keyframe
 from short2_utils import (
@@ -152,8 +153,8 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         # Zを一定に保つ（ズームイン廃止）
         cam_pos = get_cam_on_arc(angle)
 
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # カメラの位置+回転を直接キーフレーム記録（Phase A/Bと同じ方式に統一）
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         final_cam_pos = cam_pos
         final_rot = camera.rotation_quaternion.copy()
@@ -188,6 +189,51 @@ def _interpolate_car_position(start_pos, end_pos, progress):
     y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress
     z = start_pos[2] + (end_pos[2] - start_pos[2]) * progress
     return (x, y, z)
+
+
+def _set_camera_position_and_rotation_keyframe(cam, target_name, frame, cam_pos, tgt_pos):
+    """Track Toに依存せず、LookAt計算でカメラの向きを直接設定してキーフレーム記録する
+    
+    Track To constraintの有効/無効に関係なく動作する。
+    mathutils.Vector.to_track_quat() を使用し、カメラの-Z軸がtargetを向くように回転を算出。
+    """
+    from mathutils import Vector, Quaternion
+    
+    current_frame = bpy.context.scene.frame_current
+    bpy.context.scene.frame_set(frame)
+    
+    # CameraTargetの位置を設定
+    if target_name in bpy.data.objects:
+        tgt = bpy.data.objects[target_name]
+        tgt.location = (tgt_pos[0], tgt_pos[1], tgt_pos[2])
+    
+    # カメラの位置を設定
+    cam.location = Vector(cam_pos)
+    
+    # LookAt計算: カメラの-Z軸がtargetを向くように回転を算出
+    camera_loc = Vector(cam_pos)
+    target_loc = Vector(tgt_pos)
+    direction = target_loc - camera_loc
+    
+    if direction.length < 0.001:
+        # カメラとtargetが重なっている場合は回転を変更しない
+        pass
+    else:
+        # to_track_quat(direction, 'TRACK_axis', 'UP_axis')
+        # Blenderのカメラ: 進行方向=-Z, 上向き=+Y
+        track_quat = direction.normalized().to_track_quat('-Z', 'Y')
+        cam.rotation_euler = track_quat.to_euler()
+    
+    # キーフレームとして記録
+    if cam.animation_data is None:
+        cam.animation_data_create()
+    
+    for i in range(3):
+        cam.keyframe_insert(data_path="location", index=i)
+    for i in range(3):
+        cam.keyframe_insert(data_path="rotation_euler", index=i)
+    
+    bpy.context.scene.frame_set(current_frame)
 
 
 def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, cut1_final_cam, strategy_config=None, cut_frames=None):
@@ -228,8 +274,8 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     target = (0.0, 0.0, 1.0)
     keyframe_interval = 24
 
-    # cut2a_startで明確なカメラキーフレームを設定（前回の残骸とのgapを防止）
-    _set_camera_keyframe(camera, cut2a_start, cut1_final_cam, target)
+    # cut2a_startで明確なカメラキーフレームを設定（カット1からの連続性を保証）
+    _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", cut2a_start, cut1_final_cam, target)
 
     # カメラのキーフレーム
     phase_a_frames = list(range(cut2a_start, cut2a_end + 1, keyframe_interval))
@@ -247,8 +293,8 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
         # Zの最低値を保証（車との干渉防止）
         cam_z = _clamp_camera_z(cam_z, min_camera_z)
         cam_pos = (cam_x, cam_y, cam_z)
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # Track Toがミュートされているので、位置+回転を直接キーフレーム記録
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         # 車は中央集合位置で静止（重なったまま）
         _set_location_keyframe(car_a, frame, car_a_end[0], car_a_end[1], car_a_end[2])
@@ -326,8 +372,8 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         # Zの最低値を保証（車との干渉防止）
         cam_z = _clamp_camera_z(cam_z, min_camera_z)
         cam_pos = (cam_x, cam_y, cam_z)
-        # matrix_world→quaternionでキーフレーム設定（ジンバルロック回避）
-        _set_camera_keyframe(camera, frame, cam_pos, target)
+        # Track Toがミュートされているので、位置+回転を直接キーフレーム記録
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
         # 車のスライド進行度（イージング適用）
         raw_car_progress = (frame - cut2b_start) / total_slide_frames
@@ -344,7 +390,7 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
     _set_location_keyframe(car_b, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
 
     # 最終カメラ位置を設定（キーフレームはループで設定済み）
-    set_camera_look_at(camera, cam_return_pos, target)
+    camera.location = (cam_return_pos[0], cam_return_pos[1], cam_return_pos[2])
 
     print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {top_down_pos} → {cam_return_pos}")
     print(f"  車: スライド完了 → carA={car_a_start}, carB={car_b_start}")

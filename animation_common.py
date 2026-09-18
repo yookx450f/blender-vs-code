@@ -139,7 +139,10 @@ def _ensure_camera_tracks_target(cam, target):
     track_constraint.target = target
     track_constraint.track_axis = 'TRACK_NEGATIVE_Z'
     track_constraint.up_axis = 'UP_Y'
-    track_constraint.mute = False
+    # mute 状態を尊重: 既に mute=True に設定されている場合は再有効化しない
+    # → Short2などではTrack Toを無効化し、直接rotation_eulerで制御する
+    if not track_constraint.mute:
+        track_constraint.mute = False
 
 
 def set_camera_look_at(cam, loc, tgt):
@@ -176,9 +179,14 @@ def _set_camera_keyframe(cam, frame, loc, tgt):
     if target.animation_data is None:
         target.animation_data_create()
     
-    # カメラの位置を設定してキーフレーム
+    # カメラの位置を設定してキーフレーム（極端な値を防止するためクランプ）
     x, y, z = loc[0], loc[1], loc[2]
-    cam.location = (x, y, z)
+    CLAMP_MAX = 50.0
+    cx = max(-CLAMP_MAX, min(CLAMP_MAX, x))
+    cy = max(-CLAMP_MAX, min(CLAMP_MAX, y))
+    cz = max(0.1, min(CLAMP_MAX, z))
+    
+    cam.location = (cx, cy, cz)
     for i in range(3):
         cam.keyframe_insert(data_path="location", index=i)
     

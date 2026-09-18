@@ -1,8 +1,9 @@
 # カメラ飛翔問題対策ドキュメント
 
-**作成日**: 2026-09-11  
-**ステータス**: 有効  
-**対象モジュール**: `animation_common.py`, `short2_utils.py`, `short2_cuts.py`, `blend_scene_creator.py`
+**作成日**: 2026-09-11
+**最終更新**: 2026-09-18
+**ステータス**: 有効 (2026-09-18修正済み)
+**対象モジュール**: `animation_common.py`, `short2_utils.py`, `short2_cuts.py`, `blend_scene_creator.py`, `animation_settings_short2.py`
 
 ---
 
@@ -72,10 +73,74 @@ for obj in list(bpy.data.objects):
 
 ### 原因D: キーフレーム間隔が広い (LOW PRIORITY)
 
-**場所**: [`short2_cuts.py`](short2_cuts.py:95) - `keyframe_interval = 24`  
+**場所**: [`short2_cuts.py`](short2_cuts.py:95) - `keyframe_interval = 24`
 **現象**: 24フレーム(1秒)ごとのキーフレーム設定では、Blender 5.x の interpolation で急な移動区間の補間が不安定になる
 
 **影響**: カメラの位置は正しく設定されていても、中間フレームで値が暴走する可能性
+
+### 原因E: CameraTarget の animation_data がクリアされない (HIGH PRIORITY) ⭐ 2026-09-18修正
+
+**場所**: [`animation_settings_short2.py`](animation_settings_short2.py:168)
+**現象**: `clear_animation_data([camera, car_a, car_b])` では CameraTarget は対象外。前回の `_set_camera_keyframe()` で設定された CameraTarget の位置キーフレームが次回に引き継がれる
+
+```
+Short2実行 → _set_camera_keyframe() で CameraTarget にlocationキーフレーム设定
+次実行   → clear_animation_data([camera, car_a, car_b]) はCameraTargetをクリアしない
+結果     → CameraTargetの古いキーフレームが残り、カメラ位置を暴走させる
+```
+
+**ステータス**: ✅ 2026-09-18 に修正済み。[`animation_settings_short2.py`](animation_settings_short2.py:170) に CameraTarget の animation_data クリア処理を追加。
+
+### 原因F: Track To constraint が強制再有効化される (HIGH PRIORITY) ⭐ 2026-09-18修正
+
+**場所**: [`animation_common.py:142`](animation_common.py:142)
+**現象**: `_ensure_camera_tracks_target()` で `track_constraint.mute = False` に強制。Short2側で `constraint.mute = True` を設定しても、`_set_camera_keyframe()` 呼び出しですぐに再有効化される
+
+```
+animation_settings_short2.py: constraint.mute = True (無効化)
+short2_cuts.py: _set_camera_keyframe() を呼び出し
+animation_common.py: _ensure_camera_tracks_target() で mute = False (再有効化！)
+→ CameraTargetの残骸キーフレームに従ってカメラが暴走
+```
+
+**ステータス**: ✅ 2026-09-18 に修正済み。[`animation_common.py`](animation_common.py:142) で mute 状態を尊重するよう変更。
+
+### 原因G: カメラが補間で過度に遠方へ移動 (MEDIUM PRIORITY) ⭐ 2026-09-18修正
+
+**場所**: [`animation_common.py:179`](animation_common.py:179) の `_set_camera_keyframe()`
+**現象**: トップダウンフェーズでカメラが Z=8m に移動し、その後復帰する補間の途中で「車の中心から過度に遠い位置」を経由することがある。特に fr287 付近で車全体が画面の中央に小さく映ってしまう
+
+```
+fr287 (補間中) → カメラ位置: 補間で車が小さすぎる
+正常値        → カメラ距離: 5-8m
+異常時の値    → カメラ距離: 10m以上、車はピンと見えた
+```
+
+**ステータス**: ✅ 2026-09-18 に一時的な距離制限 (最大10m / 最小5m) を追加したが、**これは補間パスを歪める原因となったため削除**。根本的な解決策として原因Hのアプローチに変更。
+
+### 原因H: Short2のPhase A/Bでrotation_eulerキーフレームが設定されない (HIGH PRIORITY) ⭐ 2026-09-18修正
+
+**場所**: [`short2_cuts.py`](short2_cuts.py:193) の `setup_cut2_phase_a_topdown()` / `setup_cut2_phase_b_camera_return()`
+**現象**: Track To constraintがミュートされている状態で `_set_camera_keyframe()` を呼んでいても、カメラの回転キーフレームは記録されない。その結果、補間でrotation_eulerが前回の値のまま残っており、CameraTargetのキーフレームと整合性が取れていない
+
+```
+Short2: constraint.mute = True (Track To無効)
+Phase A/B: _set_camera_keyframe() → 位置のみキーフレーム化（回転は記録しない）
+→ カメラの向きが更新されず、前回のrotation_eulerが残ったままになる
+→ Track Toが無効なのでカメラはどこにも向かず、補間で暴走する
+```
+
+**ステータス**: ✅ 2026-09-18 に修正済み。以下の修正を実施:
+1. `_set_camera_position_and_rotation_keyframe()` を追加 (LookAt計算方式)
+2. Short2全体 (Cut1 + Phase A + Phase B) で統一して使用
+3. カメラ制御方式の統一化により、切り替え時のカクつきも解消
+
+### 原因I: Cut1とPhase A/Bでカメラ制御方式が異なる (MEDIUM PRIORITY) ⭐ 2026-09-18修正
+
+**場所**: [`short2_cuts.py`](short2_cuts.py)
+**現象**: Cut1では `_set_camera_keyframe()` (Track To依存)、Phase A/Bでは直接rotation_eulerキーフレーム。制御方式の不一致で切り替え時にカクつきが発生
+
+**ステータス**: ✅ 2026-09-18 に修正済み。Cut1も `_set_camera_position_and_rotation_keyframe()` に変更し、Short2全体で統一
 
 ---
 
@@ -86,6 +151,11 @@ for obj in list(bpy.data.objects):
 | 2026-08-13 | keyframe_insert が正しい値を記録しない | obj.location/rotation_euler を keyframe_insert 前に設定 | [`plans/scene1-slide-animation-fix.md`](plans/scene1-slide-animation-fix.md:397) |
 | 2026-08-13 | Blender 5.x で fcurves が存在しない | レイヤー化アクションAPIに対応 | same |
 | 2026-09-xx | ジンバルロックでカメラが飛ぶ | set_camera_look_at の安全域を拡張 (L107-118) | `animation_common.py` |
+| **2026-09-18** | **CameraTargetのanimation_dataが残骸として残る** | `animation_settings_short2.py` にCameraTargetクリア処理を追加 | [`animation_settings_short2.py`](animation_settings_short2.py:170) |
+| **2026-09-18** | **Track To constraintが強制再有効化される** | `_ensure_camera_tracks_target()` でmute状態を尊重するよう変更 | [`animation_common.py`](animation_common.py:142) |
+| **2026-09-18** | **clear_scene()でCameraTargetが生き残り** | `objects_to_keep`からComparisonCamera,CameraTargetを除外。毎回再作成方式に | [`blend_scene_creator.py`](blend_scene_creator.py:423) |
+| **2026-09-18** | **補間でカメラが過度に遠方へ移動 (fr287)** | `_set_camera_keyframe()` に最大距離10m / 最小5mの制限を追加 → **削除** (補間パスを歪めるため) | [`animation_common.py`](animation_common.py:179) |
+| **2026-09-18** | **Short2でrotation_eulerキーフレーム未設定 + カメラ制御方式不統一** | LookAt計算方式の `_set_camera_position_and_rotation_keyframe()` を実装し、Short2全体に統一適用 | [`short2_cuts.py`](short2_cuts.py:194) |
 
 ---
 
@@ -110,7 +180,13 @@ for obj in list(bpy.data.objects):
 
 ## 5. 推奨修正 (未実装分)
 
-### 修正1: set_camera_look_at() を matrix_world ベースに書き換え (HIGH PRIORITY)
+### ✅ 修正1: clear_scene() で ComparisonCamera/CameraTarget を削除 ⭐ 2026-09-18完了
+
+**ステータス**: ✅ 完了
+
+`objects_to_keep` から `ComparisonCamera` と `CameraTarget` を除外し、毎回新しいカメラを作成する方式に変更。これにより前回の回転状態やキーフレームが完全にクリアされる。
+
+### 修正2: set_camera_look_at() を matrix_world ベースに書き換え (HIGH PRIORITY)
 
 **問題**: `rotation_euler` 経由の設定はジンバルロックの根本解決にならない
 
@@ -149,21 +225,6 @@ def set_camera_look_at(cam, loc, tgt):
 - ジンバルロックを完全に回避 (オイラー角を使用しない)
 - 真上/真下付近も安定して動作
 - カメラの進行方向(-Z軸)が常にターゲットを指す
-
-### 修正2: clear_scene() でカメラのrotation_eulerをリセット (MEDIUM PRIORITY)
-
-**追加コード**:
-```python
-def clear_scene():
-    # ... 既存処理 ...
-    
-    # ComparisonCamera の状態もリセット
-    if "ComparisonCamera" in bpy.data.objects:
-        camera = bpy.data.objects["ComparisonCamera"]
-        camera.rotation_euler = (0.0, 0.0, 0.0)
-        if camera.animation_data:
-            camera.animation_data_clear()
-```
 
 ### 修正3: キーフレーム間隔の短縮 (LOW PRIORITY)
 
@@ -207,3 +268,5 @@ def clear_scene():
 
 **更新履歴**:
 - 2026-09-11: 初版作成 (Short2カメラ飛翔問題を契機に)
+- 2026-09-18: **CameraTarget残骸問題とconstraint再有効化問題を修正**。3ファイルに渡り一貫性のある修正を適用 ([`animation_settings_short2.py`](animation_settings_short2.py), [`animation_common.py`](animation_common.py), [`blend_scene_creator.py`](blend_scene_creator.py))
+- 2026-09-18: **距離制限の削除とPhase A/Bのrotation_eulerキーフレーム追加**。距离制限 (5m-10m) は補間パスを歪めるため削除。代わりに、Short2のPhase A/Bで直接rotation_eulerキーフレームを記録する `_set_camera_position_and_rotation_keyframe()` を実装 ([`short2_cuts.py`](short2_cuts.py), [`animation_common.py`](animation_common.py))
