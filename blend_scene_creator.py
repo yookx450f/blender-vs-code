@@ -422,19 +422,12 @@ def load_cars_config():
 # ============================================================
 def clear_scene():
     """シーン内のすべてのオブジェクトを削除（初期化関数）"""
-    # 全オブジェクトを一括削除（KeyLightとComparisonCamera以外）
-    objects_to_keep = {"KeyLight", "ComparisonCamera"}
+    # 全オブジェクトを一括削除（KeyLightのみ保持）
+    # ComparisonCamera と CameraTarget は削除し、次回起動時に再作成する
+    objects_to_keep = {"KeyLight"}
     for obj in list(bpy.data.objects):
         if obj.name not in objects_to_keep:
             bpy.data.objects.remove(obj, do_unlink=True)
-    
-    # ComparisonCamera の状態もリセット（前回のキーフレーム/回転が引き継がれないように）
-    if "ComparisonCamera" in bpy.data.objects:
-        camera = bpy.data.objects["ComparisonCamera"]
-        camera.location = (0.0, 0.0, 5.0)
-        camera.rotation_euler = (0.0, 0.0, 0.0)
-        if camera.animation_data:
-            camera.animation_data_clear()
     
     # 不要なマテリアルもクリーンアップ
     for mat in list(bpy.data.materials):
@@ -1161,6 +1154,72 @@ def setup_camera_and_lighting():
     print(f"  - 位置: {camera.location}")
     
     return camera
+
+def adjust_lighting_for_giant_characters(scale_factor, max_height_m):
+    """shortGame専用: 巨大キャラクターの上部まで光が届くようライティングを調整する
+    
+    キャラクターの高さを超えて配置し、全身が明るく照らされるようライト位置・エネルギー・照射角をスケーリング。
+    
+    Parameters:
+        scale_factor: キャラクター寸法から計算されたスケール倍率
+        max_height_m: 両キャラクターの最大高さ（メートル）
+    """
+    # ライトは必ずキャラクター頭上より上に配置（+2mのマージン）
+    min_light_z = max(14, max_height_m + 2.0)
+    
+    # KeyLight を引き上げ・エネルギー増加
+    if "KeyLight" in bpy.data.objects:
+        kl = bpy.data.objects["KeyLight"]
+        old_loc = kl.location.copy()
+        kl.location = (old_loc.x, old_loc.y, min_light_z)
+        kl.data.energy = int(1500 * max(scale_factor, 1.5))
+        kl.data.size = max(kl.data.size, 8 * scale_factor)
+        print(f"  KeyLight: Z={old_loc.z:.1f}→{min_light_z:.1f}, energy={kl.data.energy}, size={kl.data.size:.1f}")
+    
+    # SubLight を引き上げ・エネルギー増加
+    if "SubLight" in bpy.data.objects:
+        sl = bpy.data.objects["SubLight"]
+        old_loc = sl.location.copy()
+        sl.location = (old_loc.x, old_loc.y, min_light_z)
+        sl.data.energy = int(1200 * max(scale_factor, 1.5))
+        sl.data.size = max(sl.data.size, 6 * scale_factor)
+        print(f"  SubLight: Z={old_loc.z:.1f}→{min_light_z:.1f}, energy={sl.data.energy}, size={sl.data.size:.1f}")
+    
+    # RimLight のZ位置引き上げ・照射角拡大
+    if "RimLight" in bpy.data.objects:
+        rl = bpy.data.objects["RimLight"]
+        old_loc = rl.location.copy()
+        rl.location = (old_loc.x, old_loc.y, min_light_z)
+        rl.data.energy = int(1500 * max(scale_factor, 1.5))
+        rl.data.spot_size = max(rl.data.spot_size, 1.5 * scale_factor)
+        print(f"  RimLight: Z={old_loc.z:.1f}→{min_light_z:.1f}, spot_size={rl.data.spot_size:.2f}")
+    
+    # TopFill Light — キャラクター真上から下向きのエリアライト（頭部を照らす最重要光源）
+    top_fill_name = "TopFill"
+    if top_fill_name not in bpy.data.objects:
+        top_z = max_height_m + 5.0  # 頭上さらに+5mの余裕
+        bpy.ops.object.light_add(type='AREA', location=(0.0, 0.0, top_z))
+        tf = bpy.context.active_object
+        tf.name = top_fill_name
+        # X軸90度回転で下向きに
+        tf.rotation_euler = (math.pi / 2, 0.0, 0.0)
+        tf.data.energy = int(2000 * max(scale_factor, 1.5))
+        tf.data.size = max(10 * scale_factor, 20)
+        if hasattr(tf.data, 'distance'):
+            tf.data.distance = 0
+        if hasattr(tf.data, 'use_custom_distance'):
+            tf.data.use_custom_distance = False
+        print(f"  TopFill追加: Z={top_z:.1f}, energy={tf.data.energy}, size={tf.data.size:.1f} (下向き)")
+    else:
+        tf = bpy.data.objects[top_fill_name]
+        top_z = max_height_m + 5.0
+        tf.location = (0.0, 0.0, top_z)
+        tf.rotation_euler = (math.pi / 2, 0.0, 0.0)
+        tf.data.energy = int(2000 * max(scale_factor, 1.5))
+        tf.data.size = max(10 * scale_factor, 20)
+    
+    print(f"  ✅ ライティング調整完了 (scale_factor={scale_factor:.2f}, max_height={max_height_m:.2f}m, min_light_z={min_light_z:.1f})")
+
 
 def setup_world_background():
     """世界背景を完全な漆黒（真っ黒）に設定する"""
@@ -1990,6 +2049,13 @@ def main():
         # バリエーション設定があれば総フレーム数を反映
         SHORT_GAME_TOTAL_FRAMES = SHORT_GAME_CONFIG.get("total_frames", 624) if SHORT_GAME_CONFIG else 624
         print(f"  shortGame: total_frames={SHORT_GAME_TOTAL_FRAMES} (約{SHORT_GAME_TOTAL_FRAMES/24:.1f}秒)")
+        
+        # 巨大キャラクターのライティング調整（キャラ上部が暗くならないようライト位置をスケーリング）
+        max_height_m = max((dims.get("height", 0) / 1000.0 for dims in game_dimensions.values()), default=2.0)
+        base_size_m = 2.0
+        light_scale_factor = max_height_m / base_size_m
+        light_scale_factor = max(0.8, min(10.0, light_scale_factor))  # 上限拡大で巨大キャラの照明確保
+        adjust_lighting_for_giant_characters(light_scale_factor, max_height_m)
         
         setup_shortGame_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT_GAME_CONFIG, char_dimensions=game_dimensions)
         scene.frame_end = SHORT_GAME_TOTAL_FRAMES

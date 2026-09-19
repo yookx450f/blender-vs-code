@@ -102,12 +102,12 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     # スケーリング適用後の基本値
     # キャラクター間隔: スケール係数の0.5乗で弱く補正（大きな変化を抑制）
     char_scale = scale_factor ** 0.5
-    # カメラ距離: 1.8倍でスマホ画面でも両キャラ入りつつ大きめに表示
-    cam_scale = scale_factor * 1.8
+    # カメラ距離: フィールドを広げるよう倍率を低下させ、後方から構図を捉える
+    cam_scale = scale_factor * 0.75
     char_start_half_dist = 2.1125 * char_scale          # キャラクター開始位置の半間隔（1.25×1.3×1.3倍）
-    cam_start_x = -3.0 * cam_scale                      # カメラ起始X座標
-    cam_start_y = -6.0 * cam_scale                      # カメラ起始Y座標
-    cam_start_z = 3.5 * min(cam_scale, 2.0)            # カメラ高度Z
+    cam_start_x = -4.5 * cam_scale                      # カメラ起始X座標（距離を拡大）
+    cam_start_y = -8.0 * cam_scale                      # カメラ起始Y座標（フィールドを広く）
+    cam_start_z = 4.5 * min(cam_scale, 1.5)            # カメラ高度Z（高さも上げる）
     topdown_height = 8.0 * cam_scale                    # トップダウンカメラ高さ
 
     print(f"  動的スケーリング: scale_factor={scale_factor:.2f}, char_scale={char_scale:.2f}, cam_scale={cam_scale:.2f}")
@@ -145,9 +145,9 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     # ============================================================
     # キャラクターのターゲット位置を定義（スケーリング適用）
     # ============================================================
-    char_a_start = (-char_start_half_dist, rear_offset_y, grounded_z_a)
+    char_a_start = (-char_start_half_dist, 0.0, grounded_z_a)
     char_b_start = (char_start_half_dist, 0.0, grounded_z_b)
-    char_a_end = (0.0 - offset_a[0], rear_offset_y, grounded_z_a)
+    char_a_end = (0.0 - offset_a[0], 0.0, grounded_z_a)
     char_b_end = (0.0 - offset_b[0], 0.0, grounded_z_b)
 
     print(f"  carA: start={char_a_start} -> end={char_a_end}")
@@ -162,17 +162,25 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
         if constraint.type == 'TRACK_TO':
             constraint.mute = True
             print(f"  Track To コンストレイント '{constraint.name}' を無効化")
-
+    
+    # CameraTarget のアニメーションデータもクリア
+    target_name = "CameraTarget"
+    if target_name in bpy.data.objects:
+        camera_target = bpy.data.objects[target_name]
+        if camera_target.animation_data:
+            camera_target.animation_data_clear()
+            print(f"  {camera_target.name} のアニメーションデータをクリア")
+    
     # アニメーションデータを完全にクリア（前回実行の残骸を削除）
     print("  アニメーションデータのクリーンアップ...")
     clear_animation_data([camera, char_a, char_b])
 
-    # レンズ設定 — cam_scaleに応じてFOVを調整（35mm基準で拡大、広角〜標準に収める）
+    # レンズ設定 — 広角で環境全体の構図を捉えるよう固定（24mm基準、18-50mm範囲）
     original_lens = camera.data.lens
-    adjusted_lens = round(35 * min(cam_scale, 2.0))
-    adjusted_lens = max(24, min(85, adjusted_lens))  # 広角〜望遠の範囲に収める
+    adjusted_lens = round(24 * min(cam_scale, 1.0))
+    adjusted_lens = max(18, min(50, adjusted_lens))  # より広角の範囲に収める
     camera.data.lens = adjusted_lens
-    print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（スケール調整）")
+    print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（広角調整）")
     
     # センサーサイズを少し拡大してキャラクターが大きく見えるように
     # スマホ縦画面で見たときにちょうど良いサイズ感に調整
@@ -191,6 +199,20 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     strategy_config["cam_start_y"] = cam_start_y
     strategy_config["cam_start_z"] = cam_start_z
     strategy_config["topdown_height"] = topdown_height
+
+    # カメラZの最低値保証（キャラクターの最大全高 + 安全マージン3.0m）
+    max_char_height_m = 3.0  # デフォルト
+    if char_dimensions:
+        heights = []
+        for dims in char_dimensions.values():
+            h = dims.get("height", 0) / 1000.0 if dims.get("height") else 0
+            if h > 0:
+                heights.append(h)
+        if heights:
+            max_char_height_m = max(heights)
+    min_camera_z = max_char_height_m + 3.0  # キャラクターの上部から最低3m離す
+    strategy_config["min_camera_z"] = min_camera_z
+    print(f"  カメラZ最低値保証: {min_camera_z:.1f}m (キャラ高{max_char_height_m:.1f}m + マージン3.0m)")
 
     # ============================================================
     # バリエーション設定：総フレーム数・フェーズAの時間変動適用
@@ -235,6 +257,12 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
         "cut2b_start": actual_cut2b_start,
         "cut2b_end": actual_cut2b_end,
     }
+
+    # ============================================================
+    # クォータニオン状態をリセット（跨カット残留の防止）
+    # ============================================================
+    from short_game_cuts import reset_camera_quat_state
+    reset_camera_quat_state()
 
     # ============================================================
     # --- カット1 (fr0-cut1_end): 円弧パンニング + キャラクターズスライド ---

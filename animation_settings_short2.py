@@ -163,6 +163,15 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
             constraint.mute = True
             print(f"  Track To コンストレイント '{constraint.name}' を無効化")
 
+    # CameraTarget のアニメーションデータもクリア（前回実行の残骸を削除）
+    # → これがないと、CameraTargetの位置キーフレームが残り、カメラが暴走する
+    target_name = "CameraTarget"
+    if target_name in bpy.data.objects:
+        camera_target = bpy.data.objects[target_name]
+        if camera_target.animation_data:
+            camera_target.animation_data_clear()
+            print(f"  {camera_target.name} のアニメーションデータをクリア")
+
     # アニメーションデータを完全にクリア（前回実行の残骸を削除）
     print("  アニメーションデータのクリーンアップ...")
     clear_animation_data([camera, car_a, car_b])
