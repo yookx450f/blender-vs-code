@@ -43,7 +43,7 @@ DEFAULT_CUT_FRAMES = {
 def _get_easing_func(strategy_config=None):
     """
     strategy_config からイージング関数を取得。
-    未設定時はデフォルトの cubic を返す。
+    未設定時はデフォルトの cubic を返す（Short2と同じ方式）。
     """
     if strategy_config and "easing_function" in strategy_config:
         try:
@@ -51,10 +51,13 @@ def _get_easing_func(strategy_config=None):
             return get_easing_function(strategy_config["easing_function"])
         except Exception:
             pass
-    # デフォルト: sine（最も滑らかな加減速）
-    def _ease_in_out_sine(t):
-        return (1.0 - math.cos(math.pi * t)) / 2.0
-    return _ease_in_out_sine
+    # デフォルト: cubic（Short2と同じ）
+    def _ease_in_out_cubic(t):
+        if t < 0.5:
+            return 4.0 * t * t * t
+        else:
+            return 1.0 - (-2.0 * t + 2.0)**3 / 2.0
+    return _ease_in_out_cubic
 
 
 def setup_cut1_overlap(camera, char_a, char_b, char_a_start, char_a_end, char_b_start, char_b_end, strategy_config=None, cut_frames=None):
@@ -373,17 +376,14 @@ def setup_cut2_phase_a_topdown(camera, char_a, char_b, char_a_start, char_a_end,
 
     print(f"\n  === カット2 フェーズA: トップダウンビューへ移動 + キャラクター中央静止 (fr{cut2a_start}-{cut2a_end}, イージング) ===")
 
-    # バリエーション設定からトップダウン位置を取得（cam_scale適用）
-    cam_scale_td = strategy_config.get("cam_scale", 1.0) if strategy_config else 1.0
+    # バリエーション設定からトップダウン位置を取得（Short2と同じ方式：strategy_configに保存されたスケール済み値を使用）
     if strategy_config and "topdown_variation" in strategy_config:
-        raw_td = strategy_config["topdown_variation"]["position"]
-        # raw位置にcam_scaleを適用
-        top_down_pos = (raw_td[0] * cam_scale_td, raw_td[1] * cam_scale_td, raw_td[2] * cam_scale_td)
-        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → raw={raw_td}, scaled={top_down_pos}")
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
+        print(f"  トップダウン変形: {strategy_config['topdown_variation']['name']} → {top_down_pos}")
     else:
-        # スケール適用後のデフォルトトップダウン位置
-        td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
-        top_down_pos = (0.0, 0.0, td_z)
+        # スケール適用済みのトップダウン高さを使用（strategy_configから取得）
+        topdown_height = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, topdown_height)
 
     # イージング関数の取得
     ease_func = _get_easing_func(strategy_config)
@@ -446,29 +446,24 @@ def setup_cut2_phase_b_camera_return(camera, char_a, char_b, char_a_start, char_
 
     print(f"\n  === カット2 フェーズB: カメラ開始位置へ復帰 + キャラクターズスライド (fr{cut2b_start}-{cut2b_end}, イージング) ===")
 
-    # バリエーション設定から復帰カメラ位置を取得（cam_scale適用）
-    cam_scale_b = strategy_config.get("cam_scale", 1.0) if strategy_config else 1.0
+    # バリエーション設定から復帰カメラ位置を取得（Short2と同じ方式：strategy_configに保存されたスケール済み値を使用）
     if strategy_config and "camera_pattern" in strategy_config:
-        raw_return = strategy_config["camera_pattern"]["start_position"]
-        cam_return_x = raw_return[0] * cam_scale_b
-        cam_return_y = raw_return[1] * cam_scale_b
-        cam_return_z = raw_return[2] * min(cam_scale_b, 1.5)
-        cam_return_pos = (cam_return_x, cam_return_y, cam_return_z)
-        print(f"  カメラ復帰先: raw={raw_return}, scaled={cam_return_pos}")
+        cam_return_pos = tuple(strategy_config["camera_pattern"]["start_position"])
+        print(f"  カメラ復帰先: {cam_return_pos}")
     else:
-        # スケール適用後のデフォルトカメラ復帰位置（距離を拡大、フィールドを広げる）
-        cr_x = strategy_config.get("cam_start_x", -4.5) if strategy_config else -4.5
-        cr_y = strategy_config.get("cam_start_y", -8.0) if strategy_config else -8.0
-        cr_z = strategy_config.get("cam_start_z", 4.5) if strategy_config else 4.5
-        cam_return_pos = (cr_x, cr_y, cr_z)
+        # スケール適用済みのカメラ起始位置を使用（strategy_configから取得）
+        cam_start_x = strategy_config.get("cam_start_x", -4.5) if strategy_config else -4.5
+        cam_start_y = strategy_config.get("cam_start_y", -8.0) if strategy_config else -8.0
+        cam_start_z = strategy_config.get("cam_start_z", 4.5) if strategy_config else 4.5
+        cam_return_pos = (cam_start_x, cam_start_y, cam_start_z)
 
-    # トップダウン位置もバリエーションから取得（cam_scale適用）
+    # トップダウン位置もバリエーションから取得（Short2と同じ方式）
     if strategy_config and "topdown_variation" in strategy_config:
-        raw_td_b = strategy_config["topdown_variation"]["position"]
-        top_down_pos = (raw_td_b[0] * cam_scale_b, raw_td_b[1] * cam_scale_b, raw_td_b[2] * cam_scale_b)
+        top_down_pos = tuple(strategy_config["topdown_variation"]["position"])
     else:
-        td_z = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
-        top_down_pos = (0.0, 0.0, td_z)
+        # スケール適用済みのトップダウン高さを使用（strategy_configから取得）
+        topdown_height = strategy_config.get("topdown_height", 8.0) if strategy_config else 8.0
+        top_down_pos = (0.0, 0.0, topdown_height)
 
     ease_func = _get_easing_func(strategy_config)
 

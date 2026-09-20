@@ -23,6 +23,7 @@ shortGame の違い:
 """
 
 import bpy
+import copy
 from animation_common import _setup_transparency_keyframe_animation, _add_transparency_keyframe_existing, _force_constant_interpolation_car_b_alpha, _setup_short2_carb_transparency
 from short_game_utils import get_character_visual_center_offset, clear_animation_data
 from short_game_cuts import (
@@ -186,6 +187,34 @@ def setup_shortGame_animations(scene, camera, imported_chars, rear_offset_y, gro
     # スマホ縦画面で見たときにちょうど良いサイズ感に調整
     camera.data.sensor_height = max(camera.data.sensor_height, 22.0)
     print(f"  カメラセンサー高: {camera.data.sensor_height}mm")
+
+    # ============================================================
+    # バリエーションプリセットの座標にもスケールを適用（Short2と同じ方式）
+    # グローバル定数を汚染しないようディープコピーしてから修正
+    # ============================================================
+    if "camera_pattern" in strategy_config:
+        cam_pat = copy.deepcopy(strategy_config["camera_pattern"])
+        sp = tuple(cam_pat.get("start_position", (-4.5, -8.0, 4.5)))
+        scaled_sp = (
+            sp[0] * cam_scale,
+            sp[1] * cam_scale,
+            sp[2] * min(cam_scale, 2.0)
+        )
+        cam_pat["start_position"] = list(scaled_sp)
+        strategy_config["camera_pattern"] = cam_pat
+        print(f"  カメラパターン '{cam_pat.get('name','?')}': start_position {sp} → {scaled_sp}")
+
+    if "topdown_variation" in strategy_config:
+        td_var = copy.deepcopy(strategy_config["topdown_variation"])
+        tp = tuple(td_var.get("position", (0.0, 0.0, 8.0)))
+        scaled_tp = (
+            tp[0],  # X,Yは変更不要（中心上）
+            tp[1],
+            max(tp[2], tp[2] * char_scale)  # topdown高さはsqrt補正で緩やかに拡大
+        )
+        td_var["position"] = list(scaled_tp)
+        strategy_config["topdown_variation"] = td_var
+        print(f"  トップダウン '{td_var.get('name','?')}': position {tp} → {scaled_tp}")
 
     # ============================================================
     # スケール情報を strategy_config に注入（カット関数へ渡すため）
