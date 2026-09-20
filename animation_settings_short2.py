@@ -283,6 +283,12 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     }
 
     # ============================================================
+    # クォータニオン状態をリセット（跨実行残留の防止）
+    # ============================================================
+    from short2_cuts import reset_camera_quat_state
+    reset_camera_quat_state()
+
+    # ============================================================
     # --- カット1 (fr0-cut1_end): 円弧パンニング + 車スライド ---
     # ============================================================
     cut1_result = setup_cut1_overlap(

@@ -211,6 +211,11 @@ def _clamp_camera_location(x, y, z):
 # 前回のカメラクォータニオンを保持（符号統一用）
 _last_camera_quat = None
 
+def reset_camera_quat_state():
+    """_last_camera_quat をリセット（各実行开始时に呼ぶ）"""
+    global _last_camera_quat
+    _last_camera_quat = None
+
 def _set_camera_keyframes_to_linear(cam, frame):
     """カメラの location + rotation_quaternion キーフレームを LINEAR に設定
     
