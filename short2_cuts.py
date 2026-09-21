@@ -484,3 +484,109 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         'camera_loc': cam_return_pos,
         'camera_rot': camera.rotation_euler.copy(),
     }
+
+
+def setup_cut2_arc_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, cut1_final_cam, strategy_config=None, cut_frames=None):
+    """
+    カット2 (arc return): カット1終了位置から起始位置へ同じ円弧で水平に逆戻り + 車のスライド復帰。
+
+    カメラ: カット1の円弧を終了点から起点へ逆方向で戻る（Zは一定、水平移動）
+    車: 中央集合位置からカット1開始位置へゆっくりスライド
+
+    Parameters:
+        cut1_final_cam: カット1終了時のカメラ位置 (x, y, z)
+        strategy_config: バリエーション設定辞書（オプション）
+        cut_frames: dict with keys cut2b_start, cut2b_end (None時はデフォルト値を使用)
+
+    Returns:
+        dict: カット2終了時のカメラ情報
+    """
+    # フレーム値を取得
+    cut2b_start = cut_frames.get("cut2b_start", DEFAULT_CUT_FRAMES["cut2b_start"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2b_start"]
+    cut2b_end = cut_frames.get("cut2b_end", DEFAULT_CUT_FRAMES["cut2b_end"]) if cut_frames else DEFAULT_CUT_FRAMES["cut2b_end"]
+
+    print(f"\n  === カット2 (arc return): 円弧逆戻り + 車スライド復帰 (fr{cut2b_start}-{cut2b_end}, イージング) ===")
+
+    # 起始カメラ位置を取得
+    if strategy_config and "camera_pattern" in strategy_config:
+        cam_start_pos = tuple(strategy_config["camera_pattern"]["start_position"])
+    else:
+        cam_start_x = strategy_config.get("cam_start_x", -3.0) if strategy_config else -3.0
+        cam_start_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
+        cam_start_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
+        cam_start_pos = (cam_start_x, cam_start_y, cam_start_z)
+
+    # イージング関数の取得
+    ease_func = _get_easing_func(strategy_config)
+
+    target = (0.0, 0.0, 1.0)
+    keyframe_interval = 12  # 0.5秒ごと
+
+    # --- 円弧パラメータを起始位置から再計算 ---
+    arc_radius = math.sqrt(cam_start_pos[0]**2 + cam_start_pos[1]**2)
+    arc_height = cam_start_pos[2]
+
+    start_angle = math.atan2(cam_start_pos[0], cam_start_pos[1])
+
+    # total_rotation を復元（カット1と同じ回転量）
+    total_rotation_raw = strategy_config.get("camera_pattern", {}).get("total_rotation", -0.85) if strategy_config else -0.85
+    cut1_start_frame = cut_frames.get("cut1_start", 0) if cut_frames else 0
+    cut1_end_frame = cut_frames.get("cut1_end", 288) if cut_frames else 288
+    cut1_length = cut1_end_frame - cut1_start_frame + 1
+    total_rotation_scaled = total_rotation_raw * (cut1_length / 144)
+
+    print(f"  円弧パラメータ: radius={arc_radius:.2f}, height={arc_height:.2f}")
+    print(f"  カット1の回転量: {math.degrees(total_rotation_scaled):.1f}°")
+    print(f"  start_angle={math.degrees(start_angle):.1f}°, end_angle_cut1={math.degrees(start_angle + total_rotation_scaled):.1f}°")
+    print(f"  カット2: {math.degrees(start_angle + total_rotation_scaled):.1f}° → {math.degrees(start_angle):.1f}° (逆回転)")
+
+    def get_cam_on_arc(angle):
+        x = arc_radius * math.sin(angle)
+        y = arc_radius * math.cos(angle)
+        return (x, y, arc_height)
+
+    # カメラ開始キーフレーム（cut1終了位置から連続）
+    _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", cut2b_start, cut1_final_cam, target)
+
+    # フレームリストを生成
+    phase_frames = list(range(cut2b_start, cut2b_end + 1, keyframe_interval))
+    if phase_frames[-1] != cut2b_end:
+        phase_frames.append(cut2b_end)
+    num_segments = len(phase_frames) - 1
+
+    for i, frame in enumerate(phase_frames):
+        # イージング適用した進行度
+        raw_progress = i / num_segments if num_segments > 0 else 0
+        progress = ease_func(raw_progress)
+
+        # カメラ: カット1と同じ方式で逆回転
+        # カット1: start_angle → start_angle + total_rotation (progress 0→1)
+        # カット2: start_angle + total_rotation → start_angle (progress 1→0)
+        cam_angle = start_angle + total_rotation_scaled * (1 - progress)
+        cam_pos = get_cam_on_arc(cam_angle)
+
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
+
+        # 車: 中央集合位置 → 相手元の位置へスライド（位置交換、イージング適用）
+        # CarA → CarBの元位置, CarB → CarAの元位置
+        car_a_pos = _interpolate_car_position(car_a_end, car_b_start, progress)
+        car_b_pos = _interpolate_car_position(car_b_end, car_a_start, progress)
+
+        _set_location_keyframe(car_a, frame, car_a_pos[0], car_a_pos[1], car_a_pos[2])
+        _set_location_keyframe(car_b, frame, car_b_pos[0], car_b_pos[1], car_b_pos[2])
+
+    # 終了フレームを確実に設定（位置交換済み）
+    _set_location_keyframe(car_a, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
+    _set_location_keyframe(car_b, cut2b_end, car_a_start[0], car_a_start[1], car_a_start[2])
+
+    # 最終カメラ位置を設定（起始位置）
+    final_cam_pos = get_cam_on_arc(start_angle)
+    camera.location = (final_cam_pos[0], final_cam_pos[1], final_cam_pos[2])
+
+    print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {cut1_final_cam} → {final_cam_pos} (円弧逆戻り)")
+    print(f"  車: スライド完了（位置交換）→ carA={car_b_start}, carB={car_a_start}")
+
+    return {
+        'camera_loc': final_cam_pos,
+        'camera_rot': camera.rotation_euler.copy(),
+    }

@@ -1969,6 +1969,28 @@ def main():
         
         print(f"  short2: total_frames=624 (カット1 fr0-288 + カット2 fr289-624, 約26秒)")
         setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=SHORT2_CONFIG, car_dimensions=car_dimensions_short2)
+    elif CUT_NUMBER == "short3":
+        from animation_settings_short3 import setup_short3_animations
+        # ルール2: 半透明対象を体積（全長×全幅×全高）が大きい車に設定
+        car_dimensions_short3 = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            car_dimensions_short3[key] = {
+                "length": dims.get("length", 0),
+                "height": dims.get("height", 0),
+            }
+        
+        # 半透明対象を全高が大きい車に設定
+        dims_a = CARS.get("carA", {}).get("dimensions_mm", {})
+        dims_b = CARS.get("carB", {}).get("dimensions_mm", {})
+        height_a = dims_a.get("height", 0)
+        height_b = dims_b.get("height", 0)
+        transparency_target_3 = "carB" if height_b > height_a else "carA"
+        strategy_config_short3 = {"transparency_target": transparency_target_3}
+        print(f"  ルール2: 半透明対象={transparency_target_3} (全高比較: carA={height_a}mm, carB={height_b}mm)")
+        
+        print(f"  short3: total_frames=576 (カット1 fr0-288 + カット2 fr289-576, 約24秒)")
+        setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=strategy_config_short3, car_dimensions=car_dimensions_short3)
     elif CUT_NUMBER == "short-s":
         from animation_settings_short_s import setup_short_s_animations
         # 車の寸法情報を抽出（加速時間用）
@@ -2173,7 +2195,7 @@ def main():
             color_rgb = car_data["color"]
         
         # 発光テキストを作成（ペアレント設定含む）
-        if CUT_NUMBER == "short2":
+        if CUT_NUMBER in ("short2", "short3"):
             create_glowing_text_label_short2(key, car_obj, text_content, color_rgb)
         elif CUT_NUMBER == "shortGame":
             create_glowing_text_label_shortGame(key, car_obj, text_content, color_rgb)
@@ -2217,6 +2239,8 @@ def main():
         output_filename = "short_overlap.mp4"
     elif CUT_NUMBER == "short2":
         output_filename = "short2_overlap.mp4"
+    elif CUT_NUMBER == "short3":
+        output_filename = "short3_overlap.mp4"
     elif CUT_NUMBER == "short-s":
         output_filename = "short-s_overlap.mp4"
     elif CUT_NUMBER == "shortAnimal":
@@ -2246,7 +2270,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16）
-    if CUT_NUMBER in ("short", "short2", "short-s", "shortAnimal", "shortGame"):
+    if CUT_NUMBER in ("short", "short2", "short3", "short-s", "shortAnimal", "shortGame"):
         scene.render.resolution_x = 1080
         scene.render.resolution_y = 1920
         scene.render.resolution_percentage = 100
@@ -2282,6 +2306,8 @@ def main():
         blend_output_path = os.path.join(SCRIPT_DIR, "short_scene.blend")
     elif CUT_NUMBER == "short2":
         blend_output_path = os.path.join(SCRIPT_DIR, "short2_scene.blend")
+    elif CUT_NUMBER == "short3":
+        blend_output_path = os.path.join(SCRIPT_DIR, "short3_scene.blend")
     elif CUT_NUMBER == "short-s":
         blend_output_path = os.path.join(SCRIPT_DIR, "short_s_scene.blend")
     elif CUT_NUMBER == "shortAnimal":
