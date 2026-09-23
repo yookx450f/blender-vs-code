@@ -567,24 +567,24 @@ def setup_cut2_arc_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
 
         _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
-        # 車: 中央集合位置 → 相手元の位置へスライド（位置交換、イージング適用）
-        # CarA → CarBの元位置, CarB → CarAの元位置
-        car_a_pos = _interpolate_car_position(car_a_end, car_b_start, progress)
-        car_b_pos = _interpolate_car_position(car_b_end, car_a_start, progress)
+        # 車: 中央集合位置 → 各自の開始位置へスライド（元の位置に戻す、イージング適用）
+        # CarA → CarAの元位置, CarB → CarBの元位置
+        car_a_pos = _interpolate_car_position(car_a_end, car_a_start, progress)
+        car_b_pos = _interpolate_car_position(car_b_end, car_b_start, progress)
 
         _set_location_keyframe(car_a, frame, car_a_pos[0], car_a_pos[1], car_a_pos[2])
         _set_location_keyframe(car_b, frame, car_b_pos[0], car_b_pos[1], car_b_pos[2])
 
-    # 終了フレームを確実に設定（位置交換済み）
-    _set_location_keyframe(car_a, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
-    _set_location_keyframe(car_b, cut2b_end, car_a_start[0], car_a_start[1], car_a_start[2])
+    # 終了フレームを確実に設定（各自の開始位置へ戻る）
+    _set_location_keyframe(car_a, cut2b_end, car_a_start[0], car_a_start[1], car_a_start[2])
+    _set_location_keyframe(car_b, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
 
     # 最終カメラ位置を設定（起始位置）
     final_cam_pos = get_cam_on_arc(start_angle)
     camera.location = (final_cam_pos[0], final_cam_pos[1], final_cam_pos[2])
 
     print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {cut1_final_cam} → {final_cam_pos} (円弧逆戻り)")
-    print(f"  車: スライド完了（位置交換）→ carA={car_b_start}, carB={car_a_start}")
+    print(f"  車: スライド完了（元の位置へ）→ carA={car_a_start}, carB={car_b_start}")
 
     return {
         'camera_loc': final_cam_pos,

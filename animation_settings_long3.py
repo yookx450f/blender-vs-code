@@ -1,25 +1,26 @@
 """
-アニメーション設定モジュール - ショート動画v3（縦長9:16）
-フレーム 0-432（約18秒、24fps）を処理する。
+アニメーション設定モジュール - 長尺動画v3（横長16:9）
+フレーム 0-576（約24秒、24fps）を処理する。
 
-カット1 (fr0-288): 「車が重なっていく部分」の円弧パンニング（Short1と同じ）
-カット2 (fr289-432): カメラ起始位置へ逆回転復帰 + 車のスライド復帰（同時進行、イージング適用）
+カット1 (fr0-288): 「車が重なっていく部分」の円弧パンニング（Short3と同じ）
+カット2A (fr289-432): トップダウンビューへ移動（イージング適用）
+カット2B (fr433-576): カメラ起始位置へ復帰 + 車のスライド復帰（同時進行、イージング適用）
 
-YouTube Shorts用の縦長フォーマット。
+YouTube長尺用の横長フォーマット（16:9 / 1920x1080）。
 
-short3 の特徴:
-    Short1と同じアニメーションロジックを使用（cut1を流用）。
-    カット2では、カメラをカット1終了位置から起始位置へ逆回転で戻し、
-    同時に車を中央集合位置から元の開始位置へスライドさせる。
-    両車とも不透明状態を維持（透明度アニメーションなし）。
+long3 の特徴:
+    Short3と同じアニメーションロジックを使用（cut1 + topdown → returnを流用）。
+    カット2Aでは、カメラを車の真上に移動。
+    カット2Bでは、真上から起始位置へ戻り、同時に車を元の開始位置へスライドさせる。
+    CarBのみ半透明化（全高比較なし、常にCarBが対象）。
 
 【動的スケーリング】
     車の寸法に基づいて、カメラ距離と車間隔を自動調整する。
     大きな車ほど、カメラを遠ざけ・間隔を広げる。
 
 使い方:
-    from animation_settings_short3 import setup_short3_animations
-    setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None)
+    from animation_settings_long3 import setup_long3_animations
+    setup_long3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None)
 """
 
 import bpy
@@ -28,7 +29,8 @@ from animation_common import _setup_transparency_keyframe_animation, _add_transp
 from short2_utils import get_car_visual_center_offset, clear_animation_data
 from short2_cuts import (
     setup_cut1_overlap,
-    setup_cut2_arc_return,
+    setup_cut2_phase_a_topdown,
+    setup_cut2_phase_b_camera_return,
 )
 
 
@@ -73,12 +75,13 @@ def _calculate_scale_factor(car_dimensions):
     return scale_factor
 
 
-def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None):
+def setup_long3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None):
     """
-    ショート動画v3のアニメーションをオーケストレーション（フレーム 0-432）
+    長尺動画v3のアニメーションをオーケストレーション（フレーム 0-576）
 
     カット1 (fr0-288): 車が中央へスライド + 円弧パンニング
-    カット2 (fr289-432): カメラ起始位置へ逆回転復帰 + 車のスライド復帰（同時進行、イージング適用）
+    カット2A (fr289-432): トップダウンビューへ移動
+    カット2B (fr433-576): カメラ起始位置へ復帰 + 車のスライド完了（同時進行、イージング適用）
 
     Parameters:
         scene: bpy.context.scene
@@ -92,7 +95,7 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     Returns:
         CutState: 最終状態情報
     """
-    print(f"\n=== ショート動画v3 アニメーション設定を開始 (total_frames=432, 約18秒) ===")
+    print(f"\n=== 長尺動画v3 アニメーション設定を開始 (total_frames=576, 約24秒) ===")
 
     # ============================================================
     # 動的スケーリング計算
@@ -108,10 +111,12 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     cam_start_x = -3.0 * cam_scale                    # カメラ起始X座標
     cam_start_y = -6.0 * cam_scale                    # カメラ起始Y座標
     cam_start_z = 3.5 * min(cam_scale, 2.0)          # カメラ高度Z
+    topdown_height = max(8.0, 8.0 * char_scale)      # トップダウンカメラ高さ
 
     print(f"  動的スケーリング: scale_factor={scale_factor:.2f}, char_scale={char_scale:.2f}, cam_scale={cam_scale:.2f}")
     print(f"  車間隔: ±{car_start_half_dist:.2f}m")
     print(f"  カメラ起始位置: ({cam_start_x:.1f}, {cam_start_y:.1f}, {cam_start_z:.1f})")
+    print(f"  トップダウン高さ: {topdown_height:.1f}m")
 
     # ============================================================
     # 前提計算：車の位置・接地 Z を準備
@@ -191,6 +196,7 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     strategy_config["cam_start_x"] = cam_start_x
     strategy_config["cam_start_y"] = cam_start_y
     strategy_config["cam_start_z"] = cam_start_z
+    strategy_config["topdown_height"] = topdown_height
 
     # カメラZの最低値保証（車の最大全高 + 安全マージン2.0m）
     max_car_height_m = 2.0  # デフォルト
@@ -229,19 +235,25 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     reset_camera_quat_state()
 
     # ============================================================
-    # 総フレーム数はカット1 + カット2 (fr0-576) - 各12秒ずつ
+    # 総フレーム数 = カット1 + カット2A(トップダウン) + カット2B(復帰) (fr0-576)
     # ============================================================
     total_frames = 576  # 約24秒
     print(f"  総フレーム数: {total_frames} (約{total_frames/24:.1f}秒)")
 
     cut1_start = 0
     cut1_end = 288
-    cut2b_start = 289
+    cut2a_start = 289
+    cut2a_end = 432
+    cut2b_start = 433
     cut2b_end = 576
+
+    print(f"  カット区間: fr{cut1_start}-{cut1_end} + fr{cut2a_start}-{cut2a_end} + fr{cut2b_start}-{cut2b_end}")
 
     cut_frames = {
         "cut1_start": cut1_start,
         "cut1_end": cut1_end,
+        "cut2a_start": cut2a_start,
+        "cut2a_end": cut2a_end,
         "cut2b_start": cut2b_start,
         "cut2b_end": cut2b_end,
     }
@@ -264,8 +276,8 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
 
     target_car = car_b if transparency_target == "carB" else car_a
 
-    # キーフレームの位置をカット1終了に合わせて調整（fr288で不透明化）
-    alpha_restore_frame = cut1_end
+    # キーフレームの位置をカット2B開始に合わせて調整（復帰時に不透明化）
+    alpha_restore_frame = cut2b_start
     _setup_short2_carb_transparency(target_car, end_frame=total_frames, restore_frame=alpha_restore_frame)
     print(f"  Alpha({transparency_target}): fr30で半透明化(1.0→0.35), fr{alpha_restore_frame}で不透明化(0.35→1.0) [CONSTANT補間]")
 
@@ -278,12 +290,21 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     print(f"  カメラ: loc={cut1_result['camera_loc']}, rot={cut1_result['camera_rot']}")
 
     # ============================================================
-    # --- カット2 (fr289-432): 円弧逆戻り + 車スライド完了 ---
-    # カット1終了位置から起始位置へ同じ円弧で水平に逆戻り
+    # --- カット2A (fr289-432): トップダウンビューへ移動 + 車中央静止 ---
     # ============================================================
-    cut2_result = setup_cut2_arc_return(
+    cut1_final_cam = cut1_result['camera_loc']
+    setup_cut2_phase_a_topdown(
         camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end,
-        cut1_final_cam=cut1_result['camera_loc'],
+        cut1_final_cam,
+        strategy_config=strategy_config,
+        cut_frames=cut_frames
+    )
+
+    # ============================================================
+    # --- カット2B (fr433-576): カメラ復帰 + 不透明化 + 車スライド完了 ---
+    # ============================================================
+    cut2_result = setup_cut2_phase_b_camera_return(
+        camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end,
         strategy_config=strategy_config,
         cut_frames=cut_frames
     )
@@ -303,7 +324,7 @@ def setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
 
-    print(f"\n=== ショート動画v3 アニメーション完了 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
+    print(f"\n=== 長尺動画v3 アニメーション完了 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
 
     from animation_common import CutState
     return CutState(

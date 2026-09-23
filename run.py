@@ -14,6 +14,9 @@ Blenderをコマンドライン経由で起動してスクリプトを実行す�
     python run.py short-s      # ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了／終端フレーム自動計算）
     python run.py shortAnimal  # 動物ショート動画（縦長9:16、背面壁面グリッド付き、フレーム0-624、約26秒@24fps）
     python run.py shortGame    # ゲームキャラクターショート動画（縦長9:16、Short2構造、約26秒@24fps）
+    python run.py shortGame2   # ゲームキャラクターショート動画v2（縦長9:16、カット1のみ360度一周、約24秒@24fps）
+    python run.py short3       # ショート動画v3（縦長9:16、カツト1+カメラ逆回転復帰、約24秒）
+    python run.py long3        # 長尺動画v3（横長16:9/1080p、カツト1+カメラ逆回転復帰、約24秒）
     python run.py --render     # 全カットをレンダリング合成してMP4出力
 """
 
@@ -43,7 +46,9 @@ CUTS = {
     "short-s": {"start": 0, "end": -1, "label": "ショート動画s（縦長9:16、3秒停止＋カウントダウン→加速ペース全速走行→GOAL通過+3秒で終了）"},
     "shortAnimal": {"start": 0, "end": 960, "label": "動物ショート動画（縦長9:16、カット1削除済み、約40秒@24fps）"},
     "shortGame": {"start": 0, "end": -1, "label": "ゲームキャラクターショート動画（縦長9:16、総フレーム数動的計算@24fps）"},
+    "shortGame2": {"start": 0, "end": 576, "label": "ゲームキャラクターショート動画v2（縦長9:16、カツト1のみ360度一周、約24秒@24fps）"},
     "short3": {"start": 0, "end": 576, "label": "ショート動画v3（縦長9:16、カット1+カメラ逆回転復帰、約24秒）"},
+    "long3": {"start": 0, "end": 576, "label": "長尺動画v3（横長16:9、カット1+カメラ逆回転復帰、約24秒）"},
 }
 
 # 現在のディレクトリにあるスクリプトのパス
@@ -235,7 +240,7 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
     env["CUT5_EXTRA_FRAMES"] = str(cut5_extra_frames)
     
     # Short2/ShortAnimal/ShortGameバリエーションのシード値を渡す
-    if cut_number in ("short2", "shortAnimal", "shortGame"):
+    if cut_number in ("short2", "shortAnimal", "shortGame", "shortGame2"):
         if seed is None:
             seed = random.randint(1, 999999)
         env["STRATEGY_SEED"] = str(seed)
@@ -243,6 +248,8 @@ def run_blender(scene_script=None, render_only=False, cut_number="all", seed=Non
             mode_name = "Short2"
         elif cut_number == "shortGame":
             mode_name = "ShortGame"
+        elif cut_number == "shortGame2":
+            mode_name = "ShortGame2"
         else:
             mode_name = "ShortAnimal"
         print(f"{mode_name} バリエーションシード: {seed}")
