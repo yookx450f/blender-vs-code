@@ -26,8 +26,49 @@ import os
 import random
 import argparse
 
-# Blenderの実行ファイルパス
-BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
+# Blenderの実行ファイルパス（OS自動検出）
+def get_blender_path():
+    """OS に応じて Blender の実行ファイルを自動検出する"""
+    import platform
+    import shutil
+
+    system = platform.system()
+
+    if system == "Darwin":  # macOS
+        paths = [
+            "/Applications/Blender.app/Contents/MacOS/Blender",
+            os.path.expanduser("~/Applications/Blender.app/Contents/MacOS/Blender"),
+            os.path.expanduser("~/.local/bin/blender"),
+        ]
+    elif system == "Windows":
+        paths = [
+            r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
+            r"C:\Program Files (x86)\Blender Foundation\Blender 5.2\blender.exe",
+            r"D:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
+        ]
+    elif system == "Linux":
+        paths = [
+            "/usr/bin/blender",
+            "/usr/local/bin/blender",
+            os.path.expanduser("~/.local/bin/blender"),
+        ]
+    else:
+        paths = []
+
+    # 存在するパスを探す
+    for p in paths:
+        if os.path.exists(p):
+            return p
+
+    # 見つからない場合は PATH から探索
+    blender_in_path = shutil.which("blender")
+    if blender_in_path:
+        return blender_in_path
+
+    return None
+
+
+BLENDER_PATH = get_blender_path()
 
 # カット定義（フレーム範囲）
 # 【改訂: カット1大幅短縮】カット1が576→408に、カット2-3も-168フレームずれた
