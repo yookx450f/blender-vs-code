@@ -21,7 +21,8 @@ from mathutils import Vector
 
 # カメラ位置の制限範囲（メートル）
 # short2ではカメラがtop-downへ移動するため、適度な制限が必要
-CAMERA_LOCATION_MAX = 15.0
+# カメラが飛びすぎないように範囲を狭める（15.0→12.0）
+CAMERA_LOCATION_MAX = 12.0
 
 
 def get_car_visual_center_offset(car_obj):

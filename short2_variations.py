@@ -95,10 +95,10 @@ CAMERA_PATTERNS = [
         "total_rotation": -0.85,
     },
     {
-        "name": "wide_arc_lr",           # ワイド: より大きな円弧
+        "name": "wide_arc_lr",           # ワイド: より大きな円弧（振れ幅縮小版）
         "pan_direction": 1,
-        "start_position": (-4.0, -7.0, 4.0),
-        "total_rotation": -1.1,
+        "start_position": (-3.5, -6.5, 3.8),
+        "total_rotation": -0.9,
     },
     {
         "name": "close_arc_lr",          # クローズ: より近い位置からのパン
@@ -114,10 +114,10 @@ CAMERA_PATTERNS = [
         "total_rotation": 0.85,
     },
     {
-        "name": "wide_reverse_arc_rl",   # ワイド: より大きな円弧（右側）
+        "name": "wide_reverse_arc_rl",   # ワイド: より大きな円弧（右側）（振れ幅縮小版）
         "pan_direction": -1,
-        "start_position": (4.0, -7.0, 4.0),
-        "total_rotation": 1.1,
+        "start_position": (3.5, -6.5, 3.8),
+        "total_rotation": 0.9,
     },
     {
         "name": "close_reverse_arc_rl",  # クローズ: より近い位置からのパン（右側）

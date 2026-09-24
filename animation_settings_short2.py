@@ -178,7 +178,7 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
 
     # レンズ設定 — cam_scaleに応じてFOVを調整
     original_lens = camera.data.lens
-    adjusted_lens = round(35 * min(cam_scale, 2.0))
+    adjusted_lens = round(35 * min(cam_scale, 1.5))  # cam_scale上限: 2.0→1.5（カメラ飛防止）
     adjusted_lens = max(24, min(85, adjusted_lens))  # 広角〜望遠の範囲に収める
     camera.data.lens = adjusted_lens
     print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（スケール調整）")
@@ -218,9 +218,9 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
         cam_pat = copy.deepcopy(strategy_config["camera_pattern"])
         sp = tuple(cam_pat.get("start_position", (-3.0, -6.0, 3.5)))
         scaled_sp = (
-            sp[0] * cam_scale,
-            sp[1] * cam_scale,
-            sp[2] * min(cam_scale, 2.0)
+            sp[0] * min(cam_scale, 1.5),  # カメラ飛防止: 上限1.5
+            sp[1] * min(cam_scale, 1.5),
+            sp[2] * min(cam_scale, 1.5)
         )
         cam_pat["start_position"] = list(scaled_sp)
         strategy_config["camera_pattern"] = cam_pat
