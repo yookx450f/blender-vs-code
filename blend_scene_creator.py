@@ -851,7 +851,8 @@ def create_human_figure(location=(-2.8, 0.0, 0.0), height_m=1.7, rotation_z_degr
         インポートしたオブジェクト
     """
     # human.glb のパスを構築 (animal_glbディレクトリを使用)
-    human_glb_path = r"C:\3d\Modly\animal_glb\human.glb"
+    glb_dir = os.path.dirname(os.path.abspath(__file__))
+    human_glb_path = os.path.join(glb_dir, "animal_glb", "human.glb")
     
     if not os.path.exists(human_glb_path):
         print(f"警告: human.glb が見つかりません - {human_glb_path}")

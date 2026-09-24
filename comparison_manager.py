@@ -441,7 +441,7 @@ def set_comparison_pair_to_config(car_a_id, car_b_id):
     
     try:
         import json
-        glb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "C:\\3d\\Modly\\glb")
+        glb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "glb")
         
         # 既存設定を読み込む
         if os.path.exists(config_path):
@@ -449,7 +449,7 @@ def set_comparison_pair_to_config(car_a_id, car_b_id):
                 config = json.load(f)
         else:
             config = {
-                "glb_dir": "C:\\3d\\Modly\\glb",
+                "glb_dir": "./glb",
                 "carA": {"id": "1", "color": [0.5, 0.5, 0.5], "position": [2.0, 0.0, 0]},
                 "carB": {"id": "2", "color": [0.0, 0.7, 1.0], "position": [-2.0, 0.0, 0]}
             }
@@ -873,7 +873,7 @@ def set_animal_comparison_pair_to_config(animal_a_id, animal_b_id):
     
     try:
         import json
-        glb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "C:\\\\3d\\\\Modly\\\\glb")
+        glb_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "animal_glb")
         
         # DBから動物データを取得（色情報を含む）
         animals_db = get_animals_db_dict()
@@ -1274,7 +1274,7 @@ def set_game_comparison_pair_to_config(game_a_id, game_b_id):
         data_map = {dict(r)["id"]: dict(r) for r in rows}
         color_a = CLAY_COLOR_MAP.get(data_map[int(game_a_id)].get("color_name", "グレー"), [0.5, 0.5, 0.5])
         color_b = CLAY_COLOR_MAP.get(data_map[int(game_b_id)].get("color_name", "グレー"), [0.5, 0.5, 0.5])
-        glb_dir_base = "C:/3d/Modly/game_glb"
+        glb_dir_base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "game_glb")
         config_data = {
             "glb_dir": os.path.abspath(glb_dir_base).replace("\\", "/"),
             "gameA": {"id": str(game_a_id), "color": color_a, "position": [2.0, 0.0, 0]},

@@ -1,5 +1,6 @@
+import os
 CAR_ID = "2"
-GLB_DIRECTORY = r"C:\3d\Modly\glb"
+GLB_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "glb")
 FPS = 30
 DURATION_SECONDS = 60
 TOTAL_FRAMES = FPS * DURATION_SECONDS

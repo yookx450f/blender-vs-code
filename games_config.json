@@ -1,5 +1,5 @@
 {
-  "glb_dir": "C:/3d/Modly/game_glb",
+  "glb_dir": "./game_glb",
   "gameA": {
     "id": "8",
     "color": [

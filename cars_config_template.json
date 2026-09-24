@@ -22,7 +22,7 @@
 {
   "carA": {
     "name": "Corolla Cross 2025",
-    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2025.glb",
+    "glb_path": "./glb/colloraCross2025.glb",
     "position": [-2.0, 0.0, 0],
     "color": [0.8, 0.2, 0.2],
     "dimensions_mm": {
@@ -36,7 +36,7 @@
   },
   "carB": {
     "name": "Corolla Cross 2026",
-    "glb_path": "C:\\3d\\Modly\\glb\\colloraCross2026.glb",
+    "glb_path": "./glb/colloraCross2026.glb",
     "position": [2.0, 0.0, 0],
     "color": [0.2, 0.2, 0.8],
     "dimensions_mm": {

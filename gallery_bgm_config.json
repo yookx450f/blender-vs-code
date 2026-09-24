@@ -1,5 +1,5 @@
 {
-  "glb_dir": "C:\\3d\\Modly\\glb",
+  "glb_dir": "./glb",
   "gallery": {
     "grid_length": 100,
     "car_spacing": 15,

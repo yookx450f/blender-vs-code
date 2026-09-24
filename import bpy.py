@@ -14,16 +14,19 @@ import math
 # ============================================================
 # 設定変数（ここを変更して使い回し可能）
 # ============================================================
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+GLB_DIR = os.path.join(SCRIPT_DIR, "glb")
+
 CARS = {
     "carA": {
         "name": "Corolla Cross",
-        "glb_path": r"C:\3d\Modly\glb\colloraCross2025.glb",
+        "glb_path": os.path.join(GLB_DIR, "colloraCross2025.glb"),
         "position": (-2.0, 0, 0),
         "color": (0.8, 0.2, 0.2),
     },
     "carB": {
         "name": "Target Car",
-        "glb_path": r"C:\3d\Modly\glb\colloraCross2026.glb",
+        "glb_path": os.path.join(GLB_DIR, "colloraCross2026.glb"),
         "position": (2.0, 0, 0),
         "color": (0.2, 0.2, 0.8),
     },

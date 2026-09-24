@@ -1,5 +1,5 @@
 {
-  "glb_dir": "C:\\\\3d\\\\Modly\\\\animal_glb",
+  "glb_dir": "./animal_glb",
   "animalA": {
     "id": "11",
     "color": [
