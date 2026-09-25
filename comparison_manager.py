@@ -4,6 +4,7 @@
 動画比較ペアの制作状況を追跡・管理するデータベース操作モジュール。
 """
 
+import streamlit as st
 import sqlite3
 import pandas as pd
 import os
@@ -331,11 +332,12 @@ def delete_comparison(comp_id):
         return False
 
 
+@st.cache_data(ttl=60)
 def get_matrix_data():
     """
-    マトリクス表示用のデータを生成
+    マトリクス表示用のデータを生成（キャッシュ有効期限: 60秒）
     
-    戻り値: 
+    戻り値:
     - cars_df: 車種リスト (縦軸・横軸用)
     - comparisons_df: 全比較ペアデータ
     """
@@ -919,9 +921,10 @@ def is_invalid_animal_pair(animal_a_id, animal_b_id):
     return False
 
 
+@st.cache_data(ttl=60)
 def get_animal_matrix_data():
     """
-    動物マトリクス表示用のデータを生成
+    動物マトリクス表示用のデータを生成（キャッシュ有効期限: 60秒）
     
     戻り値:
     - animals_df: 動物リスト (縦軸・横軸用)
@@ -1298,8 +1301,9 @@ def is_invalid_game_pair(game_a_id, game_b_id):
     return get_game_comparison_by_ids(game_a_id, game_b_id) is not None
 
 
+@st.cache_data(ttl=60)
 def get_game_matrix_data():
-    """比較マトリクス用のデータを取得"""
+    """比較マトリクス用のデータを取得（キャッシュ有効期限: 60秒）"""
     games = get_all_games()
     comparisons = get_all_game_comparisons()
     status_map = {}

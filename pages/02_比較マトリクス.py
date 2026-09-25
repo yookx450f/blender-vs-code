@@ -163,7 +163,7 @@ for car_a in filtered_cars_a:
             invalid_pairs.add((car_a["id"], car_b["id"]))
 
 # フィルタ条件に合致する行・列のID集合を事前に計算
-def compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs):
+def compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, compare_lookup=None):
     """フィルタ条件に合致する車A/車BのID集合を返す。全件表示の場合はNoneを返す。"""
     if status_filter == "全件表示":
         return None, None
@@ -177,7 +177,7 @@ def compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filte
             if pair_key in invalid_pairs:
                 continue
             
-            comp = get_comparison_by_ids(car_a["id"], car_b["id"])
+            comp = compare_lookup.get(pair_key) if compare_lookup else None
             has_registration = comp is not None
             if comp:
                 short_status = comp["short_status"]
@@ -211,7 +211,7 @@ def compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filte
 
 
 # HTMLテーブルを生成（ダークテーマ対応）
-def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_car_a_ids=None, active_car_b_ids=None):
+def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_car_a_ids=None, active_car_b_ids=None, compare_lookup=None):
     # ダークテーマ用カラーパレット
     bg_header = "#2d2d2d"
     bg_row_header = "#333333"
@@ -231,44 +231,42 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
         "両方完了": "#2e7d32",       # ダークグリーン
     }
     
-    html = f'''<div style="overflow: auto; max-height: 75vh;"><table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: 'Meiryo UI', sans-serif; table-layout: fixed;">'''
+    parts = []
+    parts.append('<div style="overflow: auto; max-height: 75vh;"><table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: \'Meiryo UI\', sans-serif; table-layout: fixed;">')
     
     # ヘッダー行 - 車B（列）をヘッダーに表示（フィルタ中は有効な列のみ）
-    # position: sticky でスクロール時にも常に表示されるようにする
-    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20; min-width: 140px;"></th>'
+    parts.append(f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 140px; text-align: left; color: {text_header}; position: sticky; top: 0; left: 0; z-index: 20; min-width: 140px;"></th>')
     for car_b in filtered_cars_b:
         if active_car_b_ids is not None and car_b["id"] not in active_car_b_ids:
             continue
         full_name = car_b["name"]
-        html += f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 100px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>'
-    html += '</tr>'
+        parts.append(f'<th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; width: 100px; text-align: center; color: {text_header}; font-size: 13px; word-wrap: break-word; white-space: pre-line; position: sticky; top: 0; z-index: 10;">{full_name}</th>')
+    parts.append('</tr>')
     
     # データ行 - 車A（行）を左側に表示
     for car_a in filtered_cars_a:
-        # フィルタ中は有効な行のみ表示
         if active_car_a_ids is not None and car_a["id"] not in active_car_a_ids:
             continue
         
         full_name_a = car_a["name"]
-        html += f'<tr><td style="padding: 4px 6px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 12px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>'
+        parts.append(f'<tr><td style="padding: 4px 6px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 12px; word-wrap: break-word; white-space: pre-line; position: sticky; left: 0; z-index: 5;">{full_name_a}</td>')
         
         for car_b in filtered_cars_b:
-            # フィルタ中は有効な列のみ表示
             if active_car_b_ids is not None and car_b["id"] not in active_car_b_ids:
                 continue
             pair_key = (car_a["id"], car_b["id"])
             
-            # 無効ペアのチェック（フィルタ中は空白に）
+            # 無効ペアのチェック
             if pair_key in invalid_pairs:
                 if status_filter == "全件表示":
                     reason = "同じ車種" if car_a["id"] == car_b["id"] else "重複ペア"
-                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>'
+                    parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {invalid_bg}; color: {invalid_text}; text-align: center; cursor: not-allowed; font-size: 11px;">⫘ {reason}</td>')
                 else:
-                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
+                    parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>')
                 continue
             
-            # ステータスを取得
-            comp = get_comparison_by_ids(car_a["id"], car_b["id"])
+            # 辞書参照でステータスを取得（DBクエリなし）
+            comp = compare_lookup.get(pair_key) if compare_lookup else None
             has_registration = comp is not None
             if comp:
                 short_status = comp["short_status"]
@@ -283,7 +281,6 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             
             label, _ = get_combined_status(short_status, long_status)
             
-            # DBに登録済みで未着手の場合は紺色で区別
             if has_registration and label == "未着手":
                 cell_bg = status_colors_dark.get("登録済・未着手", "#1a237e")
                 text_fg = "#9fa8da"
@@ -291,7 +288,6 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 cell_bg = status_colors_dark.get(label, "#3d3d3d")
                 text_fg = "#999999" if label == "未着手" else "#ffffff"
             
-            # ステータスフィルタの適用（get_combined_statusのラベルで判定）
             show_cell = True
             if status_filter == "未着手のみ" and label != "未着手":
                 show_cell = False
@@ -307,17 +303,13 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                 show_cell = False
             
             if not show_cell:
-                html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
+                parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>')
                 continue
             
-            # クリック可能なセル - 上段: 長尺視聴回数 / 下段: ショート視聴回数（2段表示）
-            # ツールチップで高評価・コメント数を表示
-            cell_id = f"cell_{car_a['id']}_{car_b['id']}"
             link_url = f"?car_a={car_a['id']}&car_b={car_b['id']}&search={search_query}&status={status_filter}&type_a={type_filter_a}&type_b={type_filter_b}#edit-panel"
             long_views_display = f"{long_views:,}" if long_views > 0 else "-"
             short_views_display = f"{short_views:,}" if short_views > 0 else "-"
             
-            # ツールチップ用データ（高評価・コメント数）
             short_likes_val = comp.get("short_likes", 0) or 0 if comp else 0
             short_comments_val = comp.get("short_comments", 0) or 0 if comp else 0
             long_likes_val = comp.get("long_likes", 0) or 0 if comp else 0
@@ -327,7 +319,7 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
             if has_registration:
                 tooltip_title = f"🎬 長尺: 👁{long_views:,} 👍{long_likes_val:,} 💬{long_comments_val:,}<br>📱 ショート: 👁{short_views:,} 👍{short_likes_val:,} 💬{short_comments_val:,}"
             
-            html += f'''<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
+            parts.append(f'''<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px; font-weight: bold;"
                     title="{tooltip_title}"
                     onmouseover="this.style.border='2px solid #ffffff'"
                     onmouseout="this.style.border='1px solid {border_color}'">
@@ -335,18 +327,24 @@ def generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invali
                     <div style="font-size: 12px; line-height: 1.2; font-weight: bold;">{long_views_display}</div>
                     <div style="font-size: 12px; line-height: 1.2; font-weight: bold;">{short_views_display}</div>
                 </a>
-            </td>'''
+            </td>''')
         
-        html += '</tr>'
+        parts.append('</tr>')
     
-    html += '</table></div>'
-    return html
+    parts.append('</table></div>')
+    return "".join(parts)
 
+
+# 比較データを辞書に事前ロード（O(N²) DBクエリをO(1)辞書参照に最適化）
+compare_lookup = {}
+if not comparisons_df.empty:
+    for _, row in comparisons_df.iterrows():
+        compare_lookup[(row["car_a_id"], row["car_b_id"])] = dict(row)
 
 # 有効な行・列のID集合を計算
-active_a_ids, active_b_ids = compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs)
+active_a_ids, active_b_ids = compute_active_ids_for_filter(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, compare_lookup)
 
-matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_a_ids, active_b_ids)
+matrix_html = generate_matrix_html(filtered_cars_a, filtered_cars_b, status_filter, invalid_pairs, search_query, type_filter_a, type_filter_b, active_a_ids, active_b_ids, compare_lookup)
 st.markdown(matrix_html, unsafe_allow_html=True)
 
 # スクロール用JavaScriptを注入

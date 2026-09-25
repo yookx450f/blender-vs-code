@@ -135,7 +135,7 @@ def get_game_combined_status(short_status, long_status):
 # マトリクス表示
 st.subheader("📋 比較マトリクス")
 
-def generate_game_matrix_html(filtered_games_a, filtered_games_b):
+def generate_game_matrix_html(filtered_games_a, filtered_games_b, game_compare_lookup=None):
     bg_header = "#2d2d2d"
     bg_row_header = "#333333"
     border_color = "#555555"
@@ -151,17 +151,18 @@ def generate_game_matrix_html(filtered_games_a, filtered_games_b):
         "両方完了": "#2e7d32",
     }
     
-    html = f'''<div style="overflow: auto; max-height: 75vh;"><table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: 'Meiryo UI', sans-serif;">'''
+    parts = []
+    parts.append('<div style="overflow: auto; max-height: 75vh;"><table style="border-collapse: separate; border-spacing: 0; width: 100%; font-family: \'Meiryo UI\', sans-serif;">')
     
     # ヘッダー行
-    html += f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; color: {text_header}; position: sticky; top: 0; z-index: 20;"></th>'
+    parts.append(f'<tr><th style="padding: 10px; border: 1px solid {border_color}; background: {bg_header}; min-width: 120px; color: {text_header}; position: sticky; top: 0; z-index: 20;"></th>')
     for game_b in filtered_games_b:
-        html += f'<th style="padding: 8px; border: 1px solid {border_color}; background: {bg_header}; text-align: center; color: {text_header}; font-size: 12px; position: sticky; top: 0; z-index: 10;">{game_b["name"]}</th>'
-    html += '</tr>'
+        parts.append(f'<th style="padding: 8px; border: 1px solid {border_color}; background: {bg_header}; text-align: center; color: {text_header}; font-size: 12px; position: sticky; top: 0; z-index: 10;">{game_b["name"]}</th>')
+    parts.append('</tr>')
     
     # データ行
     for game_a in filtered_games_a:
-        html += f'<tr><td style="padding: 4px 6px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 12px; position: sticky; left: 0; z-index: 5;">{game_a["name"]}</td>'
+        parts.append(f'<tr><td style="padding: 4px 6px; border: 1px solid {border_color}; background: {bg_row_header}; font-weight: bold; color: {text_color}; font-size: 12px; position: sticky; left: 0; z-index: 5;">{game_a["name"]}</td>')
         
         for game_b in filtered_games_b:
             pair_key = (game_a["id"], game_b["id"])
@@ -169,12 +170,13 @@ def generate_game_matrix_html(filtered_games_a, filtered_games_b):
             if pair_key in invalid_pairs:
                 if status_filter == "全件表示":
                     reason = "同じキャラクター" if game_a["id"] == game_b["id"] else "重複ペア"
-                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: #4a4a4a; color: #888888; text-align: center; font-size: 11px;">⫘ {reason}</td>'
+                    parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: #4a4a4a; color: #888888; text-align: center; font-size: 11px;">⫘ {reason}</td>')
                 else:
-                    html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
+                    parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>')
                 continue
             
-            comp = get_game_comparison_by_ids(game_a["id"], game_b["id"])
+            # 辞書参照でステータスを取得（DBクエリなし）
+            comp = game_compare_lookup.get(pair_key) if game_compare_lookup else None
             has_registration = comp is not None
             
             if comp:
@@ -209,20 +211,26 @@ def generate_game_matrix_html(filtered_games_a, filtered_games_b):
                 show_cell = False
             
             if not show_cell:
-                html += f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>'
+                parts.append(f'<td style="padding: 4px 6px; border: 1px solid {border_color}; background: transparent;"></td>')
                 continue
             
             link_url = f"?game_a={game_a['id']}&game_b={game_b['id']}#edit-panel"
-            html += f'''<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px;">
+            parts.append(f'''<td style="padding: 4px 6px; border: 1px solid {border_color}; background: {cell_bg}; color: {text_fg}; text-align: center; cursor: pointer; font-size: 12px;">
                 <a href="{link_url}" style="text-decoration: none; color: inherit;">{label}</a>
-            </td>'''
+            </td>''')
         
-        html += '</tr>'
+        parts.append('</tr>')
     
-    html += '</table></div>'
-    return html
+    parts.append('</table></div>')
+    return "".join(parts)
 
-matrix_html = generate_game_matrix_html(filtered_games_a, filtered_games_b)
+# status_map を辞書参照用に整形（O(N²) DBクエリをO(1)辞書参照に最適化）
+game_compare_lookup = {}
+if status_map:
+    for pair_key, comp_data in status_map.items():
+        game_compare_lookup[pair_key] = comp_data
+
+matrix_html = generate_game_matrix_html(filtered_games_a, filtered_games_b, game_compare_lookup)
 st.markdown(matrix_html, unsafe_allow_html=True)
 
 # ラジェンド
