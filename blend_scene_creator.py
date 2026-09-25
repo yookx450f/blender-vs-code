@@ -1716,7 +1716,7 @@ def main():
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
-            from short2_apply_variations import load_config_from_env, apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            from short2_apply_variations import load_config_from_env, apply_grid_color, apply_clay_colors_per_car, apply_background_glow, apply_grid_pulse_effect
             SHORT2_CONFIG = load_config_from_env()
             print(f"  [DEBUG] SHORT2_CONFIG loaded: {SHORT2_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
@@ -1731,7 +1731,7 @@ def main():
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
             print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
             from short_animal_variations import load_config_from_env as load_animal_config_from_env
-            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_label_appear_effect, apply_background_glow, apply_grid_pulse_effect
+            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car, apply_background_glow, apply_grid_pulse_effect
             SHORT_ANIMAL_CONFIG = load_animal_config_from_env()
             print(f"  [DEBUG] SHORT_ANIMAL_CONFIG loaded: {SHORT_ANIMAL_CONFIG is not None}")
             # グリッド色のみの即時適用（グリッド床面は既に作成済み）
@@ -2312,12 +2312,6 @@ def main():
 
     # short2 モード: テキストエフェクト + 背景発光をテキストラベル作成後に適用
     if CUT_NUMBER == "short2" and SHORT2_CONFIG:
-        # テキスト出現エフェクトの適用
-        if "label_effect" in SHORT2_CONFIG:
-            text_objects = [obj for obj in bpy.data.objects if obj.type == 'FONT']
-            if text_objects:
-                apply_label_appear_effect(text_objects, SHORT2_CONFIG["label_effect"])
-        
         # 背景発光の変更（setup_world_background() の黒設定を上書き）
         if "bg_glow" in SHORT2_CONFIG:
             apply_background_glow(SHORT2_CONFIG["bg_glow"])
