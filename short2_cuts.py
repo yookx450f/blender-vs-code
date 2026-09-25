@@ -115,7 +115,7 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         cam_start_y = strategy_config.get("cam_start_y", -6.0) if strategy_config else -6.0
         cam_start_z = strategy_config.get("cam_start_z", 3.5) if strategy_config else 3.5
         cam_start = (cam_start_x, cam_start_y, cam_start_z)
-        total_rotation = -0.85
+        total_rotation = -1.7
 
     arc_radius = math.sqrt(cam_start[0]**2 + cam_start[1]**2)
     arc_height = cam_start[2]

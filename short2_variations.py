@@ -92,38 +92,38 @@ CAMERA_PATTERNS = [
         "name": "standard_arc_lr",       # 標準: 左→右円弧パン
         "pan_direction": 1,              # 1=左から右, -1=右から左
         "start_position": (-3.0, -6.0, 3.5),
-        "total_rotation": -0.85,
+        "total_rotation": -1.7,
     },
     {
         "name": "wide_arc_lr",           # ワイド: より大きな円弧（振れ幅縮小版）
         "pan_direction": 1,
         "start_position": (-3.5, -6.5, 3.8),
-        "total_rotation": -0.9,
+        "total_rotation": -1.8,
     },
     {
         "name": "close_arc_lr",          # クローズ: より近い位置からのパン
         "pan_direction": 1,
         "start_position": (-2.0, -4.5, 2.8),
-        "total_rotation": -0.65,
+        "total_rotation": -1.3,
     },
     # --- 右→左 パターン ---
     {
         "name": "reverse_arc_rl",        # 逆方向: 右→左円弧パン
         "pan_direction": -1,
         "start_position": (3.0, -6.0, 3.5),
-        "total_rotation": 0.85,
+        "total_rotation": 1.7,
     },
     {
         "name": "wide_reverse_arc_rl",   # ワイド: より大きな円弧（右側）（振れ幅縮小版）
         "pan_direction": -1,
         "start_position": (3.5, -6.5, 3.8),
-        "total_rotation": 0.9,
+        "total_rotation": 1.8,
     },
     {
         "name": "close_reverse_arc_rl",  # クローズ: より近い位置からのパン（右側）
         "pan_direction": -1,
         "start_position": (2.0, -4.5, 2.8),
-        "total_rotation": 0.65,
+        "total_rotation": 1.3,
     },
 ]
 
