@@ -5,9 +5,9 @@ Short2 - カット1・カット2 の位置アニメーションモジュール
 カッは完全に分離されており、独立して動作する。
 
 フレーム定義 (24fps):
-  カット1: fr0-288 (約12秒) — 車が中央へスライド + 円弧パンニング
-  カット2A: fr289-456 (7秒) — トップダウンビューへ移動 (イージング) + 車スライド開始
-  カット2B: fr457-624 (7秒) — カメラ復帰 (イージング) + CarB不透明化 + 車スライド完了
+  カット1: fr0-144 (約6秒) — 車が中央へスライド + 円弧パンニング
+  カット2A: fr145-228 (3.5秒) — トップダウンビューへ移動 (イージング) + 車スライド開始
+  カット2B: fr229-312 (3.5秒) — カメラ復帰 (イージング) + CarB不透明化 + 車スライド完了
 
 使い方:
     from short2_cuts import (
@@ -32,11 +32,11 @@ from short2_utils import (
 # ============================================================
 DEFAULT_CUT_FRAMES = {
     "cut1_start": 0,
-    "cut1_end": 288,
-    "cut2a_start": 289,
-    "cut2a_end": 456,
-    "cut2b_start": 457,
-    "cut2b_end": 624,
+    "cut1_end": 144,
+    "cut2a_start": 145,
+    "cut2a_end": 228,
+    "cut2b_start": 229,
+    "cut2b_end": 312,
 }
 
 
@@ -85,8 +85,8 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
     _set_location_keyframe(car_a, cut1_start, car_a_start[0], car_a_start[1], car_a_start[2])
     _set_location_keyframe(car_b, cut1_start, car_b_start[0], car_b_start[1], car_b_start[2])
 
-    # 中央集合完了フレーム（cut1_end の約42%地点 = 5秒相当）
-    slide_end_frame = cut1_start + int((cut1_end - cut1_start) * 0.42)
+    # 中央集合完了フレーム（cut1_end の約33%地点 = 4秒相当）
+    slide_end_frame = cut1_start + int((cut1_end - cut1_start) * 0.33)
 
     # フレーム slide_end_frame: 中央集合完了
     _set_location_keyframe(car_a, slide_end_frame, car_a_end[0], car_a_end[1], car_a_end[2])

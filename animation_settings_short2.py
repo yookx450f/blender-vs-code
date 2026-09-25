@@ -1,9 +1,9 @@
 """
 アニメーション設定モジュール - ショート動画v2（縦長9:16）
-フレーム 0-624（約26秒、24fps）を処理する。
+フレーム 0-312（約13秒、24fps）を処理する。
 
-カット1 (fr0-288): 「車が重なっていく部分」の円弧パンニング
-カット2 (fr289-624): トップダウンビュー → カメラ復帰 → 車スライド復帰（同時進行）
+カット1 (fr0-144): 「車が重なっていく部分」の円弧パンニング
+カット2 (fr145-312): トップダウンビュー → カメラ復帰 → 車スライド復帰（同時進行）
   フェーズA (fr289-456): 7秒 - トップダウンへ移動（イージング適用）
   フェーズB (fr457-624): 7秒 - カメラ復帰（イージング適用）
 
@@ -92,7 +92,7 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     Returns:
         CutState: 最終状態情報
     """
-    print(f"\n=== ショート動画v2 アニメーション設定を開始 (total_frames=624, 約26秒) ===")
+    print(f"\n=== ショート動画v2 アニメーション設定を開始 (total_frames=312, 約13秒) ===")
 
     # ============================================================
     # 動的スケーリング計算
@@ -241,7 +241,7 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # ============================================================
     # バリエーション設定：総フレーム数・フェーズAの時間変動適用
     # ============================================================
-    total_frames = 624  # デフォルト
+    total_frames = 312  # デフォルト（約13秒、2倍速化）
     if strategy_config and "total_frames" in strategy_config:
         total_frames = strategy_config["total_frames"]
         print(f"  総フレーム数: {total_frames} (約{total_frames/24:.1f}秒)")
@@ -260,8 +260,8 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     phase_a_frames = round(total_frames * base_phase_a_ratio * phase_a_modifier)
     # phase_a_frames も24の倍数に丸める
     phase_a_frames = round(phase_a_frames / 24) * 24
-    if phase_a_frames < 48:  # 最短2秒以下を防止
-        phase_a_frames = 48
+    if phase_a_frames < 24:  # 最短1秒以下を防止
+        phase_a_frames = 24
 
     actual_cut1_start = 0
     actual_cut1_end = cut1_end

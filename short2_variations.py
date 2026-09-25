@@ -180,7 +180,7 @@ EASING_FUNCTIONS = {
 SLIDE_SPEED_MULTIPLIERS = [0.85, 0.9, 1.0, 1.1, 1.15]  # ±15% の速度変動
 
 TOTAL_FRAME_DURATION_MULTIPLIERS = [0.8, 0.9, 1.0, 1.1, 1.2]  # ±20% の動画長さ変動
-BASE_TOTAL_FRAMES = 624  # 標準の総フレーム数（約26秒）
+BASE_TOTAL_FRAMES = 312  # 標準の総フレーム数（約13秒、2倍速化）
 
 
 # ============================================================
@@ -245,8 +245,8 @@ def generate_strategy_config(seed=None):
     total_frames = round(BASE_TOTAL_FRAMES * multiplier)
     # 24の倍数に丸める（秒数との整合性）
     total_frames = round(total_frames / 24) * 24
-    if total_frames < 300:  # 最短12.5秒以下を防止
-        total_frames = 300
+    if total_frames < 150:  # 最短6.25秒以下を防止
+        total_frames = 150
     config["total_frames"] = total_frames
     
     return config
