@@ -55,29 +55,47 @@ def _color_distance(color_a, color_b):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(color_a, color_b)))
 
 
-def select_distinct_clay_colors(rng, presets, min_distance=0.35):
+# グリッド色とクレイ色の最小距離閾値
+# この値以上離れていないと、視覚的に色が混ざり合って区別しにくい
+GRID_CLAY_MIN_DISTANCE = 0.5
+
+
+def select_distinct_clay_colors(rng, presets, grid_color=None, min_distance=0.35):
     """
     十分な距離を隔てた2つのクレイ色を選択。
+    
+    グリッド色が指定された場合、グリッド色とのRGB距離が
+    GRID_CLAY_MIN_DISTANCE (0.5) 未満のクレイ色は候補から除外する。
+    これにより、床のグリッドと車の色が似通る問題を解消する。
     
     Parameters:
         rng: random.Randomインスタンス
         presets: クレイ色のプリセットリスト
-        min_distance: RGB距離の最小閾値（デフォルト0.35）
+        grid_color: グリッド色の辞書 {"name": str, "color": (r,g,b)} (None時は距離チェックなし)
+        min_distance: クレイ色同士のRGB距離の最小閾値（デフォルト0.35）
     
     Returns:
         tuple: (clay_a, clay_b) のタプル
     """
-    clay_a = rng.choice(presets)
-    candidates = [c for c in presets if c["name"] != clay_a["name"]]
+    # グリッド色が指定されたら、距離が近いクレイ色を除外
+    candidates = list(presets)
+    if grid_color is not None:
+        gc = grid_color["color"]
+        filtered = [c for c in presets if _color_distance(gc, c["color"]) >= GRID_CLAY_MIN_DISTANCE]
+        if filtered:
+            candidates = filtered
     
-    # 距離条件を満たす候補を優先
-    distant = [c for c in candidates if _color_distance(clay_a["color"], c["color"]) >= min_distance]
+    clay_a = rng.choice(candidates)
+    remaining = [c for c in candidates if c["name"] != clay_a["name"]]
+    
+    # 距離条件を満たす候補を優先（クレイ色同士も離れている）
+    distant = [c for c in remaining if _color_distance(clay_a["color"], c["color"]) >= min_distance]
     
     if distant:
         clay_b = rng.choice(distant)
     else:
         # 閾値以下しかない場合は、最も距離の遠い色を選択
-        clay_b = max(candidates, key=lambda c: _color_distance(clay_a["color"], c["color"]))
+        clay_b = max(remaining, key=lambda c: _color_distance(clay_a["color"], c["color"]))
     
     return clay_a, clay_b
 
@@ -204,6 +222,11 @@ def generate_strategy_config(seed=None):
     """
     ランダムに各プリセットを1つずつ選び、設定辞書を返す。
     
+    色の選択順序:
+        1. グリッド色を先に選択
+        2. クレイ色はグリッド色との距離が0.5以上離れた色から選択
+           これにより、床と車の色が似通る問題を解消
+    
     Parameters:
         seed: int or None. 指定すると再現可能。None時はランダムシード。
     
@@ -212,12 +235,15 @@ def generate_strategy_config(seed=None):
     """
     rng = random.Random(seed)
     
-    # ルール1: CarAとCarBは必ず異なるクレイ色を選択（且つRGB距離が離れている）
-    clay_a, clay_b = select_distinct_clay_colors(rng, CLAY_COLOR_PRESETS, min_distance=0.35)
+    # グリッド色を先に選択（クレイ色のフィルターの基準にする）
+    grid_color = rng.choice(GRID_COLOR_PRESETS)
+    
+    # ルール1: CarAとCarBは必ず異なるクレイ色を選択（且つグリッド色とも離れている）
+    clay_a, clay_b = select_distinct_clay_colors(rng, CLAY_COLOR_PRESETS, grid_color=grid_color, min_distance=0.35)
     
     config = {
         # 色設定
-        "grid_color": rng.choice(GRID_COLOR_PRESETS),
+        "grid_color": grid_color,
         "clay_color_a": clay_a,
         "clay_color_b": clay_b,
         "bg_glow": rng.choice(BACKGROUND_GLOW_PRESETS),
@@ -277,4 +303,13 @@ def print_config_summary(config):
     print(f"  グリッドパルス:  {'ON' if config['grid_pulse'] else 'OFF'}")
     print(f"  フェーズA倍率:   {config['phase_a_duration_modifier']}x")
     print(f"  総フレーム数:    {config.get('total_frames', BASE_TOTAL_FRAMES)} (約{config.get('total_frames', BASE_TOTAL_FRAMES)/24:.1f}秒)")
+    
+    # グリッド色とクレイ色の距離を確認表示
+    gd = config['grid_color']['color']
+    ca = config['clay_color_a']['color']
+    cb = config['clay_color_b']['color']
+    d_a = math.sqrt(sum((a-b)**2 for a,b in zip(gd, ca)))
+    d_b = math.sqrt(sum((a-b)**2 for a,b in zip(gd, cb)))
+    print(f"  グリッド→クレイA距離: {d_a:.3f} [{'✓' if d_a >= GRID_CLAY_MIN_DISTANCE else '⚠️'}]")
+    print(f"  グリッド→クレイB距離: {d_b:.3f} [{'✓' if d_b >= GRID_CLAY_MIN_DISTANCE else '⚠️'}]")
     print("="*50)

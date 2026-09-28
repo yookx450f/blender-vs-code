@@ -1,11 +1,11 @@
 """
 アニメーション設定モジュール - ショート動画v2（縦長9:16）
-フレーム 0-312（約13秒、24fps）を処理する。
+フレーム 0-324（約13.5秒、24fps）を処理する。
 
-カット1 (fr0-144): 「車が重なっていく部分」の円弧パンニング
-カット2 (fr145-312): トップダウンビュー → カメラ復帰 → 車スライド復帰（同時進行）
-  フェーズA (fr289-456): 7秒 - トップダウンへ移動（イージング適用）
-  フェーズB (fr457-624): 7秒 - カメラ復帰（イージング適用）
+カット1 (fr0-120): 「車が重なっていく部分」の円弧パンニング（約5秒）
+カット2 (fr121-324): トップダウンビュー → カメラ復帰 → 車スライド復帰（同時進行）
+  フェーズA (fr121-240): 5秒 - トップダウンへ移動（イージング適用、よりゆっくり滑らかに）
+  フェーズB (fr241-324): 3.5秒 - カメラ復帰（イージング適用）
 
 YouTube Shorts用の縦長フォーマット。
 
@@ -15,6 +15,9 @@ short2 の違い:
 【動的スケーリング】
     車の寸法に基づいて、カメラ距離と車間隔を自動調整する。
     大きな車ほど、カメラを遠ざけ・間隔を広げる。
+    
+    ※2026-09-27: カメラ飛翔防止のため、cam_scale に上限値を追加し、
+       巨大車両ではレンズのFOV調整で対応するように変更。
 
 使い方:
     from animation_settings_short2 import setup_short2_animations
@@ -30,6 +33,14 @@ from short2_cuts import (
     setup_cut2_phase_a_topdown,
     setup_cut2_phase_b_camera_return,
 )
+
+
+# カメラ距離の最大スケーリング倍率
+# これを超えると、カメラが遠すぎて画面から車が見えなくなる
+MAX_CAM_SCALE = 2.0
+
+# カメラ起始位置の最大絶対値（メートル）
+CAM_START_MAX_ABS = 10.0
 
 
 def _calculate_scale_factor(car_dimensions):
@@ -92,7 +103,7 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     Returns:
         CutState: 最終状態情報
     """
-    print(f"\n=== ショート動画v2 アニメーション設定を開始 (total_frames=312, 約13秒) ===")
+    print(f"\n=== ショート動画v2 アニメーション設定を開始 (total_frames=324, 約13.5秒) ===")
 
     # ============================================================
     # 動的スケーリング計算
@@ -102,15 +113,24 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # スケーリング適用後の基本値
     # 車間隔: スケール係数の0.5乗で弱く補正（大きな変化を抑制）
     char_scale = scale_factor ** 0.5
-    # カメラ距離: スケール係数に1.5倍を掛けて強く補正（巨大車でも画面に収まる）
-    cam_scale = scale_factor * 1.5
+    
+    # カメラ距離: スケール係数に1.5倍、上限 MAX_CAM_SCALE で制限
+    # ※2026-09-27: 巨大車両でカメラが遠くなりすぎないように上限を追加
+    cam_scale = min(scale_factor * 1.5, MAX_CAM_SCALE)
+    
     car_start_half_dist = 1.25 * char_scale           # 車開始位置の半間隔
-    cam_start_x = -3.0 * cam_scale                    # カメラ起始X座標
-    cam_start_y = -6.0 * cam_scale                    # カメラ起始Y座標
-    cam_start_z = 3.5 * min(cam_scale, 2.0)          # カメラ高度Z
-    topdown_height = max(8.0, 8.0 * char_scale)      # トップダウンカメラ高さ（sqrt補正で緩やかに拡大、8m以下にはしない）
+    
+    # カメラ起始位置: 絶対値を CAM_START_MAX_ABS (±10m) に制限
+    cam_start_x = max(-CAM_START_MAX_ABS, min(CAM_START_MAX_ABS, -3.0 * cam_scale))
+    cam_start_y = max(-CAM_START_MAX_ABS, min(CAM_START_MAX_ABS, -6.0 * cam_scale))
+    
+    # カメラ高度Z: 上限2.0の制限を維持
+    cam_start_z = 3.5 * min(cam_scale, 2.0)
+    
+    # トップダウンカメラ高さ（sqrt補正で緩やかに拡大、8m以下にはしない）
+    topdown_height = max(8.0, 8.0 * char_scale)
 
-    print(f"  動的スケーリング: scale_factor={scale_factor:.2f}, char_scale={char_scale:.2f}, cam_scale={cam_scale:.2f}")
+    print(f"  動的スケーリング: scale_factor={scale_factor:.2f}, char_scale={char_scale:.2f}, cam_scale={cam_scale:.2f} (上限{MAX_CAM_SCALE})")
     print(f"  車間隔: ±{car_start_half_dist:.2f}m")
     print(f"  カメラ起始位置: ({cam_start_x:.1f}, {cam_start_y:.1f}, {cam_start_z:.1f})")
     print(f"  トップダウン高さ: {topdown_height:.1f}m")
@@ -177,11 +197,16 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     clear_animation_data([camera, car_a, car_b])
 
     # レンズ設定 — cam_scaleに応じてFOVを調整
+    # ※2026-09-27: 巨大車ではカメラを近づけたままレンズを広角化して対応
     original_lens = camera.data.lens
-    adjusted_lens = round(35 * min(cam_scale, 1.5))  # cam_scale上限: 2.0→1.5（カメラ飛防止）
-    adjusted_lens = max(24, min(85, adjusted_lens))  # 広角〜望遠の範囲に収める
+    if scale_factor > 2.0:
+        adjusted_lens = max(24, round(35 / min(scale_factor, 3.0)))
+        print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（広角化 for scale={scale_factor:.2f}）")
+    else:
+        adjusted_lens = round(35 * min(cam_scale, 1.5))
+        adjusted_lens = max(24, min(85, adjusted_lens))
+        print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（スケール調整）")
     camera.data.lens = adjusted_lens
-    print(f"  カメラレンズ: {original_lens}mm → {adjusted_lens}mm（スケール調整）")
 
     # ============================================================
     # スケール情報を strategy_config に注入（カット関数へ渡すため）
@@ -218,8 +243,8 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
         cam_pat = copy.deepcopy(strategy_config["camera_pattern"])
         sp = tuple(cam_pat.get("start_position", (-3.0, -6.0, 3.5)))
         scaled_sp = (
-            sp[0] * min(cam_scale, 1.5),  # カメラ飛防止: 上限1.5
-            sp[1] * min(cam_scale, 1.5),
+            max(-CAM_START_MAX_ABS, min(CAM_START_MAX_ABS, sp[0] * min(cam_scale, 1.5))),
+            max(-CAM_START_MAX_ABS, min(CAM_START_MAX_ABS, sp[1] * min(cam_scale, 1.5))),
             sp[2] * min(cam_scale, 1.5)
         )
         cam_pat["start_position"] = list(scaled_sp)
@@ -241,7 +266,7 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # ============================================================
     # バリエーション設定：総フレーム数・フェーズAの時間変動適用
     # ============================================================
-    total_frames = 312  # デフォルト（約13秒、2倍速化）
+    total_frames = 324  # デフォルト（約13.5秒）フェーズAを5秒に延長
     if strategy_config and "total_frames" in strategy_config:
         total_frames = strategy_config["total_frames"]
         print(f"  総フレーム数: {total_frames} (約{total_frames/24:.1f}秒)")
@@ -252,12 +277,11 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
         print(f"  フェーズA倍率: {phase_a_modifier}x")
 
     # カット区間を総フレーム数に応じて再計算
-    # 構成比: カット1=約46%, フェーズA=約27% * phase_a_modifier, フェーズB=残り
-    cut1_end = round(total_frames * 0.46)
-    cut1_end = round(cut1_end / 24) * 24  # 秒単位の整数に丸める
+    # カット1: fr0-120 (5秒), フェーズA: fr121-204 (3.5秒), フェーズB: fr205-288 (3.5秒)
+    cut1_end = 120  # 固定: カット1を5秒に設定
 
-    base_phase_a_ratio = 0.27
-    phase_a_frames = round(total_frames * base_phase_a_ratio * phase_a_modifier)
+    base_phase_a_frames = 120  # フェーズAを5秒に延長（よりゆっくり・滑らかにカメラが降りてくる）
+    phase_a_frames = round(base_phase_a_frames * phase_a_modifier)
     # phase_a_frames も24の倍数に丸める
     phase_a_frames = round(phase_a_frames / 24) * 24
     if phase_a_frames < 24:  # 最短1秒以下を防止
@@ -306,10 +330,22 @@ def setup_short2_animations(scene, camera, imported_cars, rear_offset_y, grounde
 
     target_car = car_b if transparency_target == "carB" else car_a
 
-    # キーフレームの位置をフェーズB開始に合わせて調整
-    alpha_restore_frame = actual_cut2b_start  # フェーズB開始で不透明化
-    _setup_short2_carb_transparency(target_car, end_frame=total_frames, restore_frame=alpha_restore_frame)
-    print(f"  Alpha({transparency_target}): fr30で半透明化(1.0→0.35), fr{alpha_restore_frame}で不透明化(0.35→1.0) [CONSTANT補間]")
+    # 3段階透明度設定:
+    #   fr0-fr29: Alpha=0.35 (半透明 - 車が中央で重なる状態)
+    #   fr30-fr66: Alpha=1.0 (不透明 - スライドアウト後)
+    #   fr67-fr203: Alpha=0.35 (半透明 - スライドイン完了後)
+    #   fr204-end: Alpha=1.0 (不透明 - フェーズA終了時)
+    first_restore_frame = 30       # fr30で一時的に不透明化
+    fade_again_frame = 67          # fr67で再び半透明に
+    final_restore_frame = 204      # fr204（フェーズA終了）で最終不透明化
+    _setup_short2_carb_transparency(
+        target_car, 
+        end_frame=total_frames, 
+        restore_frame=first_restore_frame,
+        fade_again_frame=fade_again_frame,
+        final_restore_frame=final_restore_frame
+    )
+    print(f"  Alpha({transparency_target}): fr0=0.35, fr{first_restore_frame}=1.0, fr{fade_again_frame}=0.35, fr{final_restore_frame}=1.0 [CONSTANT補間]")
 
     # ============================================================
     # --- カット2 フェーズA: トップダウンビュー + 車スライド開始 ---

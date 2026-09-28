@@ -2,12 +2,12 @@
 Short2 - カット1・カット2 の位置アニメーションモジュール
 
 各カットごとのカメラ・車の位置キーフレームを設定する。
-カッは完全に分離されており、独立して動作する。
+カットは完全に分離されており、独立して動作する。
 
 フレーム定義 (24fps):
-  カット1: fr0-144 (約6秒) — 車が中央へスライド + 円弧パンニング
-  カット2A: fr145-228 (3.5秒) — トップダウンビューへ移動 (イージング) + 車スライド開始
-  カット2B: fr229-312 (3.5秒) — カメラ復帰 (イージング) + CarB不透明化 + 車スライド完了
+  カット1: fr0-120 (約5秒) — 車が中央へスライド + 円弧パンニング
+  カット2A: fr121-240 (5秒) — トップダウンビューへ移動 (イージング、ゆっくり滑らかに) + 車スライド開始
+  カット2B: fr241-324 (3.5秒) — カメラ復帰 (イージング) + CarB不透明化 + 車スライド完了
 
 使い方:
     from short2_cuts import (
@@ -32,12 +32,17 @@ from short2_utils import (
 # ============================================================
 DEFAULT_CUT_FRAMES = {
     "cut1_start": 0,
-    "cut1_end": 144,
-    "cut2a_start": 145,
-    "cut2a_end": 228,
-    "cut2b_start": 229,
-    "cut2b_end": 312,
+    "cut1_end": 120,   # カット1を5秒に短縮 (fr0-120)
+    "cut2a_start": 121,
+    "cut2a_end": 204,  # フェーズA: 3.5秒 (84フレーム)
+    "cut2b_start": 205,
+    "cut2b_end": 288,  # フェーズB: 3.5秒 (84フレーム) → 全体12秒
 }
+
+# カメラ位置の制限範囲（メートル）
+# short2_utils.py と統一値を使用
+# ※2026-09-27: カメラ飛翔防止のため 15.0→12.0 に変更
+CAMERA_LOCATION_MAX = 12.0
 
 
 def _get_easing_func(strategy_config=None):
@@ -62,11 +67,16 @@ def _get_easing_func(strategy_config=None):
 
 def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None, cut_frames=None):
     """
-    カット1: 車が中央へスライド + 円弧パンニング。
+    カット1: 車のスライドアニメーション + 円弧パンニング。
 
-    CarA: (-1.25, rear_offset_y) → 中央集合位置
-    CarB: (1.25, 0.0) → 中央集合位置
-    カメラ: バリエーション設定に基づく円弧パンニング
+    新しい流れ (fr=cut1_start を 0 とする前提):
+      fr0:       2台が中央で重なり (carBは半透明)
+      fr1-24(1秒): 各自の開始位置へスライド
+      fr30:     carB不透明化 (透明度アニメーション側で制御)
+      fr31-48(1秒): 再度中央へスライドして重なり
+      fr48-cut1_end: 中央位置維持
+
+    カメラ: バリエーション設定に基づく円弧パンニング（変更なし）
 
     Parameters:
         cut_frames: dict with keys cut1_start, cut1_end (None時はデフォルト値を使用)
@@ -81,20 +91,36 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
     print(f"\n  === カット1: 車中央スライド + 円弧パンニング (fr{cut1_start}-{cut1_end}) ===")
 
     # --- 車のアニメーション ---
-    # フレーム 0: スタート位置
-    _set_location_keyframe(car_a, cut1_start, car_a_start[0], car_a_start[1], car_a_start[2])
-    _set_location_keyframe(car_b, cut1_start, car_b_start[0], car_b_start[1], car_b_start[2])
+    # 新しい流れ:
+    #   fr0:       中央で重なり (car_a_end / car_b_end)
+    #   fr0→fr24(1秒): 開始位置へスライド (car_a_start / car_b_start)
+    #   fr30:     開始位置維持 (carB不透明化は透明度側で制御)
+    #   fr30→fr66(1.5秒): 中央へスライド (car_a_end / car_b_end)
+    #   fr67-cut1_end: 中央位置維持 (carBは半透明 Alpha=0.35)
 
-    # 中央集合完了フレーム（cut1_end の約33%地点 = 4秒相当）
-    slide_end_frame = cut1_start + int((cut1_end - cut1_start) * 0.33)
+    slide_out_end = cut1_start + 24       # fr24: スライドアウト完了
+    stay_frame = cut1_start + 30          # fr30: 不透明化 (開始位置維持)
+    slide_in_end = cut1_start + 66        # fr66: 中央へスライド完了 (1.5秒)
 
-    # フレーム slide_end_frame: 中央集合完了
-    _set_location_keyframe(car_a, slide_end_frame, car_a_end[0], car_a_end[1], car_a_end[2])
-    _set_location_keyframe(car_b, slide_end_frame, car_b_end[0], car_b_end[1], car_b_end[2])
+    # fr0: 中央で重なり
+    _set_location_keyframe(car_a, cut1_start, car_a_end[0], car_a_end[1], car_a_end[2])
+    _set_location_keyframe(car_b, cut1_start, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    # fr24: 各自の開始位置へスライド完了
+    _set_location_keyframe(car_a, slide_out_end, car_a_start[0], car_a_start[1], car_a_start[2])
+    _set_location_keyframe(car_b, slide_out_end, car_b_start[0], car_b_start[1], car_b_start[2])
+
+    # fr30: 開始位置維持 (不透明化タイミング)
+    _set_location_keyframe(car_a, stay_frame, car_a_start[0], car_a_start[1], car_a_start[2])
+    _set_location_keyframe(car_b, stay_frame, car_b_start[0], car_b_start[1], car_b_start[2])
+
+    # fr48: 中央へスライド完了
+    _set_location_keyframe(car_a, slide_in_end, car_a_end[0], car_a_end[1], car_a_end[2])
+    _set_location_keyframe(car_b, slide_in_end, car_b_end[0], car_b_end[1], car_b_end[2])
 
     # 位置維持キーフレーム（0.5秒ごと - 補間の階段状を緩和）
     keyframe_interval = 12
-    maintain_start = slide_end_frame + keyframe_interval
+    maintain_start = slide_in_end + keyframe_interval
     for frame in range(maintain_start, cut1_end + 1, keyframe_interval):
         _set_location_keyframe(car_a, frame, car_a_end[0], car_a_end[1], car_a_end[2])
         _set_location_keyframe(car_b, frame, car_b_end[0], car_b_end[1], car_b_end[2])
@@ -102,6 +128,11 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
     # カット1終了フレームも確実に設定
     _set_location_keyframe(car_a, cut1_end, car_a_end[0], car_a_end[1], car_a_end[2])
     _set_location_keyframe(car_b, cut1_end, car_b_end[0], car_b_end[1], car_b_end[2])
+
+    print(f"  [fr{cut1_start}] 中央重なり: carA={car_a_end}, carB={car_b_end}")
+    print(f"  [fr{slide_out_end}] スライドアウト完了: carA={car_a_start}, carB={car_b_start}")
+    print(f"  [fr{stay_frame}] 開始位置維持 (不透明化タイミング)")
+    print(f"  [fr{slide_in_end}] 中央スライドイン完了: carA={car_a_end}, carB={car_b_end}")
 
     # --- カメラ円弧パンニング（バリエーション設定適用） ---
     if strategy_config and "camera_pattern" in strategy_config:
@@ -118,6 +149,8 @@ def setup_cut1_overlap(camera, car_a, car_b, car_a_start, car_a_end, car_b_start
         total_rotation = -1.7
 
     arc_radius = math.sqrt(cam_start[0]**2 + cam_start[1]**2)
+    # ※2026-09-27: 巨大車両でカメラが遠くなりすぎないように半径に上限を追加
+    arc_radius = min(arc_radius, CAMERA_LOCATION_MAX)
     arc_height = cam_start[2]
     start_angle = math.atan2(cam_start[0], cam_start[1])
 
@@ -194,10 +227,11 @@ def _interpolate_car_position(start_pos, end_pos, progress):
 def _clamp_camera_location(x, y, z):
     """カメラの位置を安全な範囲内に制限する
     
-    各座標軸を ±15.0m 以内にクランプし、
+    各座標軸を ±CAMERA_LOCATION_MAX (±12.0m) 以内にクランプし、
     Z座標は常に正（地面より上）を保証する。
+    
+    ※2026-09-27: CAMERA_LOCATION_MAX を 15.0→12.0 に変更 (short2_utils.py と統一)
     """
-    CAMERA_LOCATION_MAX = 15.0
     cx = max(-CAMERA_LOCATION_MAX, min(CAMERA_LOCATION_MAX, x))
     cy = max(-CAMERA_LOCATION_MAX, min(CAMERA_LOCATION_MAX, y))
     cz = max(0.1, min(CAMERA_LOCATION_MAX, z))
@@ -357,7 +391,7 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
     min_camera_z = strategy_config.get("min_camera_z", 4.0) if strategy_config else 4.0
 
     target = (0.0, 0.0, 1.0)
-    keyframe_interval = 12  # 0.5秒ごとで補間を滑らかに
+    keyframe_interval = 6  # 0.25秒ごとで補間をより滑らかに
 
     # cut2a_startで明確なカメラキーフレームを設定（カット1からの連続性を保証）
     _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", cut2a_start, cut1_final_cam, target)
@@ -393,10 +427,14 @@ def setup_cut2_phase_a_topdown(camera, car_a, car_b, car_a_start, car_a_end, car
 
 def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None, cut_frames=None):
     """
-    カット2 フェーズB: カメラ開始位置へ復帰 + CarB不透明化 + 車スライド。
+    カット2 フェーズB: カメラ復帰 + 車スライド（二段階）。
 
-    カメラ: トップダウン位置 → バリエーション設定に基づく復帰位置
-    車: 中央集合位置からカット1開始位置へスライド開始 → cut2b_endで到達
+    フェーズB前半 (fr205-fr287):
+      カメラ: トップダウン → 復帰位置
+      車: 中央集合位置 → 開始位置へスライド
+    フェーズB後半 (fr288-fr324, ~1.5秒):
+      カメラ: 固定（復帰位置維持）
+      車: 開始位置 → 中央へスライド回来り
 
     Parameters:
         strategy_config: バリエーション設定辞書（オプション）
@@ -437,31 +475,33 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
     min_camera_z = strategy_config.get("min_camera_z", 4.0) if strategy_config else 4.0
 
     target = (0.0, 0.0, 1.0)
-    keyframe_interval = 12  # 0.5秒ごとで補間を滑らかに
+    keyframe_interval = 6  # 0.25秒ごとで補間をより滑らかに
 
-    # 車のスライドはフェーズBのみで進行
-    total_slide_frames = cut2b_end - cut2b_start + 1
+    # フェーズB後半: 最後の1.5秒（36フレーム）は車を中央へスライド回来り
+    slide_back_frames = 36  # 1.5秒
+    phase_b_slide_end = cut2b_end - slide_back_frames
 
-    phase_b_frames = list(range(cut2b_start, cut2b_end + 1, keyframe_interval))
-    if phase_b_frames[-1] != cut2b_end:
-        phase_b_frames.append(cut2b_end)
-    num_segments = len(phase_b_frames) - 1
+    # --- フェーズB前半: カメラ復帰 + 車→開始位置へスライド (fr205-fr288) ---
+    total_slide_frames_a = phase_b_slide_end - cut2b_start + 1
 
-    for i, frame in enumerate(phase_b_frames):
+    phase_b_a_frames = list(range(cut2b_start, phase_b_slide_end + 1, keyframe_interval))
+    if not phase_b_a_frames or phase_b_a_frames[-1] != phase_b_slide_end:
+        phase_b_a_frames.append(phase_b_slide_end)
+    num_segments_a = len(phase_b_a_frames) - 1
+
+    for i, frame in enumerate(phase_b_a_frames):
         # カメラの補間（イージング適用）
-        raw_progress = i / num_segments if num_segments > 0 else 0
+        raw_progress = i / num_segments_a if num_segments_a > 0 else 0
         cam_progress = ease_func(raw_progress)
         cam_x = top_down_pos[0] + (cam_return_pos[0] - top_down_pos[0]) * cam_progress
         cam_y = top_down_pos[1] + (cam_return_pos[1] - top_down_pos[1]) * cam_progress
         cam_z = top_down_pos[2] + (cam_return_pos[2] - top_down_pos[2]) * cam_progress
-        # Zの最低値を保証（車との干渉防止）
         cam_z = _clamp_camera_z(cam_z, min_camera_z)
         cam_pos = (cam_x, cam_y, cam_z)
-        # Track Toがミュートされているので、位置+回転を直接キーフレーム記録
         _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_pos, target)
 
-        # 車のスライド進行度（イージング適用）
-        raw_car_progress = (frame - cut2b_start) / total_slide_frames
+        # 車のスライド進行度（中央→開始位置へ）
+        raw_car_progress = max(0, (frame - cut2b_start) / total_slide_frames_a)
         car_progress = ease_func(raw_car_progress)
 
         car_a_pos = _interpolate_car_position(car_a_end, car_a_start, car_progress)
@@ -470,14 +510,39 @@ def setup_cut2_phase_b_camera_return(camera, car_a, car_b, car_a_start, car_a_en
         _set_location_keyframe(car_a, frame, car_a_pos[0], car_a_pos[1], car_a_pos[2])
         _set_location_keyframe(car_b, frame, car_b_pos[0], car_b_pos[1], car_b_pos[2])
 
-    # 終了フレームを確実に設定（車が完全にスタート位置に戻っていることを保証）
-    _set_location_keyframe(car_a, cut2b_end, car_a_start[0], car_a_start[1], car_a_start[2])
-    _set_location_keyframe(car_b, cut2b_end, car_b_start[0], car_b_start[1], car_b_start[2])
+    # 前半終了時に車が開始位置に到達していることを保証
+    _set_location_keyframe(car_a, phase_b_slide_end, car_a_start[0], car_a_start[1], car_a_start[2])
+    _set_location_keyframe(car_b, phase_b_slide_end, car_b_start[0], car_b_start[1], car_b_start[2])
+
+    # --- フェーズB後半: カメラ固定 + 車→中央へスライド回来り (fr289-fr324) ---
+    slide_back_frames_list = list(range(phase_b_slide_end, cut2b_end + 1, keyframe_interval))
+    if not slide_back_frames_list or slide_back_frames_list[-1] != cut2b_end:
+        slide_back_frames_list.append(cut2b_end)
+    num_segments_b = len(slide_back_frames_list) - 1
+
+    for i, frame in enumerate(slide_back_frames_list):
+        # カメラは固定（復帰位置維持）
+        _set_camera_position_and_rotation_keyframe(camera, "CameraTarget", frame, cam_return_pos, target)
+
+        # 車のスライド進行度（開始位置→中央へ回来り、イージング適用）
+        raw_car_progress = max(0, (frame - phase_b_slide_end) / slide_back_frames)
+        car_progress = ease_func(raw_car_progress)
+
+        car_a_pos = _interpolate_car_position(car_a_start, car_a_end, car_progress)
+        car_b_pos = _interpolate_car_position(car_b_start, car_b_end, car_progress)
+
+        _set_location_keyframe(car_a, frame, car_a_pos[0], car_a_pos[1], car_a_pos[2])
+        _set_location_keyframe(car_b, frame, car_b_pos[0], car_b_pos[1], car_b_pos[2])
+
+    # 終了フレームを確実に設定（車が中央に到達していることを保証）
+    _set_location_keyframe(car_a, cut2b_end, car_a_end[0], car_a_end[1], car_a_end[2])
+    _set_location_keyframe(car_b, cut2b_end, car_b_end[0], car_b_end[1], car_b_end[2])
 
     # 最終カメラ位置を設定（キーフレームはループで設定済み）
     camera.location = (cam_return_pos[0], cam_return_pos[1], cam_return_pos[2])
 
-    print(f"  [fr{cut2b_start}-{cut2b_end}] カメラ: {top_down_pos} → {cam_return_pos}")
+    print(f"  [fr{cut2b_start}-{phase_b_slide_end}] カメラ: {top_down_pos} → {cam_return_pos} + 車: 中央→開始位置へ")
+    print(f"  [fr{phase_b_slide_end+1}-{cut2b_end}] カメラ固定 + 車: 開始位置→中央へスライド回来り (1.5秒)")
     print(f"  車: スライド完了 → carA={car_a_start}, carB={car_b_start}")
 
     return {
@@ -524,6 +589,8 @@ def setup_cut2_arc_return(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
 
     # --- 円弧パラメータを起始位置から再計算 ---
     arc_radius = math.sqrt(cam_start_pos[0]**2 + cam_start_pos[1]**2)
+    # ※2026-09-27: 巨大車両でカメラが遠くなりすぎないように半径に上限を追加
+    arc_radius = min(arc_radius, CAMERA_LOCATION_MAX)
     arc_height = cam_start_pos[2]
 
     start_angle = math.atan2(cam_start_pos[0], cam_start_pos[1])
