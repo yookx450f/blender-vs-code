@@ -838,6 +838,159 @@ def _set_all_fac_keyframes_to_constant(node_tree):
         print(f'    ⚠ CONSTANT補間設定エラー: {e}')
 
 
+def _setup_short4_carb_transparency(car_object, end_frame=312):
+    """Carの透明度アニメーションをshort4専用ロジックで完全に再構築する
+
+    fr0-fr39: Alpha=1.0 (不透明 - 分離位置で開始)
+    fr40-fr48: Alpha 1.0→0.5 (半透明化第一阶段, LINEAR補間)
+    fr48-fr56: Alpha 0.5→0.35 (半透明化第二阶段, LINEAR補間)
+    fr56-fr179: Alpha=0.35 (半透明維持, CONSTANT補間)
+    fr180-fr192: Alpha 0.35→0.5 (不透明化第一阶段, LINEAR補間)
+    fr192-fr204: Alpha 0.5→1.0 (不透明化第二阶段, LINEAR補間)
+    fr204-end_frame: Alpha=1.0 (不透明維持)
+
+    Parameters:
+        car_object: 対象車のオブジェクト
+        end_frame: 終了フレーム (デフォルト312)
+    """
+    if car_object is None:
+        return
+
+    all_meshes = _collect_all_mesh_objects_recursive(car_object)
+
+    if not all_meshes:
+        if car_object.type == 'MESH' and len(car_object.data.materials) > 0:
+            all_meshes = [car_object]
+        else:
+            return
+
+    processed_materials = set()
+
+    for mesh_obj in all_meshes:
+        if not hasattr(mesh_obj, 'data') or mesh_obj.data is None:
+            continue
+        for material in mesh_obj.data.materials:
+            if material is None or not material.use_nodes:
+                continue
+            if id(material) in processed_materials:
+                continue
+            processed_materials.add(id(material))
+
+            try:
+                material.blend_method = 'BLEND'
+            except AttributeError:
+                pass
+
+            nodes = material.node_tree.nodes
+            links = material.node_tree.links
+
+            # 既存のMix Shaderを探す（ない場合は新規作成）
+            mix_shader = None
+            for node in nodes:
+                if node.type == 'MIX_SHADER':
+                    mix_shader = node
+                    break
+
+            # Mix Shaderが存在しない場合は Mix Shader 構成を作成
+            if mix_shader is None:
+                original_color = _get_material_color(material)
+                nodes.clear()
+                links.clear()
+
+                output_node = nodes.new(type='ShaderNodeOutputMaterial')
+                output_node.location = (600, 0)
+
+                mix_shader = nodes.new(type='ShaderNodeMixShader')
+                mix_shader.location = (400, 0)
+
+                transparent_bsdf = nodes.new(type='ShaderNodeBsdfTransparent')
+                transparent_bsdf.location = (200, -150)
+
+                principled_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+                principled_bsdf.location = (200, 150)
+                principled_bsdf.inputs['Base Color'].default_value = (*original_color, 1.0)
+                principled_bsdf.inputs['Roughness'].default_value = 0.8
+                principled_bsdf.inputs['Metallic'].default_value = 0.0
+
+                links.new(transparent_bsdf.outputs['BSDF'], mix_shader.inputs[1])
+                links.new(principled_bsdf.outputs['BSDF'], mix_shader.inputs[2])
+                links.new(mix_shader.outputs['Shader'], output_node.inputs['Surface'])
+
+            fac_input = mix_shader.inputs['Fac']
+
+            # アニメーションデータを完全にクリア
+            clear_material_animation(material.node_tree)
+            material.node_tree.animation_data_clear()
+
+            # 再度animation_dataを設定（キーフレーム追加のため）
+            material.node_tree.animation_data_create()
+
+            # Short4の4段階透明度パターンをすべて一度に設定
+            keyframes = [
+                (0, 1.0),           # fr0: 不透明
+                (39, 1.0),          # fr39: 不透明維持
+                (40, 1.0),          # fr40: 半透明化第一阶段開始
+                (48, 0.5),          # fr48: 第一阶段完了
+                (56, 0.35),         # fr56: 第二阶段完了（完全半透明）
+                (179, 0.35),        # fr179: 半透明維持
+                (180, 0.35),        # fr180: 不透明化第一阶段開始
+                (192, 0.5),         # fr192: 第一阶段完了
+                (204, 1.0),         # fr204: 第二阶段完了（完全不透明）
+                (end_frame, 1.0),   # end_frame: 不透明維持
+            ]
+
+            for frame, fac_value in keyframes:
+                bpy.context.scene.frame_set(frame)
+                fac_input.default_value = fac_value
+                fac_input.keyframe_insert(data_path="default_value", frame=frame)
+
+            # キーフレームの補間モードを設定
+            _set_short4_fac_interpolation(material.node_tree)
+
+    bpy.context.scene.frame_set(0)
+    print(f"  Car透明度(short4専用-4段階): fr0=1.0, fr40→48=1.0→0.5, fr48→56=0.5→0.35, fr56→179=0.35, fr180→192=0.35→0.5, fr192→204=0.5→1.0")
+
+
+def _set_short4_fac_interpolation(node_tree):
+    """Short4の透明度補間モードを設定する
+
+    LINEAR: 半透明化/不透明化フェーズ (fr39-fr56, fr179-fr204)
+    CONSTANT: 維持フェーズ (fr0-fr39, fr56-fr179, fr204-end)
+    """
+    try:
+        if not hasattr(node_tree, 'animation_data') or node_tree.animation_data is None:
+            return
+        action = node_tree.animation_data.action
+        if action is None:
+            return
+        
+        if hasattr(action, 'fcurves'):
+            for fc in action.fcurves:
+                if 'default_value' in fc.data_path:
+                    for kf in fc.keyframe_points:
+                        frame = kf.co.x
+                        # 変化フェーズはLINEAR, 維持フェーズはCONSTANT
+                        if (40 <= frame <= 56) or (180 <= frame <= 204):
+                            kf.interpolation = 'LINEAR'
+                        else:
+                            kf.interpolation = 'CONSTANT'
+        elif hasattr(action, 'layers'):
+            for layer in action.layers:
+                for strip in layer.strips:
+                    if strip.type == 'KEYFRAME':
+                        for cb in strip.channelbags:
+                            for fc in cb.fcurves:
+                                if 'default_value' in fc.data_path:
+                                    for kf in fc.keyframe_points:
+                                        frame = kf.co.x
+                                        if (40 <= frame <= 56) or (180 <= frame <= 204):
+                                            kf.interpolation = 'LINEAR'
+                                        else:
+                                            kf.interpolation = 'CONSTANT'
+    except Exception as e:
+        print(f'    ⚠ Short4 Fac interpolation設定エラー: {e}')
+
+
 def _apply_transparency_to_materials(obj, start_frame, end_frame):
     """オブジェクトの全マテリアルに半透明化キーフレームを設定"""
     if obj is None or len(obj.data.materials) == 0:
