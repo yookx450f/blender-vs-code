@@ -2365,7 +2365,9 @@ def main():
     elif CUT_NUMBER == "short3":
         output_filename = "short3_overlap.mp4"
     elif CUT_NUMBER == "short4":
-        output_filename = "short4_overlap.mp4"
+        car_a_name = CARS.get("carA", {}).get("name", "carA").replace(" ", "-")
+        car_b_name = CARS.get("carB", {}).get("name", "carB").replace(" ", "-")
+        output_filename = f"short4_{car_a_name}_vs_{car_b_name}.mp4"
     elif CUT_NUMBER == "long3":
         output_filename = "long3_overlap.mp4"
     elif CUT_NUMBER == "short-s":
@@ -2443,7 +2445,9 @@ def main():
     elif CUT_NUMBER == "short3":
         blend_output_path = os.path.join(SCRIPT_DIR, "short3_scene.blend")
     elif CUT_NUMBER == "short4":
-        blend_output_path = os.path.join(SCRIPT_DIR, "short4_scene.blend")
+        car_a_name_b = CARS.get("carA", {}).get("name", "carA").replace(" ", "-")
+        car_b_name_b = CARS.get("carB", {}).get("name", "carB").replace(" ", "-")
+        blend_output_path = os.path.join(SCRIPT_DIR, f"short4_{car_a_name_b}_vs_{car_b_name_b}.blend")
     elif CUT_NUMBER == "long3":
         blend_output_path = os.path.join(SCRIPT_DIR, "long3_scene.blend")
     elif CUT_NUMBER == "short-s":
