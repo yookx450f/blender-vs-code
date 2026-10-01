@@ -841,11 +841,11 @@ def _set_all_fac_keyframes_to_constant(node_tree):
 def _setup_short4_carb_transparency(car_object, end_frame=312):
     """Carの透明度アニメーションをshort4専用ロジックで完全に再構築する
 
-    fr0-fr39: Alpha=1.0 (不透明 - 分離位置で開始)
-    fr40-fr48: Alpha 1.0→0.5 (半透明化第一阶段, LINEAR補間)
-    fr48-fr56: Alpha 0.5→0.35 (半透明化第二阶段, LINEAR補間)
-    fr56-fr179: Alpha=0.35 (半透明維持, CONSTANT補間)
-    fr180-fr192: Alpha 0.35→0.5 (不透明化第一阶段, LINEAR補間)
+    fr0-fr34: Alpha=1.0 (不透明 - 分離位置で開始)
+    fr35-fr43: Alpha 1.0→0.5 (半透明化第一阶段, LINEAR補間)
+    fr43-fr56: Alpha 0.5→0.4 (半透明化第二阶段, LINEAR補間)
+    fr56-fr179: Alpha=0.4 (半透明維持, CONSTANT補間)
+    fr180-fr192: Alpha 0.4→0.5 (不透明化第一阶段, LINEAR補間)
     fr192-fr204: Alpha 0.5→1.0 (不透明化第二阶段, LINEAR補間)
     fr204-end_frame: Alpha=1.0 (不透明維持)
 
@@ -926,16 +926,28 @@ def _setup_short4_carb_transparency(car_object, end_frame=312):
             material.node_tree.animation_data_create()
 
             # Short4の4段階透明度パターンをすべて一度に設定
+            # total_framesに対して各フェーズは割合ベースで計算される（基準312フレーム）
+            BASE_FRAMES = 312
+            f0 = int(end_frame * 0 / BASE_FRAMES)
+            f34 = int(end_frame * 34 / BASE_FRAMES)
+            f35 = int(end_frame * 35 / BASE_FRAMES)
+            f43 = int(end_frame * 43 / BASE_FRAMES)
+            f56 = int(end_frame * 56 / BASE_FRAMES)
+            f179 = int(end_frame * 179 / BASE_FRAMES)
+            f180 = int(end_frame * 180 / BASE_FRAMES)
+            f192 = int(end_frame * 192 / BASE_FRAMES)
+            f204 = int(end_frame * 204 / BASE_FRAMES)
+
             keyframes = [
-                (0, 1.0),           # fr0: 不透明
-                (39, 1.0),          # fr39: 不透明維持
-                (40, 1.0),          # fr40: 半透明化第一阶段開始
-                (48, 0.5),          # fr48: 第一阶段完了
-                (56, 0.35),         # fr56: 第二阶段完了（完全半透明）
-                (179, 0.35),        # fr179: 半透明維持
-                (180, 0.35),        # fr180: 不透明化第一阶段開始
-                (192, 0.5),         # fr192: 第一阶段完了
-                (204, 1.0),         # fr204: 第二阶段完了（完全不透明）
+                (f0, 1.0),           # fr0: 不透明
+                (f34, 1.0),          # fr34: 不透明維持
+                (f35, 1.0),          # fr35: 半透明化第一阶段開始
+                (f43, 0.5),          # fr43: 第一阶段完了
+                (f56, 0.4),          # fr56: 第二阶段完了（完全半透明）
+                (f179, 0.4),         # fr179: 半透明維持
+                (f180, 0.4),         # fr180: 不透明化第一阶段開始
+                (f192, 0.5),         # fr192: 第一阶段完了
+                (f204, 1.0),         # fr204: 第二阶段完了（完全不透明）
                 (end_frame, 1.0),   # end_frame: 不透明維持
             ]
 
@@ -945,17 +957,31 @@ def _setup_short4_carb_transparency(car_object, end_frame=312):
                 fac_input.keyframe_insert(data_path="default_value", frame=frame)
 
             # キーフレームの補間モードを設定
-            _set_short4_fac_interpolation(material.node_tree)
+            _set_short4_fac_interpolation(material.node_tree, end_frame)
 
     bpy.context.scene.frame_set(0)
-    print(f"  Car透明度(short4専用-4段階): fr0=1.0, fr40→48=1.0→0.5, fr48→56=0.5→0.35, fr56→179=0.35, fr180→192=0.35→0.5, fr192→204=0.5→1.0")
+    BASE_FRAMES = 312
+    pf35 = int(end_frame * 35 / BASE_FRAMES)
+    pf43 = int(end_frame * 43 / BASE_FRAMES)
+    pf56 = int(end_frame * 56 / BASE_FRAMES)
+    pf179 = int(end_frame * 179 / BASE_FRAMES)
+    pf180 = int(end_frame * 180 / BASE_FRAMES)
+    pf192 = int(end_frame * 192 / BASE_FRAMES)
+    pf204 = int(end_frame * 204 / BASE_FRAMES)
+    print(f"  Car透明度(short4専用-4段階, end_frame={end_frame}): fr0=1.0, "
+          f"fr{pf35}→{pf43}=1.0→0.5, fr{pf43}→{pf56}=0.5→0.4, "
+          f"fr{pf56}→{pf179}=0.4, fr{pf180}→{pf192}=0.4→0.5, fr{pf192}→{pf204}=0.5→1.0")
 
 
-def _set_short4_fac_interpolation(node_tree):
+def _set_short4_fac_interpolation(node_tree, end_frame=312):
     """Short4の透明度補間モードを設定する
 
-    LINEAR: 半透明化/不透明化フェーズ (fr39-fr56, fr179-fr204)
-    CONSTANT: 維持フェーズ (fr0-fr39, fr56-fr179, fr204-end)
+    LINEAR: 半透明化/不透明化フェーズ (fr34-fr56, fr179-fr204)
+    CONSTANT: 維持フェーズ (fr0-fr34, fr56-fr179, fr204-end)
+
+    Parameters:
+        node_tree: マテリアルのノードツリー
+        end_frame: 終了フレーム (デフォルト312、ランダム化可能)
     """
     try:
         if not hasattr(node_tree, 'animation_data') or node_tree.animation_data is None:
@@ -970,7 +996,12 @@ def _set_short4_fac_interpolation(node_tree):
                     for kf in fc.keyframe_points:
                         frame = kf.co.x
                         # 変化フェーズはLINEAR, 維持フェーズはCONSTANT
-                        if (40 <= frame <= 56) or (180 <= frame <= 204):
+                        BASE_FRAMES = 312
+                        f35_interp = int(end_frame * 35 / BASE_FRAMES)
+                        f56_interp = int(end_frame * 56 / BASE_FRAMES)
+                        f180_interp = int(end_frame * 180 / BASE_FRAMES)
+                        f204_interp = int(end_frame * 204 / BASE_FRAMES)
+                        if (f35_interp <= frame <= f56_interp) or (f180_interp <= frame <= f204_interp):
                             kf.interpolation = 'LINEAR'
                         else:
                             kf.interpolation = 'CONSTANT'
@@ -983,7 +1014,12 @@ def _set_short4_fac_interpolation(node_tree):
                                 if 'default_value' in fc.data_path:
                                     for kf in fc.keyframe_points:
                                         frame = kf.co.x
-                                        if (40 <= frame <= 56) or (180 <= frame <= 204):
+                                        BASE_FRAMES = 312
+                                        f35_interp = int(end_frame * 35 / BASE_FRAMES)
+                                        f56_interp = int(end_frame * 56 / BASE_FRAMES)
+                                        f180_interp = int(end_frame * 180 / BASE_FRAMES)
+                                        f204_interp = int(end_frame * 204 / BASE_FRAMES)
+                                        if (f35_interp <= frame <= f56_interp) or (f180_interp <= frame <= f204_interp):
                                             kf.interpolation = 'LINEAR'
                                         else:
                                             kf.interpolation = 'CONSTANT'

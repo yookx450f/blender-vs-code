@@ -1,14 +1,14 @@
 """
-Short4 - カメラ円弧等速360°一周 + 新車アニメーション モジュール
+Long4 - カメラ円弧等速360°一周 + 新車アニメーション モジュール（横長16:9）
 
 fr0-total_framesで、カメラは円弧上をZサイン波で360°一周し、起始位置へ戻る。
 車のアニメーション：分離→中央スライド→半透明→不透明化→分離位置へスライド。
 
-総フレーム数はランダムに 288-336 の範囲で変動（±1秒）。
+総フレーム数はランダムに 576-672 の範囲で変動（約24-28秒）。
 すべてのフレーム位置は total_frames に対する割合で計算される。
 
 使い方の例:
-    from short4_cuts import setup_arc_full_circle, reset_camera_quat_state
+    from long4_cuts import setup_arc_full_circle, reset_camera_quat_state
 """
 
 import bpy
@@ -146,22 +146,22 @@ def _get_easing_func(strategy_config=None):
     return _ease_in_out_cubic
 
 
-def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None, total_frames=312):
+def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_start, car_b_end, strategy_config=None, total_frames=624):
     """
-    fr0-fr{total_frames}全体: カメラ円弧等速360°一周 + 新車アニメーション。
+    fr0-fr{total_frames}全体: カメラ円弧等速360°一周 + 新車アニメーション（横長版）。
 
     カメラ: 起始角度から負方向に360°一周（等速・LINEAR補間）。
-            Z座標はサイン波 (fr0=z_min → fr156=z_max → fr{total_frames}=z_min)。
+            Z座標はサイン波 (fr0=z_min → fr{total_frames/2}=z_max → fr{total_frames}=z_min)。
 
     車: 新しいアニメーションロジック
       fr0-slide_end: 左右分離→中央へスライド（イージング付き）
       fade_out_phase1_start-fade_out_phase1_end: 透明度段階1 (Alpha 1.0→0.5)
-      fade_out_phase2_end: 透明度段階2 (Alpha 0.5→0.35)
-      restore_phase1_start-restore_phase1_end: 不透明化段階1 (Alpha 0.35→0.5)
+      fade_out_phase2_end: 透明度段階2 (Alpha 0.5→0.4)
+      restore_phase1_start-restore_phase1_end: 不透明化段階1 (Alpha 0.4→0.5)
       restore_phase2_end: 不透明化段階2 (Alpha 0.5→1.0)
       slide_start_frame-slide_out_end: 不透明で中央→左右分離位置へゆっくりスライド
 
-    各フレーム位置は total_frames に対する割合で計算される（312を基準）。
+    各フレーム位置は total_frames に対する割合で計算される（624を基準）。
 
     Parameters:
         camera: カメラオブジェクト
@@ -169,12 +169,12 @@ def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
         car_a_start, car_b_start: 車の開始位置（左右に開いた位置）
         car_a_end, car_b_end: 車の終了位置（中央集合位置）
         strategy_config: スケール情報を含む辞書
-        total_frames: 総フレーム数（デフォルト312、ランダム化可能）
+        total_frames: 総フレーム数（デフォルト624、ランダム化可能。約24-28秒）
 
     Returns:
         dict: 終了時の状態情報 (camera_loc, camera_rot)
     """
-    print(f"\n=== Short4 アニメーション: カメラ円弧等速360°一周（fr{total_frames}完了）+ 新車アニメーション (fr0-{total_frames}) ===")
+    print(f"\n=== Long4 アニメーション: カメラ円弧等速360°一周（fr{total_frames}完了）+ 新車アニメーション (fr0-{total_frames}) ===")
 
     # ============================================================
     # --- カメラ: fr0-fr{total_frames} で等速360°一周 ---
@@ -206,7 +206,7 @@ def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
         x = arc_radius * math.sin(angle)
         y = arc_radius * math.cos(angle)
         # Z高さ: 最初の1秒(fr0-fr24)はZ=z_min固定、fr25以降はサイン波
-        fixed_z_progress = 24.0 / total_frames if total_frames > 0 else 0.0769
+        fixed_z_progress = 24.0 / total_frames if total_frames > 0 else 0.0385
         if progress <= fixed_z_progress:
             z = z_min
         else:
@@ -238,17 +238,17 @@ def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
     # ============================================================
     # --- 車: total_framesに対する割合でフレーム位置を計算 ---
     # ============================================================
-    # 基準フレーム数312に対する割合で各フェーズの開始・終了フレームを計算
-    BASE_FRAMES = 312  # 基準となる総フレーム数
+    # 基準フレーム数624に対する割合で各フェーズの開始・終了フレームを計算
+    BASE_FRAMES = 624  # 基準となる総フレーム数（横長版=約26秒）
 
-    slide_to_center_end = int(total_frames * 36 / BASE_FRAMES)       # 中央へスライド完了
-    fade_out_phase1_start = int(total_frames * 40 / BASE_FRAMES)   # 半透明化第一阶段開始（透明度用）
-    fade_out_phase1_end = int(total_frames * 48 / BASE_FRAMES)     # Alpha=0.5（透明度用）
-    fade_out_phase2_end = int(total_frames * 56 / BASE_FRAMES)     # Alpha=0.35（透明度用）
-    restore_phase1_start = int(total_frames * 180 / BASE_FRAMES)   # 不透明化第一阶段開始（透明度用）
-    restore_phase1_end = int(total_frames * 192 / BASE_FRAMES)     # Alpha=0.5（透明度用）
-    restore_phase2_end = int(total_frames * 204 / BASE_FRAMES)     # Alpha=1.0（透明度用）
-    slide_start_frame = int(total_frames * 205 / BASE_FRAMES)      # 中央→分離位置へスライド開始
+    slide_to_center_end = int(total_frames * 72 / BASE_FRAMES)       # 中央へスライド完了（short4の36×2）
+    fade_out_phase1_start = int(total_frames * 80 / BASE_FRAMES)   # 半透明化第一阶段開始（透明度用）
+    fade_out_phase1_end = int(total_frames * 96 / BASE_FRAMES)     # Alpha=0.5（透明度用）
+    fade_out_phase2_end = int(total_frames * 112 / BASE_FRAMES)    # Alpha=0.4（透明度用）
+    restore_phase1_start = int(total_frames * 360 / BASE_FRAMES)   # 不透明化第一阶段開始（透明度用）
+    restore_phase1_end = int(total_frames * 384 / BASE_FRAMES)     # Alpha=0.5（透明度用）
+    restore_phase2_end = int(total_frames * 408 / BASE_FRAMES)     # Alpha=1.0（透明度用）
+    slide_start_frame = int(total_frames * 409 / BASE_FRAMES)      # 中央→分離位置へスライド開始
     slide_out_end = total_frames                                   # 分離位置で終了
 
     print(f"  フレーム配置 (total_frames={total_frames}): slide_in~fr{slide_to_center_end}, "
@@ -280,7 +280,7 @@ def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
     _set_location_keyframe(car_b, slide_to_center_end, car_b_end[0], car_b_end[1], car_b_end[2])
     print(f"  [fr{slide_to_center_end}] 中央スライド完了: carA={car_a_end}, carB={car_b_end}")
 
-    # 中央位置で静止（透明度変化は animation_settings_short4.py / animation_common.py で処理）
+    # 中央位置で静止（透明度変化は animation_settings_long4.py / animation_common.py で処理）
     for frame in range(slide_to_center_end + keyframe_interval_car, slide_start_frame, keyframe_interval_car):
         _set_location_keyframe(car_a, frame, car_a_end[0], car_a_end[1], car_a_end[2])
         _set_location_keyframe(car_b, frame, car_b_end[0], car_b_end[1], car_b_end[2])

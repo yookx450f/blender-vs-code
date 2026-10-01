@@ -1708,10 +1708,11 @@ def main():
     grid = create_grid_floor(x_half_width=grid_x_half, y_half_length=grid_y_half)
     print(f"グリッド床面を作成しました: {grid.name} (X方向±{grid_x_half:.0f}m / Y方向±{grid_y_half:.0f}m)")
     
-    # short2/shortAnimal モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
+    # short2/shortAnimal/shortGame/short4 モードの場合、バリエーション設定を読み込む（適用はオブジェクト作成後に行う）
     SHORT2_CONFIG = None
     SHORT_ANIMAL_CONFIG = None
     SHORT_GAME_CONFIG = None
+    SHORT4_CONFIG = None
     if CUT_NUMBER == "short2":
         try:
             strategy_seed = os.environ.get("STRATEGY_SEED", "")
@@ -1811,6 +1812,30 @@ def main():
             import traceback
             print(f"  ❌ バリエーション設定エラー: {e}")
             traceback.print_exc()
+    elif CUT_NUMBER == "short4":
+        try:
+            strategy_seed = os.environ.get("STRATEGY_SEED", "")
+            print(f"  [DEBUG] STRATEGY_SEED={strategy_seed!r}")
+            from short2_apply_variations import apply_grid_color, apply_clay_colors_per_car
+            from short2_variations import generate_strategy_config
+            seed_val = int(strategy_seed) if strategy_seed else None
+            full_variations = generate_strategy_config(seed=seed_val)
+            
+            SHORT4_CONFIG = {
+                "grid_color": full_variations.get("grid_color"),
+                "clay_color_a": full_variations.get("clay_color_a"),
+                "clay_color_b": full_variations.get("clay_color_b"),
+                "bg_glow": full_variations.get("bg_glow"),
+            }
+            
+            print(f"  ✅ short4 バリエーション設定完了 (grid={SHORT4_CONFIG['grid_color']['name']}, clayA={SHORT4_CONFIG['clay_color_a']['name']}, clayB={SHORT4_CONFIG['clay_color_b']['name']})")
+            print(f"  [DEBUG] SHORT4_CONFIG loaded: {SHORT4_CONFIG is not None}")
+            if SHORT4_CONFIG and "grid_color" in SHORT4_CONFIG:
+                apply_grid_color(SHORT4_CONFIG["grid_color"])
+        except Exception as e:
+            import traceback
+            print(f"  ❌ バリエーション設定エラー: {e}")
+            traceback.print_exc()
     
     # 背面壁面グリッド（一旦無効化 - 縦グリッドが浮く問題のため）
     # if CUT_NUMBER == "shortAnimal":
@@ -1882,6 +1907,10 @@ def main():
     # shortGame/shortGame2モード: クレイ色の変更をキャラクターのインポート後に適用
     if CUT_NUMBER in ("shortGame", "shortGame2") and SHORT_GAME_CONFIG and "clay_color_a" in SHORT_GAME_CONFIG and "clay_color_b" in SHORT_GAME_CONFIG:
         apply_clay_colors_per_car(SHORT_GAME_CONFIG["clay_color_a"], SHORT_GAME_CONFIG["clay_color_b"])
+    
+    # short4モード: クレイ色の変更を車のインポート後に適用
+    if CUT_NUMBER == "short4" and SHORT4_CONFIG and "clay_color_a" in SHORT4_CONFIG and "clay_color_b" in SHORT4_CONFIG:
+        apply_clay_colors_per_car(SHORT4_CONFIG["clay_color_a"], SHORT4_CONFIG["clay_color_b"])
     
     # ============================================================
     # 新しい演出：後端を揃えて全長差を可視化（左右配置版）
@@ -2022,7 +2051,7 @@ def main():
         setup_short3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=strategy_config_short3, car_dimensions=car_dimensions_short3)
     elif CUT_NUMBER == "short4":
         from animation_settings_short4 import setup_short4_animations
-        # ルール2: 半透明対象を全高が大きい車に設定
+        # short4ルール: 半透明対象は常にCarB（固定）
         car_dimensions_short4 = {}
         for key, car_data in CARS.items():
             dims = car_data.get("dimensions_mm", {})
@@ -2031,14 +2060,18 @@ def main():
                 "height": dims.get("height", 0),
             }
 
-        # 半透明対象を全高が大きい車に設定
-        dims_a = CARS.get("carA", {}).get("dimensions_mm", {})
-        dims_b = CARS.get("carB", {}).get("dimensions_mm", {})
-        height_a = dims_a.get("height", 0)
-        height_b = dims_b.get("height", 0)
-        transparency_target_4 = "carB" if height_b > height_a else "carA"
+        # 半透明対象は常にCarBに固定
+        transparency_target_4 = "carB"
+        
+        # バリエーション設定から色情報を含むstrategy_configを構築
         strategy_config_short4 = {"transparency_target": transparency_target_4}
-        print(f"  ルール2: 半透明対象={transparency_target_4} (全高比較: carA={height_a}mm, carB={height_b}mm)")
+        if SHORT4_CONFIG:
+            strategy_config_short4["grid_color"] = SHORT4_CONFIG.get("grid_color")
+            strategy_config_short4["clay_color_a"] = SHORT4_CONFIG.get("clay_color_a")
+            strategy_config_short4["clay_color_b"] = SHORT4_CONFIG.get("clay_color_b")
+            strategy_config_short4["bg_glow"] = SHORT4_CONFIG.get("bg_glow")
+        
+        print(f"  short4ルール: 半透明対象={transparency_target_4} (固定)")
 
         print(f"  short4: total_frames=312 (カメラ一周360°、約13秒)")
         setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=strategy_config_short4, car_dimensions=car_dimensions_short4)
@@ -2058,6 +2091,22 @@ def main():
         
         print(f"  long3: total_frames=576 (カツト1 fr0-288 + カツト2 fr289-576, 約24秒)")
         setup_long3_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=strategy_config_long3, car_dimensions=car_dimensions_long3)
+    elif CUT_NUMBER == "long4":
+        from animation_settings_long4 import setup_long4_animations
+        # long4ルール: 半透明対象は常にCarB（固定）
+        car_dimensions_long4 = {}
+        for key, car_data in CARS.items():
+            dims = car_data.get("dimensions_mm", {})
+            car_dimensions_long4[key] = {
+                "length": dims.get("length", 0),
+                "height": dims.get("height", 0),
+            }
+        
+        strategy_config_long4 = {"transparency_target": "carB"}
+        print(f"  long4ルール: 半透明対象=carB (固定)")
+        
+        print(f"  long4: total_frames=576-672 (円弧360度一周、約24-28秒ランダム±2秒)")
+        setup_long4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=strategy_config_long4, car_dimensions=car_dimensions_long4)
     elif CUT_NUMBER == "short-s":
         from animation_settings_short_s import setup_short_s_animations
         # 車の寸法情報を抽出（加速時間用）
@@ -2324,7 +2373,7 @@ def main():
             color_rgb = car_data["color"]
         
         # 発光テキストを作成（ペアレント設定含む）
-        if CUT_NUMBER in ("short2", "short3", "short4", "long3"):
+        if CUT_NUMBER in ("short2", "short3", "short4", "long3", "long4"):
             create_glowing_text_label_short2(key, car_obj, text_content, color_rgb)
         elif CUT_NUMBER in ("shortGame", "shortGame2"):
             create_glowing_text_label_shortGame(key, car_obj, text_content, color_rgb)
@@ -2370,6 +2419,8 @@ def main():
         output_filename = f"short4_{car_a_name}_vs_{car_b_name}.mp4"
     elif CUT_NUMBER == "long3":
         output_filename = "long3_overlap.mp4"
+    elif CUT_NUMBER == "long4":
+        output_filename = "long4_overlap.mp4"
     elif CUT_NUMBER == "short-s":
         output_filename = "short-s_overlap.mp4"
     elif CUT_NUMBER == "shortAnimal":
@@ -2401,7 +2452,7 @@ def main():
     print("EEVEEレイトレーシングを有効化しました")
     
     # 解像度設定（ショート動画は縦長9:16、long3は横長16:9）
-    if CUT_NUMBER == "long3":
+    if CUT_NUMBER in ("long3", "long4"):
         scene.render.resolution_x = 1920
         scene.render.resolution_y = 1080
         scene.render.resolution_percentage = 100
@@ -2450,6 +2501,8 @@ def main():
         blend_output_path = os.path.join(SCRIPT_DIR, f"short4_{car_a_name_b}_vs_{car_b_name_b}.blend")
     elif CUT_NUMBER == "long3":
         blend_output_path = os.path.join(SCRIPT_DIR, "long3_scene.blend")
+    elif CUT_NUMBER == "long4":
+        blend_output_path = os.path.join(SCRIPT_DIR, "long4_scene.blend")
     elif CUT_NUMBER == "short-s":
         blend_output_path = os.path.join(SCRIPT_DIR, "short_s_scene.blend")
     elif CUT_NUMBER == "shortAnimal":

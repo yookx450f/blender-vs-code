@@ -1,32 +1,32 @@
 """
-アニメーション設定モジュール - ショート動画v4（縦長9:16）
-総フレーム数は 288-336 (約12-14秒) の範囲でランダム化。
+アニメーション設定モジュール - 長尺動画v4（横長16:9）
+総フレーム数は 576-672 (約24-28秒) の範囲でランダム化。
 
 カメラ: fr0-fr{total_frames}全体で円弧上をサイン波Zで360°一周（fr{total_frames}で一周完了＝動画終了）
 車: 新しいアニメーションパターン
-  - fr0-slide_end: 左右分離→中央へスライド（約1.5秒、イージング付き）
+  - fr0-slide_end: 左右分離→中央へスライド（約3秒、イージング付き）
   - fade_out_phase1_start-fade_out_phase1_end: Alpha 1.0→0.5 (第一阶段)
   - fade_out_phase2: Alpha 0.5→0.4 (第二阶段)
   - fade_out-end: Alpha=0.4 で中央静止
   - restore_phase1_start-restore_phase1_end: Alpha 0.4→0.5 (不透明化第一阶段)
   - restore_phase2_end: Alpha 0.5→1.0 (不透明化第二阶段)
-  - slide_out: 不透明で中央→左右分離位置へスライド（約4.5秒）
+  - slide_out: 不透明で中央→左右分離位置へスライド（約9秒）
 
-YouTube Shorts用の縦長フォーマット。
+YouTube長尺用の横長フォーマット（16:9 / 1920x1080）。
 
-short4 の違い:
-    新しい透明度方式（4段階: 半透明化2段階 + 不透明化2段階）を使用。
-    カメラはfr0-fr{total_frames}で等速360°一周（Zサイン波）。
-    車は分離→中央スライド→半透明化(fr35~fr56, Alpha=0.4)→不透明化(fr180~fr204)→分離位置へスライド。
-    total_frames はランダムに 288-336 の範囲で変動（±1秒）。
+long4 の違い:
+    Short4と同じ透明度方式（4段階: 半透明化2段階 + 不透明化2段階）を使用。
+    カメラはfr0-fr{total_frames}で等速360°一周（Zサイン波、約24-28秒）。
+    車は分離→中央スライド→半透明化→不透明化→分離位置へスライド。
+    total_frames はランダムに 576-672 の範囲で変動。
 
 【動的スケーリング】
     車の寸法に基づいて、カメラ距離と車間隔を自動調整する。
     大きな車ほど、カメラを遠ざけ・間隔を広げる。
 
 使い方:
-    from animation_settings_short4 import setup_short4_animations
-    setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None)
+    from animation_settings_long4 import setup_long4_animations
+    setup_long4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None)
 """
 
 import bpy
@@ -34,7 +34,7 @@ import copy
 import random
 from animation_common import _setup_short4_carb_transparency
 from short2_utils import get_car_visual_center_offset, clear_animation_data
-from short4_cuts import setup_arc_full_circle, reset_camera_quat_state
+from long4_cuts import setup_arc_full_circle, reset_camera_quat_state
 
 
 # カメラ距離の最大スケーリング倍率
@@ -85,11 +85,11 @@ def _calculate_scale_factor(car_dimensions):
     return scale_factor
 
 
-def setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None):
+def setup_long4_animations(scene, camera, imported_cars, rear_offset_y, grounded_z_positions, strategy_config=None, car_dimensions=None):
     """
-    ショート動画v4のアニメーションをオーケストレーション
+    長尺動画v4のアニメーションをオーケストレーション
 
-    カメラ: fr0-fr{total_frames}で円弧等速360°一周（Zサイン波）
+    カメラ: fr0-fr{total_frames}で円弧等速360°一周（Zサイン波、約24-28秒）
     車: 分離→中央スライド→半透明化→不透明化→分離位置へスライド
 
     Parameters:
@@ -105,10 +105,10 @@ def setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounde
         CutState: 最終状態情報
     """
     # ============================================================
-    # 総フレーム数のランダム化 (288-336 = 約12-14秒, ±1秒)
+    # 総フレーム数のランダム化 (576-672 = 約24-28秒)
     # ============================================================
-    total_frames = random.randint(288, 336)
-    print(f"\n=== ショート動画v4 アニメーション設定を開始 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
+    total_frames = random.randint(576, 672)
+    print(f"\n=== 長尺動画v4 アニメーション設定を開始 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
 
     # ============================================================
     # 動的スケーリング計算
@@ -252,8 +252,8 @@ def setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounde
     reset_camera_quat_state()
 
     # CarBの半透明化 — short4専用関数で完全に再構築
-    # short4ルール: 半透明対象は常にCarB（固定）
-    transparency_target = "carB"  # short4では常にCarBを半透明化対象に固定
+    # long4ルール: 半透明対象は常にCarB（固定）
+    transparency_target = "carB"  # long4では常にCarBを半透明化対象に固定
     print(f"  半透明化対象車: {transparency_target} (固定)")
 
     target_car = car_b if transparency_target == "carB" else car_a
@@ -285,7 +285,7 @@ def setup_short4_animations(scene, camera, imported_cars, rear_offset_y, grounde
     # シーンをフレーム 0 に戻す
     bpy.context.scene.frame_set(0)
 
-    print(f"\n=== ショート動画v4 アニメーション完了 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
+    print(f"\n=== 長尺動画v4 アニメーション完了 (total_frames={total_frames}, 約{total_frames/24:.1f}秒) ===")
 
     from animation_common import CutState
     return CutState(
