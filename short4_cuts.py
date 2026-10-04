@@ -242,13 +242,13 @@ def setup_arc_full_circle(camera, car_a, car_b, car_a_start, car_a_end, car_b_st
     BASE_FRAMES = 312  # 基準となる総フレーム数
 
     slide_to_center_end = int(total_frames * 36 / BASE_FRAMES)       # 中央へスライド完了
-    fade_out_phase1_start = int(total_frames * 40 / BASE_FRAMES)   # 半透明化第一阶段開始（透明度用）
+    fade_out_phase1_start = 20                                     # 半透明化第一阶段開始（固定fr20）
     fade_out_phase1_end = int(total_frames * 48 / BASE_FRAMES)     # Alpha=0.5（透明度用）
     fade_out_phase2_end = int(total_frames * 56 / BASE_FRAMES)     # Alpha=0.35（透明度用）
     restore_phase1_start = int(total_frames * 180 / BASE_FRAMES)   # 不透明化第一阶段開始（透明度用）
     restore_phase1_end = int(total_frames * 192 / BASE_FRAMES)     # Alpha=0.5（透明度用）
     restore_phase2_end = int(total_frames * 204 / BASE_FRAMES)     # Alpha=1.0（透明度用）
-    slide_start_frame = int(total_frames * 205 / BASE_FRAMES)      # 中央→分離位置へスライド開始
+    slide_start_frame = 180                                       # 中央→分離位置へスライド開始（fr180固定）
     slide_out_end = total_frames                                   # 分離位置で終了
 
     print(f"  フレーム配置 (total_frames={total_frames}): slide_in~fr{slide_to_center_end}, "
